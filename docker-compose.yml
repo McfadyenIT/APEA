@@ -1,0 +1,42 @@
+# APEA — Docker Compose
+#
+# Start the web UI:
+#     docker compose up apea
+#     open http://localhost:8000
+#
+# Run a headless test (CI style) with distributed workers inside the container:
+#     docker compose run --rm runner \
+#       python -m apea.cli --url https://example.com --test-type stress \
+#       --users 500 --duration 900 --workers 4 --check-sla
+#
+# Results/reports are written to the mounted ./projects volume on the host.
+
+services:
+  apea:
+    build: .
+    image: apea:latest
+    container_name: apea-web
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./projects:/app/projects
+      - ./apea_history.db:/app/apea_history.db
+    restart: unless-stopped
+
+  runner:
+    build: .
+    image: apea:latest
+    profiles: ["cli"]
+    volumes:
+      - ./projects:/app/projects
+      - ./apea_history.db:/app/apea_history.db
+    environment:
+      APEA_TARGET_URL: ${APEA_TARGET_URL:-}
+      APEA_TEST_TYPE: ${APEA_TEST_TYPE:-load}
+      APEA_USERS: ${APEA_USERS:-}
+      APEA_DURATION: ${APEA_DURATION:-}
+      APEA_WORKERS: ${APEA_WORKERS:-1}
+      APEA_USERNAME: ${APEA_USERNAME:-}
+      APEA_PASSWORD: ${APEA_PASSWORD:-}
+    entrypoint: ["python", "-m", "apea.cli"]
+    command: ["--check-sla"]

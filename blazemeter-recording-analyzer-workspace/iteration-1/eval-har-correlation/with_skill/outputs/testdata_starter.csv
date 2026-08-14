@@ -1,0 +1,5 @@
+username,password,search_keyword,sku,quantity
+jane.doe@example.com,Secret123,laptop,LAP-2001,1
+john.smith@example.com,P@ssw0rd456,tablet,TAB-3010,2
+maria.garcia@example.com,Welcome789!,headphones,HDP-1150,1
+alex.chen@example.com,LetMeIn321,monitor,MON-4420,3

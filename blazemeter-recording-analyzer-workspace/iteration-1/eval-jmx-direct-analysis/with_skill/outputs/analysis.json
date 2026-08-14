@@ -1,0 +1,195 @@
+{
+  "source_file": "C:\\Pradish\\Performance Testing\\Performance Orchestration\\blazemeter-recording-analyzer-workspace\\sample-recordings\\checkout_recording.jmx",
+  "format": "jmx",
+  "platform": "Magento / Adobe Commerce",
+  "auth_model": "form_login",
+  "business_flows": [
+    {
+      "flow_name": "Guest Checkout Journey (includes an authenticated Login step)",
+      "description": "A single linear journey recorded under one ThreadGroup ('Guest Checkout Users', 50 threads / 60s ramp-up): land on the home page, log in, search for a product, view its detail page, add it to cart, apply a coupon, submit shipping information, and place the order. Despite the 'Guest Checkout' naming on the TestPlan and ThreadGroup, the recording contains a real Login step with a username/password, which is not typical of a guest (non-authenticated) checkout. There is no logout or session-end step; the recording stops right after order placement.",
+      "steps": [
+        {
+          "step_name": "Home Page (Landing)",
+          "method": "GET",
+          "path": "/",
+          "page_group": "Guest Checkout Users",
+          "type": "page_render",
+          "hit_count": 1,
+          "think_time_ms": null,
+          "notes": "Response carries the Magento form_key value used by later POSTs (extracted here via a RegexExtractor already declared in the JMX)."
+        },
+        {
+          "step_name": "Login",
+          "method": "POST",
+          "path": "/customer/account/loginPost/",
+          "page_group": "Login Flow",
+          "type": "api_call",
+          "hit_count": 1,
+          "think_time_ms": 1000,
+          "notes": "Submits login[username]/login[password] plus the correlated form_key. Contradicts the 'guest checkout' framing of this recording -- see Risk Flags."
+        },
+        {
+          "step_name": "Search for Product",
+          "method": "GET",
+          "path": "/catalogsearch/result/",
+          "page_group": "Guest Checkout Users",
+          "type": "page_render",
+          "hit_count": 1,
+          "think_time_ms": 2000,
+          "notes": "Query param q='running shoes'."
+        },
+        {
+          "step_name": "View Product Detail",
+          "method": "GET",
+          "path": "/catalog/product/view/id/12345",
+          "page_group": "Guest Checkout Users",
+          "type": "page_render",
+          "hit_count": 1,
+          "think_time_ms": null,
+          "notes": "Numeric product id (12345) baked into the path."
+        },
+        {
+          "step_name": "Add to Cart",
+          "method": "POST",
+          "path": "/checkout/cart/add/",
+          "page_group": "Checkout Flow",
+          "type": "api_call",
+          "hit_count": 1,
+          "think_time_ms": null,
+          "notes": "Body carries sku=SKU12345, qty=1, and the correlated form_key. Response is the source of the quoteId extraction (JSONPostProcessor already declared in the JMX)."
+        },
+        {
+          "step_name": "Apply Coupon",
+          "method": "POST",
+          "path": "/checkout/cart/couponPost/",
+          "page_group": "Checkout Flow",
+          "type": "api_call",
+          "hit_count": 1,
+          "think_time_ms": null,
+          "notes": "Body carries coupon_code=SAVE10."
+        },
+        {
+          "step_name": "Checkout: Shipping Information",
+          "method": "POST",
+          "path": "/rest/V1/carts/${quoteId}/shipping-information",
+          "page_group": "Checkout Flow",
+          "type": "api_call",
+          "hit_count": 1,
+          "think_time_ms": null,
+          "notes": "Raw JSON body with a hardcoded shipping address (street/city/postcode/country_id). Path depends on the correlated quoteId."
+        },
+        {
+          "step_name": "Place Order (Payment + Submit)",
+          "method": "PUT",
+          "path": "/rest/V1/carts/${quoteId}/order",
+          "page_group": "Checkout Flow",
+          "type": "api_call",
+          "hit_count": 1,
+          "think_time_ms": null,
+          "notes": "Raw JSON body with hardcoded paymentMethod='checkmo'. A ResponseAssertion checks the response contains the string 'order_id', implying an order id is returned but not currently extracted."
+        }
+      ]
+    }
+  ],
+  "parametrization_candidates": [
+    {
+      "field": "username",
+      "observed_in": "Login",
+      "sample_value": "testuser1@example.com",
+      "recommended_column": "username",
+      "notes": "Only 1 sample observed. Already declared as a column in the recording's own users.csv CSVDataSet -- add more rows before load testing."
+    },
+    {
+      "field": "password",
+      "observed_in": "Login",
+      "sample_value": "Password123!",
+      "recommended_column": "password",
+      "notes": "Only 1 sample observed. Already declared in users.csv."
+    },
+    {
+      "field": "search_keyword",
+      "observed_in": "Search for Product",
+      "sample_value": "running shoes",
+      "recommended_column": "search_keyword",
+      "notes": "Not declared in the existing users.csv CSVDataSet (which only lists username, password, sku, quantity, coupon_code) -- needs to be added as a new column."
+    },
+    {
+      "field": "product_id",
+      "observed_in": "View Product Detail",
+      "sample_value": "12345",
+      "recommended_column": "product_id",
+      "notes": "Numeric path segment on the PDP call, not present in any declared CSVDataSet today. Should vary together with sku so a virtual user views and adds the same product."
+    },
+    {
+      "field": "sku",
+      "observed_in": "Add to Cart",
+      "sample_value": "SKU12345",
+      "recommended_column": "sku",
+      "notes": "Only 1 sample observed. Already declared in users.csv -- keep in sync with product_id per row."
+    },
+    {
+      "field": "quantity",
+      "observed_in": "Add to Cart",
+      "sample_value": "1",
+      "recommended_column": "quantity",
+      "notes": "Only 1 sample observed. Already declared in users.csv."
+    },
+    {
+      "field": "coupon_code",
+      "observed_in": "Apply Coupon",
+      "sample_value": "SAVE10",
+      "recommended_column": "coupon_code",
+      "notes": "Only 1 sample observed. Already declared in users.csv. Consider also modeling the share of real users who apply no coupon at all."
+    },
+    {
+      "field": "shipping address (street, city, postcode, country_id)",
+      "observed_in": "Checkout: Shipping Information",
+      "sample_value": "123 Main St / Springfield / 62704 / US",
+      "recommended_column": "address_street, address_city, address_postcode, address_country",
+      "notes": "Currently hardcoded literal values inside a raw JSON body (postBodyRaw=true) -- unlike form_key/quoteId, these are not wired to any CSV variable or ${} placeholder at all. Needs to be parameterized from scratch."
+    },
+    {
+      "field": "payment_method",
+      "observed_in": "Place Order",
+      "sample_value": "checkmo",
+      "recommended_column": "payment_method",
+      "notes": "Hardcoded literal in a raw JSON body, single sample observed ('checkmo' = Magento Check/Money Order). Parameterize if the test needs to exercise multiple payment methods."
+    }
+  ],
+  "correlation_candidates": [
+    {
+      "field": "form_key",
+      "produced_by": "Home Page (GET /) response",
+      "consumed_by": ["Login", "Add to Cart"],
+      "extraction_strategy": "regex",
+      "expression": "form_key.*?value=\"(.+?)\"",
+      "notes": "Already declared in the JMX via a RegexExtractor on Home Page and referenced as ${form_key} in both consuming request bodies -- carry this same extractor into the load test."
+    },
+    {
+      "field": "quoteId",
+      "produced_by": "Add to Cart response",
+      "consumed_by": ["Checkout: Shipping Information", "Place Order"],
+      "extraction_strategy": "json_path",
+      "expression": "$.quote_id",
+      "notes": "Already declared via a JSONPostProcessor on Add to Cart and referenced as ${quoteId} in both subsequent REST paths -- carry forward."
+    },
+    {
+      "field": "order_id",
+      "produced_by": "Place Order response (implied, not yet extracted)",
+      "consumed_by": [],
+      "extraction_strategy": "not currently extracted -- add json_path or regex if needed",
+      "expression": null,
+      "notes": "A ResponseAssertion on Place Order checks for the literal string 'order_id' in the response, implying the response body contains an order identifier, but no extractor currently captures it. Not a problem today since nothing downstream reuses it in this recording -- add an extractor if the flow is later extended past Place Order (e.g. an order-confirmation or receipt step)."
+    }
+  ],
+  "risk_flags": [
+    "ThreadGroup is named 'Guest Checkout Users' and the TestPlan 'Magento Guest Checkout', but the recording includes an authenticated Login step (POST /customer/account/loginPost/ with username+password) -- this doesn't match a typical guest (non-authenticated) checkout. Confirm with the user whether Login belongs in this flow or was captured by mistake.",
+    "No CookieManager element is present in the JMX -- session/cookie handling across Login -> Checkout Flow isn't explicitly configured in the recording. If the target app relies on a session cookie in addition to form_key/quoteId, this needs to be added when the runnable test is built.",
+    "No logout / session-end step -- the recording ends immediately after Place Order; session cleanup behavior under load is untested.",
+    "Single ThreadGroup ('Guest Checkout Users', 50 threads / 60s ramp-up) -- only one user journey/type was recorded, so realistic task-mix weighting (e.g. % of users who apply a coupon) can't be inferred from this recording alone and should be confirmed with the user.",
+    "Shipping address and payment method are hardcoded literal values inside raw JSON bodies, not wired to any CSV variable -- every virtual user would submit an identical address and payment method unless these are parameterized before load testing.",
+    "Search keyword ('running shoes') and the PDP product id ('12345') are single hardcoded values not declared in the existing users.csv CSVDataSet (which only lists username, password, sku, quantity, coupon_code) -- they aren't varying at all today and need their own test-data columns, kept in sync with sku.",
+    "All hit_count values are 1 (a single-iteration recording) -- can't infer relative step popularity (e.g. coupon usage rate) from hit counts; get real traffic ratios from the user before weighting tasks.",
+    "2 noise requests were filtered out (1 static CSS asset, 1 Google Analytics beacon) of 10 total observed -- a small, unremarkable amount, included for completeness."
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "_comment": "OPTIONAL selector overrides for the Autonomous Browser Crawl (Playwright). Each key is a list of selectors tried in order; the first match on the page is used. These defaults are generic (standard Magento + common e-commerce patterns) and work across sites. Add your site's specific selectors here (e.g. a custom login button or place-order button) — you can inspect them with your browser's DevTools. This file is site-agnostic by default; nothing here is tied to any particular site.",
+  "login_url": "/customer/account/login/",
+  "cookie": [
+    "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+    "button:has-text('Accept All')",
+    "button:has-text('Accept')",
+    "button:has-text('I Agree')",
+    "text=Allow all"
+  ],
+  "username": [
+    "#email",
+    "input[name='login[username]']",
+    "input[type='email']",
+    "input[name='username']",
+    "input[name='email']",
+    "#username"
+  ],
+  "password": [
+    "#pass",
+    "input[name='login[password]']",
+    "input[type='password']",
+    "input[name='password']",
+    "#password"
+  ],
+  "login_submit": [
+    "#send2",
+    "button:has-text('Sign In')",
+    "button:has-text('Log In')",
+    "button:has-text('Login')",
+    "button[type='submit']"
+  ],
+  "search": [
+    "#search",
+    "input[name='q']",
+    "input[type='search']",
+    "input[placeholder*='Search']"
+  ],
+  "product": [
+    "a.product-item-link",
+    ".product-item-info a",
+    ".product-item a",
+    "a[href*='.html']"
+  ],
+  "add_to_cart": [
+    "#product-addtocart-button",
+    "button:has-text('Add to Cart')",
+    "button:has-text('Add to cart')",
+    "button:has-text('Add to Bag')"
+  ],
+  "proceed_checkout": [
+    "a:has-text('Proceed to Checkout')",
+    "text=Proceed to Checkout",
+    "a[href*='checkout']:not([href*='cart'])",
+    "button:has-text('Checkout')"
+  ],
+  "place_order": [
+    "button:has-text('Place Order')",
+    "button:has-text('Place order')",
+    "button:has-text('Place Your Order')",
+    "button[type='submit']"
+  ]
+}

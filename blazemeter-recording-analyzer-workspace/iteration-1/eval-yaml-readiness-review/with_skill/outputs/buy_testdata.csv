@@ -1,0 +1,5 @@
+username,password,sku,quantity
+buyer1@example.com,Passw0rd!1,SKU10001,1
+buyer2@example.com,Passw0rd!2,SKU10002,2
+buyer3@example.com,Passw0rd!3,SKU10003,1
+buyer4@example.com,Passw0rd!4,SKU10004,3

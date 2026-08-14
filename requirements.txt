@@ -1,0 +1,32 @@
+# APEA — Autonomous Performance Engineering Agent
+# Core dependencies. Install with:  pip install -r requirements.txt
+fastapi>=0.110
+uvicorn[standard]>=0.27
+locust>=2.20
+requests>=2.31
+beautifulsoup4>=4.12
+openpyxl>=3.1
+jinja2>=3.1
+python-multipart>=0.0.9
+pyyaml>=6.0
+pypdf>=4.0            # Performance Test Plan (PDF) analysis. If absent, the analyzer degrades and asks to install it.
+python-docx>=1.1     # Performance Test Plan (DOCX) analysis. Optional; PDF/Markdown/text work without it.
+
+# Optional — the agentic AI layer (script self-repair, root-cause narrative,
+# parameterization/correlation, Ask APEA). No extra package needed (uses `requests`).
+# Just set an Anthropic API key in the environment before starting APEA:
+#   Windows : set ANTHROPIC_API_KEY=sk-ant-...
+#   macOS/Linux : export ANTHROPIC_API_KEY=sk-ant-...
+# Optionally override the model:  set APEA_LLM_MODEL=claude-3-5-sonnet-latest
+# With no key set, APEA runs exactly as before (deterministic).
+
+# Optional — headless-browser (Playwright). Powers BOTH the JS-rendered
+# Discovery re-crawl (React / Angular / Vue / Next.js) AND the Track-B
+# real-browser payment engine (drives Stripe / CyberSource card iframes).
+# NOT installed by this file on purpose: without it, discovery.py runs plain
+# HTTP + BeautifulSoup and the browser track stays inert. To enable it:
+#   Windows  : double-click setup-browser-track.bat   (one-time)
+#   any OS   : pip install -r requirements-browser.txt  &&  playwright install chromium
+# Once installed, it auto-engages only when the plain crawl detects a JS
+# framework AND comes back sparse (no forms, effectively one page) — or
+# force it with --render-js (CLI) / render_js: true (API "Discover" call).

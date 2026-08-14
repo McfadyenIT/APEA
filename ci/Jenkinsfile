@@ -1,0 +1,68 @@
+// APEA — Jenkins declarative pipeline
+// Runs the performance test described in perf-test.yml (committed in the repo)
+// and gates the build on the pass/fail criteria in that file.
+// Requires: Python 3.11 on the agent, the HTML Publisher plugin, and (optionally)
+// a "perf-creds" username/password credential for login flows.
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'CONFIG', defaultValue: 'perf-test.yml',
+               description: 'Path to the plain-English config file')
+    }
+
+    options {
+        timeout(time: 60, unit: 'MINUTES')
+        timestamps()
+    }
+
+    environment {
+        // Optional: define a "perf-creds" username/password credential in Jenkins,
+        // and an "anthropic-api-key" secret text credential if you use AI features.
+        PERF_CREDS = credentials('perf-creds')
+    }
+
+    stages {
+        stage('Setup') {
+            steps {
+                sh '''
+                    python3 -m venv .venv
+                    . .venv/bin/activate
+                    pip install --quiet -r requirements.txt
+                '''
+            }
+        }
+
+        stage('Run Performance Test') {
+            steps {
+                // Everything is read from perf-test.yml — the recording and data
+                // CSV are committed in the repo, so nothing is uploaded here.
+                sh """
+                    . .venv/bin/activate
+                    python -m apea.cli --config '${params.CONFIG}' \
+                        --username "\$PERF_CREDS_USR" --password "\$PERF_CREDS_PSW" \
+                        --check-sla | tee apea_output.txt
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: 'projects/**/reports/*, projects/**/results/locust_stats.csv, projects/**/results/locust_failures.csv, apea_output.txt',
+                             allowEmptyArchive: true, fingerprint: true
+            publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'projects/**/reports/performance_report.html',
+                reportName: 'APEA Performance Report'
+            ])
+        }
+        failure {
+            echo 'APEA quality gate FAILED — pass/fail criteria breached or execution error.'
+        }
+    }
+}

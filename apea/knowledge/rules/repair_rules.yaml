@@ -1,0 +1,58 @@
+# Deterministic repair rules. repair_for(error_text) returns the first rule whose
+# `when` signature matches. `action` is a stable identifier the Repair agent /
+# Orchestrator maps to code — so common failures are fixed with NO LLM call.
+# Claude is only invoked when NO rule matches (see decision engine escalation).
+rules:
+  - id: fix_token_regex
+    when: ["token status 200", "consumer isn't authorized"]
+    action: accept_jwt_token
+    params: {token_regex: "^[A-Za-z0-9._-]{20,4096}$"}
+    explanation: "Accept opaque OR JWT bearer tokens; reject only HTML/JSON error bodies."
+
+  - id: resolve_sku_by_search
+    when: ["doesn't exist", "no such entity with sku"]
+    action: resolve_product_via_search
+    params: {}
+    explanation: "Treat the CSV value as a search term; resolve the real product before add-to-cart."
+
+  - id: substitute_out_of_stock_product
+    when: ["you are trying to add is not available", "out of stock", "requested qty is not available"]
+    action: substitute_next_in_stock_product
+    params: {max_candidates: 8}
+    explanation: "add-to-cart is authoritative for purchasability. On an out-of-stock/qty error, SUBSTITUTE the next in-stock product from the search results (a different product, NOT a child variant) and continue. Only STOP when every candidate is out of stock — never fake an order."
+
+  - id: verify_cart_before_shipping
+    when: ["empty cart", "add an item to cart", "cart is empty"]
+    action: verify_items_then_stop_on_mismatch
+    params: {min_items: 1}
+    explanation: "GET /carts/mine/items; require count>=1; stop on quote mismatch before shipping."
+
+  - id: fix_region_id
+    when: ["regionid", "nuts 1 code", "invalid region"]
+    action: coerce_or_omit_region_id
+    params: {}
+    explanation: "Send regionId as an integer, or omit region fields when there is no integer id."
+
+  - id: use_available_payment_method
+    when: ["payment method is not available"]
+    action: select_offline_payment_from_methods
+    params: {}
+    explanation: "GET /carts/mine/payment-methods and pick an available offline code; never replay a card token."
+
+  - id: use_graphql_resolution
+    when: ["resolve: product 401", "products 401"]
+    action: resolve_product_via_graphql
+    params: {endpoint: "/{store}/graphql"}
+    explanation: "Resolve search term -> sku + stock via public GraphQL; never use the admin REST /V1/products with a customer token."
+
+  - id: accept_checkout_agreements
+    when: ["agree to the terms and conditions", "terms and conditions", "the order wasn't placed"]
+    action: attach_agreement_ids
+    params: {source: "recording", endpoint: "/carts/mine/checkout-agreements"}
+    explanation: "RECORDING-FIRST: agreement_ids are stable store config in the recorded place-order body — harvest and reuse them in paymentMethod.extension_attributes.agreement_ids. The REST agreements endpoints (/carts/mine/checkout-agreements AND /checkoutAgreements) are frequently NOT exposed (404), so use them only as a fallback."
+
+  - id: refresh_token
+    when: ["401", "consumer isn't authorized", "token expired"]
+    action: refresh_customer_token_once
+    params: {max_retries: 1}
+    explanation: "Re-request the customer token once and retry the failed call."

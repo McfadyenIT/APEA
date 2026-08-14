@@ -1,0 +1,14 @@
+Priority,Request,Field,Recorded (Hardcoded) Value,Issue,Recommended Fix
+Critical,Login,login[username],testuser1@example.com,Every virtual user authenticates as the same account,"Map to CSV column `username` (already defined in CSVDataSet, currently unused)"
+Critical,Login,login[password],Password123!,Same account password reused across all users,"Map to CSV column `password`"
+Critical,Add to Cart,sku,SKU12345,All load concentrated on one SKU/inventory row,"Map to CSV column `sku` or a validated in-stock SKU pool"
+High,Add to Cart,qty,1,CSV `quantity` column defined but unused,Map to CSV column `quantity`
+High,Search Product,q (query param),running+shoes,Identical search term for all users skews cache/search-index load,Parameterize with a list of representative search terms
+High,View Product Detail,id (path segment),12345,Every user views identical PDP,"Parameterize with product-id pool, ideally correlated from search results"
+Medium,Apply Coupon,coupon_code,SAVE10,CSV `coupon_code` column defined but unused; not all real users apply coupons,"Map to CSV column; add a percentage of users who skip this step"
+Medium,Checkout Shipping,shipping_address.street/city/postcode/country_id,"123 Main St / Springfield / 62704 / US",Static address hides region-based tax/shipping-rate logic,Parameterize with a small realistic address pool varying state/zip
+Medium,Place Order,paymentMethod.method,checkmo,Only one payment path exercised; production traffic mix usually includes card/PayPal/etc.,Parameterize per realistic payment-method distribution if needed for NFR coverage
+Low,All samplers,HTTPSampler.domain,www.example-shop.com / static.example-shop.com,Hardcoded per environment,Externalize as JMeter property / User Defined Variable for multi-env reuse
+N/A (structural),Login Flow (whole Transaction Controller),n/a,n/a,"Test Plan is labeled ""Guest Checkout"" but recording includes an explicit login step",Decide: keep as registered-customer checkout, or remove Login and add guest email to shipping-information payload for true guest checkout
+N/A (correlation - already OK),Home Page -> Login/Add to Cart,form_key,extracted via regex,Already correctly correlated,No action needed - keep as is
+N/A (correlation - already OK),Add to Cart -> Shipping/Place Order,quoteId,extracted via JSONPostProcessor,Already correctly correlated,No action needed - keep as is

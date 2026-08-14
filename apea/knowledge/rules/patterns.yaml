@@ -1,0 +1,41 @@
+# Reusable business-flow patterns. The generated checkout FSM is built FROM the
+# `business_flow` model here rather than being hard-coded — so onboarding another
+# platform is adding a block, not editing the generator.
+magento:
+  business_flow:
+    - state: LOGIN            # customer token acquired
+      endpoint: "/integration/customer/token"
+      validate: "token matches token_regex"
+    - state: RESOLVE_PRODUCT  # data-driven: search the CSV value
+      endpoint: "/search + /products"
+      validate: "one product resolved"
+    - state: STOCK_CHECK
+      validate: "is_in_stock is true, else STOP"
+    - state: CART_CREATED
+      endpoint: "/carts/mine"
+      validate: "quote id returned"
+    - state: ITEMS_ADDED
+      endpoint: "/carts/mine/items"
+      validate: "add default offer, no child walk"
+    - state: ITEMS_VERIFIED
+      endpoint: "GET /carts/mine/items"
+      validate: "count >= 1 and quote id consistent"
+    - state: SHIPPING_AVAILABLE
+      endpoint: "/carts/mine/estimate-shipping-methods-by-address-id"
+      validate: "a method offered for this cart+address"
+    - state: SHIPPING_SELECTED
+      endpoint: "/carts/mine/shipping-information"
+      validate: "regionId integer or omitted"
+    - state: PAYMENT_AVAILABLE
+      endpoint: "/carts/mine/payment-methods"
+      validate: "an available offline method exists"
+    - state: PAYMENT_SELECTED
+      endpoint: "/carts/mine/set-payment-information"
+    - state: ORDER_CREATED
+      endpoint: "/carts/mine/payment-information"
+      validate: "real order id returned"
+
+  known_patterns:
+    checkout: "magento_rest_checkout"
+    csrf: "form_key correlation (see correlation_library)"
+    hosted_gateway: "offline payment fallback; never replay card token"

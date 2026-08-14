@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+projects/
+apea_history.db
+apea_history.db-wal
+apea_history.db-shm
+.git/
+.venv/
+venv/
+*.log

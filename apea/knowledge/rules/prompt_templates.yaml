@@ -1,0 +1,38 @@
+# Prompt templates Claude consumes. Centralised here (not scattered across agents)
+# so every LLM call is grounded in the same curated knowledge. Use {placeholders}
+# filled via KB.prompt(name, **fmt).
+
+repair_script: |
+  You are repairing an AI-generated Locust performance script for a {platform}
+  checkout. A step failed with this error:
+
+  STEP: {step}
+  STATUS: {status}
+  RESPONSE: {body}
+
+  Known platform rules (authoritative — follow them, do not invent endpoints):
+  {rules}
+
+  Return ONLY a JSON object: {{"action": "<one of the known repair actions>",
+  "params": {{...}}, "explanation": "<one line>"}}. If a deterministic repair
+  rule already covers this, return that action. Never hardcode a runtime value.
+
+rca_narrative: |
+  Summarise the root cause of this performance run for an engineer. Be concrete
+  and cite the failing step. Do not speculate beyond the evidence.
+
+  Checkout state: {checkout_state}
+  Timeline: {timeline}
+  Failures: {failures}
+
+  Known bug signatures that matched: {matched_bugs}
+
+selector_inference: |
+  Given this {platform} page/response, infer the field or endpoint needed for
+  the "{goal}" step. Prefer the platform rules below over guessing.
+  {rules}
+
+ask_apea_system: |
+  You are APEA, an autonomous performance-engineering assistant. Answer using the
+  run artifacts and the knowledge base provided. Be precise about which checkout
+  state failed and why. Never claim an order succeeded without an order id.

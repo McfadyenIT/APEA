@@ -1,0 +1,45 @@
+name: APEA Performance Test
+
+# Runs the APEA performance test after every deployment. Trigger it from your
+# deploy pipeline with a repository_dispatch of type "deployed" (see README-CI.md),
+# or run it manually.
+on:
+  repository_dispatch:
+    types: [deployed]
+  workflow_dispatch:
+    inputs:
+      config:
+        description: "Path to the plain-English config file"
+        required: false
+        default: "perf-test.yml"
+        type: string
+
+jobs:
+  perf-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install APEA
+        run: pip install -r requirements.txt
+      - name: Run APEA performance test (fails the job if the SLA gate fails)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          APEA_USERNAME: ${{ secrets.PERF_USERNAME }}
+          APEA_PASSWORD: ${{ secrets.PERF_PASSWORD }}
+        run: |
+          python -m apea.cli --config "${{ github.event.inputs.config || 'perf-test.yml' }}" --check-sla | tee apea_output.txt
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apea-performance-reports
+          path: |
+            projects/**/reports/performance_report.html
+            projects/**/reports/performance_report.xlsx
+            projects/**/results/locust_stats.csv
+            apea_output.txt
+          if-no-files-found: warn

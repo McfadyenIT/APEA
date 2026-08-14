@@ -1,0 +1,32 @@
+# Reusable correlation rules (JMeter-style): capture a value from a response,
+# inject it into later requests. Shared by the Generator and the runtime script.
+rules:
+  - name: form_key
+    extract:
+      - 'name="form_key"[^>]*value="([^"]+)"'
+      - '"form_key"\s*:\s*"([^"]+)"'
+      - 'form_key=([A-Za-z0-9]+)'
+    inject: ["form_key"]
+  - name: uenc
+    extract:
+      - '/uenc/([^/"\\]+)'
+    inject: ["uenc"]
+  - name: quote_id
+    extract:
+      - '"quote_id"\s*:\s*"?(\d+)'
+      - '"entity_id"\s*:\s*"?(\d+)'
+    inject: ["quoteId", "quote_id", "cartId", "masked_id"]
+  - name: order_id
+    extract:
+      - '"order_id"\s*:\s*"?(\d+)'
+      - '"increment_id"\s*:\s*"?([A-Za-z0-9]+)'
+    inject: ["order_id", "orderId"]
+  - name: address_id
+    extract:
+      - '"addressId"\s*:\s*"?([A-Za-z0-9_\-]+)'
+      - 'addressId=([A-Za-z0-9_\-]+)'
+    inject: ["addressId"]
+  - name: customer_token
+    extract:
+      - '^"?([A-Za-z0-9._-]{20,4096})"?$'
+    inject: ["Authorization"]

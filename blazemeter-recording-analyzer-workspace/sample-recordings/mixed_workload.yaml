@@ -1,0 +1,54 @@
+execution:
+  - scenario: browse
+    concurrency: 100
+    ramp-up: 60s
+    hold-for: 10m
+  - scenario: buy
+    concurrency: 20
+    ramp-up: 30s
+    hold-for: 10m
+
+scenarios:
+  browse:
+    requests:
+      - url: https://shop.example.com/
+        label: Home Page
+        method: GET
+        think-time: 1s
+      - url: https://static.shop.example.com/assets/app.js
+        label: App JS
+        method: GET
+      - url: https://shop.example.com/search/results?q=${keyword}
+        label: Search
+        method: GET
+        think-time: 2s
+  buy:
+    requests:
+      - url: https://shop.example.com/api/login
+        label: Login
+        method: POST
+        body:
+          email: ${email}
+          password: ${password}
+        extract-jsonpath:
+          token: $.token
+        think-time: 1s
+      - url: https://shop.example.com/api/cart/add
+        label: Add to Cart
+        method: POST
+        headers:
+          Authorization: Bearer ${token}
+        body:
+          sku: ${sku}
+          quantity: ${quantity}
+        extract-jsonpath:
+          cartId: $.cartId
+        think-time: 2s
+      - url: https://shop.example.com/api/checkout/${cartId}/place-order
+        label: Place Order
+        method: PUT
+        headers:
+          Authorization: Bearer ${token}
+        assert:
+          - contains: orderId
+        think-time: 1s

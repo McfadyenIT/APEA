@@ -1,0 +1,2 @@
+password,username,search_keyword,product_id,qty,country_id,region_id,region,shipping_carrier_code,shipping_method_code,region_code,street,card_number,telephone,postcode,city,firstname,lastname,vat_id,payment_method,payment_token,po_number,card_cvv
+Test@123,uk0611@yopmail.com,0015E-2BAH-0012,c24071467,1,GB,,,radwellshippingrate,9004,Staffordshire,Lymedale Business Park,MCf shipping,15975325,ST5 9QZ,Newcastle,Suganya,Bala,,paradoxlabs_cybersource,,,123

@@ -1,0 +1,214 @@
+# Browser-interaction patterns for APEA Track B (real-browser execution).
+# Gateway iframe field selectors, PUBLIC sandbox test cards, and 3DS handling.
+# These are consulted at RUNNER-GENERATION time and baked into journey.json, so
+# the runner process itself needs no KB access. Test cards are Stripe's public
+# documented sandbox values (https://stripe.com/docs/testing) — never live data.
+
+# ---------------------------------------------------------------------------
+# RESILIENCE — generic, platform-agnostic fallbacks used when a recorded UI
+# selector fails to match (e.g. brittle Tailwind/positional selectors captured
+# from a SPA). The runner classifies each recorded CLICK into an "intent" from
+# keywords in its target/label, and if the exact recorded selector fails, it
+# tries this intent's fallback selectors (CSS) and visible-text labels in order.
+# This is the KB "memory" of how to recover common checkout steps on ANY store —
+# add a row to teach APEA a new platform's convention; nothing here is per-site.
+# Recorded-issue references (why each intent exists) are noted inline.
+# ---------------------------------------------------------------------------
+resilience:
+  settle_ms: 8000            # SPA hydrate/settle wait after navigate + click
+  step_timeout_ms: 5000      # fast-fail per action (avoid multi-minute hangs)
+  intents:
+    signin:                  # ref: SPA sign-in link resolved but not clickable
+      selectors: ["a[href*='login']", ".authorization-link a", "a.sign-in", "[data-action='sign-in']"]
+      texts: ["Sign In", "Sign in", "Log in", "Login", "My Account"]
+    product:                 # ref: brittle 'img.m-auto...' search-result click
+      selectors: ["a.product-item-link", ".product-item-info a", ".product-item a",
+                  "li.product a", ".product a", "a[href$='.html']", "[data-product-id] a"]
+      texts: []
+    add_to_cart:             # ref: '#product-addtocart-button > .block' not found
+      selectors: ["#product-addtocart-button", "button.tocart", "button.add-to-cart",
+                  "button[title*='Add to' i]", "button[id*='addtocart']"]
+      texts: ["Add to Cart", "Add to Basket", "Add to bag", "Add to cart"]
+    checkout:                # ref: '#checkout-link-button' timeout
+      selectors: ["#checkout-link-button", "a[href*='checkout']:not([href*='cart'])",
+                  "button.checkout", ".cart .checkout"]
+      texts: ["Proceed to Checkout", "Go to Checkout", "Checkout", "Continue to checkout"]
+    proceed_payment:         # ref: "[data-bind=... Proceed To Payment]" timeout
+      selectors: ["[data-bind*='Proceed To Payment']", "button.continue",
+                  "button.action.continue", ".payment-method-content button.action.primary"]
+      texts: ["Proceed to Payment", "Continue to payment", "Review & Payments", "Next", "Continue"]
+    place_order:             # ref: place-order / submit button variance
+      selectors: ["#place-order", "button.action.primary.checkout", "button.checkout",
+                  "button[title*='Place' i]"]
+      texts: ["Place Order", "Pay now", "Complete order", "Confirm order", "Submit order"]
+
+# ---------------------------------------------------------------------------
+# PRICE PATTERNS — where the REAL (server-rendered) price lives in a product
+# page's HTML, for the price auto-heal (price_resolver). Used when the REST/
+# catalog API returns price 0 because the store prices CLIENT-SIDE. Most-specific
+# first; add a row to teach APEA a new store's markup. Each must capture the
+# numeric price in group 1. Platform-agnostic (schema.org / JSON-LD / Magento).
+# ---------------------------------------------------------------------------
+price_patterns:
+  - 'product-schema-price[^>]*?value=["\'']([0-9][0-9,]*\.?[0-9]*)'
+  - 'itemprop=["\'']price["\''][^>]*content=["\'']([0-9][0-9,]*\.?[0-9]*)'
+  - '"@type"\s*:\s*"Offer"[\s\S]{0,300}?"price"\s*:\s*"?([0-9][0-9,]*\.?[0-9]*)'
+  - 'data-price-amount=["\'']([0-9][0-9,]*\.?[0-9]*)'
+  - '"final_price"\s*:\s*"?([0-9][0-9,]*\.?[0-9]*)'
+
+stripe:
+  # Any of these substrings in an iframe src/name marks a Stripe hosted-fields frame.
+  frame_url_patterns: ["js.stripe.com", "elements-inner", "__privateStripeFrame", "hooks.stripe.com"]
+
+  # Payment Element (current Stripe.js): several inputs inside one iframe.
+  payment_element_fields:
+    number: "input[name='number']"
+    expiry: "input[name='expiry']"
+    cvc: "input[name='cvc']"
+    postal: "input[name='postalCode']"
+
+  # Legacy Card Element (older split/single-line integration).
+  card_element_fields:
+    number: "input[name='cardnumber']"
+    expiry: "input[name='exp-date']"
+    cvc: "input[name='cvc']"
+    postal: "input[name='postal']"
+
+  # PUBLIC Stripe test cards. exp = any future date; cvc = any 3 digits; zip = any.
+  test_cards:
+    success: {number: "4242424242424242", exp: "12 / 34", cvc: "123", postal: "12345"}
+    threeds: {number: "4000002760003184", exp: "12 / 34", cvc: "123", postal: "12345"}
+    threeds_required: {number: "4000002500003155", exp: "12 / 34", cvc: "123", postal: "12345"}
+    decline: {number: "4000000000000002", exp: "12 / 34", cvc: "123", postal: "12345"}
+
+  # Stripe's TEST 3DS challenge modal (test mode only): a button to approve.
+  threeds:
+    frame_url_patterns: ["3ds", "hooks.stripe.com", "acs"]
+    complete_selectors:
+      - "#test-source-authorize-3ds"
+      - "button:has-text('Complete authentication')"
+      - "button:has-text('Complete')"
+      - "button:has-text('Authorize')"
+
+  # Site-specific — left null; supply via browser_payment for your integration.
+  pay_trigger_selector: null      # click to reveal the payment form, if needed
+  submit_selector: null           # the "Pay / Place order" button on YOUR page
+  success_url_contains: null      # a URL fragment that confirms the order placed
+
+paradoxlabs_cybersource:
+  # ParadoxLabs' CyberSource module for Magento 2 (the "Credit / Debit Card"
+  # method backed by paradoxlabs_cybersource, seen calling the store's own
+  # secureAccept/getParams endpoint) renders the real card form in an iframe
+  # served by CyberSource itself, communicating back to the storefront via
+  # postMessage. Two CyberSource sub-integrations exist depending on store
+  # config — Secure Acceptance (Hosted Checkout / Web-Mobile) and Flex
+  # Microform (client-side tokenization) — both frame families and field sets
+  # are listed so the same driver finds whichever one the store actually uses.
+  # NOTE: unlike Stripe, CyberSource's hosted page can be reskinned by the
+  # merchant, so these selectors are CyberSource's documented defaults and
+  # should be verified/tuned against the real site before relying on them.
+  frame_url_patterns:
+    - "secureacceptance.cybersource.com"
+    - "testsecureacceptance.cybersource.com"
+    - "flex.cybersource.com"
+    - "testflex.cybersource.com"
+
+  # Flex Microform's documented container/field ids (client-side tokenization).
+  payment_element_fields:
+    number: "input#number, input[name='card_number']"
+    expiry: "input[name='card_expiry_date'], input#expiry"
+    cvc: "input#securityCode, input[name='card_cvn']"
+    postal: "input[name='postal_code']"
+
+  # Secure Acceptance Hosted Checkout's documented default field names.
+  card_element_fields:
+    number: "input[name='card_number']"
+    expiry: "input[name='card_expiry_date']"
+    cvc: "input[name='card_cvn']"
+    postal: "input[name='bill_to_address_postal_code']"
+
+  # PUBLIC CyberSource sandbox test cards (developer.cybersource.com/hello-world/
+  # testing-guide.html) — sandbox only, never processes a real payment.
+  # exp = any future date; cvc = any 3 digits (4 for Amex); zip = any.
+  test_cards:
+    success:    {number: "4111111111111111", exp: "12 / 34", cvc: "123",  postal: "12345"}
+    mastercard: {number: "5555555555554444", exp: "12 / 34", cvc: "123",  postal: "12345"}
+    amex:       {number: "378282246310005",  exp: "12 / 34", cvc: "1234", postal: "12345"}
+    discover:   {number: "6011111111111117", exp: "12 / 34", cvc: "123",  postal: "12345"}
+    decline:    {number: "4000000000000002", exp: "12 / 34", cvc: "123",  postal: "12345"}
+
+  # CyberSource Payer Authentication (3DS2) challenge, if enabled on the store.
+  # The actual challenge iframe is issuer-hosted (ACS), so this is a best-effort
+  # generic guess — verify against the real 3DS challenge page if hit.
+  threeds:
+    frame_url_patterns: ["cardinalcommerce", "acs", "authenticate"]
+    complete_selectors:
+      - "button:has-text('Submit')"
+      - "button:has-text('Continue')"
+      - "input[type='submit']"
+
+  # Site-specific — left null; supply via browser_payment for your integration.
+  pay_trigger_selector: null
+  submit_selector: null
+  success_url_contains: null
+
+# ---------------------------------------------------------------------------
+# REPLAY PROFILES — whether a gateway's card step can be reproduced at the HTTP
+# layer (so a Locust VU can create real sandbox orders WITHOUT a browser), and if
+# so, how. Consumed by agents/payment_replay.py, which combines this KB knowledge
+# with the ACTUAL captured payment network sequence (browser_track.payment_network)
+# to reach an evidence-based verdict per recording. Generic across platforms — add
+# a gateway block to teach APEA a new one.
+#
+#   replayable: true        HTTP replay can create orders (per-VU token re-mint)
+#              conditional  possible only if specific conditions hold; check evidence
+#              false        cannot be replayed (hard blocker)
+#              unknown      no profile; rely purely on captured evidence
+# ---------------------------------------------------------------------------
+replay_profiles:
+  _default:
+    replayable: unknown
+    mechanism: undetermined
+    reasons:
+      - "No known replay profile for this gateway; verdict comes from captured evidence."
+
+  stripe:
+    replayable: true
+    mechanism: client_tokenization
+    mint:
+      description: >-
+        Mint a fresh PaymentMethod/token per VU using the PUBLISHABLE key and a
+        PUBLIC test PAN, then POST that token to the merchant's own confirm
+        endpoint (the one captured in the browser run). The merchant backend
+        finishes the order with its server-side secret — the VU never needs it.
+      needs: [publishable_key, public_test_card]
+      mint_endpoint_hint: "api.stripe.com/v1/payment_methods (or /v1/tokens)"
+    confirm_endpoint_hint: "merchant backend payment/confirm (from capture)"
+    reasons:
+      - "Card is tokenized client-side into a re-mintable token; sandbox tokens are creatable with the publishable key, so each VU can mint its own."
+
+  paradoxlabs_cybersource:
+    replayable: conditional
+    mechanism: server_signed_single_use
+    mint:
+      description: >-
+        Fetch fresh signed params from the merchant's OWN getParams/secureAccept
+        endpoint per VU (the merchant signs server-side — no secret needed by the
+        client), then POST a PUBLIC test card to the CyberSource endpoint.
+      needs: [merchant_getparams_endpoint, public_test_card]
+      mint_endpoint_hint: "store getParams / secureAccept (from capture)"
+    confirm_endpoint_hint: "*secureacceptance.cybersource.com/* (from capture)"
+    blockers:
+      - "signature / access_key / transaction_uuid are single-use and time-bound — a captured request cannot be replayed as-is."
+      - "CyberSource's hosted endpoint may enforce Origin / device-fingerprint checks that reject a raw server-side POST."
+    reasons:
+      - "Replayable ONLY IF the merchant getParams endpoint is callable per VU AND the CyberSource POST is accepted in sandbox — decide from the captured sequence, not by assumption."
+
+  # Signature hints let the classifier map a captured host/path to a profile even
+  # when the runner didn't tag a gateway. Substring match, case-insensitive.
+  _signatures:
+    stripe: ["js.stripe.com", "api.stripe.com", "stripe"]
+    paradoxlabs_cybersource: ["cybersource", "secureacceptance", "flex.cybersource"]
+    adyen: ["adyen", "checkoutshopper"]
+    braintree: ["braintree", "paypal"]
+    checkout_com: ["checkout.com"]

@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Pradish\\\\PerformanceTesting\\\\PerformanceOrchestration\" -Recurse -Depth 2)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Pradish\\\\PerformanceTesting\\\\PerformanceOrchestration\" -Force | Where-Object { $_.PSIsContainer } | Select-Object Name | Sort-Object Name)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Pradish\\\\PerformanceTesting\\\\PerformanceOrchestration\\\\apea\" -Recurse -Depth 1 -Force | Where-Object { -not $_.PSIsContainer } | Select-Object Name)",
+      "Bash(./.venv/Scripts/python.exe *)",
+      "Bash(echo \"===== journey.json payment block =====\")",
+      "Bash(echo)",
+      "Bash(echo \"===== does discovery.json have ui_steps / selenium_inputs? =====\")",
+      "Bash(echo \"===== FULL recorded_steps =====\")",
+      "Bash(echo \"===== ui_journey steps mentioning card/payment/iframe/cyber/agreement =====\")",
+      "Bash(echo \"=== files in results ===\")",
+      "Bash(ls __TRACKED_VAR__/results)",
+      "Bash(echo \"=== browser_track.json ===\")",
+      "Bash(echo \"=== browser calls \\(apea_calls_browser.jsonl\\) ===\")",
+      "Bash(echo \"=== journey.json: recorded_steps + checkout config ===\")",
+      "Bash(echo \"=== playwright_run.log \\(full, tail 2500\\) ===\")",
+      "Bash(echo \"=== FULL recorded ui_journey \\(all steps\\) ===\")",
+      "Bash(echo 'LATEST: __TRACKED_VAR__')",
+      "Bash(echo \"=== browser call trace ===\")",
+      "Bash(echo \"=== browser_track.json \\(minus prices\\) ===\")",
+      "Bash(echo \"=== browser trace \\(UI steps\\) ===\")",
+      "PowerShell(cd C:\\\\Pradish\\\\PerformanceTesting\\\\PerformanceOrchestration; $out = & .\\\\.venv\\\\Scripts\\\\python.exe selftest.py 2>&1 | Out-String; $out.Substring\\([Math]::Max\\(0,$out.Length-2800\\)\\))",
+      "Bash(echo \"=== full totals from set-shipping body ===\")",
+      "Bash(echo \"=== report: does it show Order Value KPI? any price=0? ===\")",
+      "PowerShell(cd C:\\\\Pradish\\\\PerformanceTesting\\\\PerformanceOrchestration; $out = & .\\\\.venv\\\\Scripts\\\\python.exe selftest.py 2>&1 | Out-String; \\($out -split \"`n\" | Select-String -Pattern \"checks passed|FAIL|Generated Locust\"\\) -join \"`n\")",
+      "PowerShell(cd C:\\\\Pradish\\\\PerformanceTesting\\\\PerformanceOrchestration; & .\\\\.venv\\\\Scripts\\\\python.exe -c \"import py_compile; py_compile.compile\\('apea/agents/generator.py', doraise=True\\); print\\('compiles'\\)\"; $out = & .\\\\.venv\\\\Scripts\\\\python.exe selftest.py 2>&1 | Out-String; \\($out -split \"`n\" | Select-String -Pattern \"checks passed|FAIL\"\\) -join \"`n\")",
+      "Bash(echo \"=== locust_stats.csv \\(Items added / Order / Aggregated\\) ===\")",
+      "PowerShell(cd C:\\\\Pradish\\\\PerformanceTesting\\\\PerformanceOrchestration; & .\\\\.venv\\\\Scripts\\\\python.exe -c \"import py_compile; py_compile.compile\\('apea/agents/generator.py', doraise=True\\); print\\('generator compiles'\\)\"; $out = & .\\\\.venv\\\\Scripts\\\\python.exe selftest.py 2>&1 | Out-String; \\($out -split \"`n\" | Select-String -Pattern \"checks passed|FAIL|Generated Locust\"\\) -join \"`n\")",
+      "Bash(echo \"=== Items added / Order stats ===\")",
+      "Bash(echo \"=== report files present ===\")",
+      "Bash(ls __TRACKED_VAR__/reports)",
+      "Bash(echo \"=== report HTML: Order Value / Orders area ===\")",
+      "Bash(echo \"=== how does analyzer build 'flow'? does order_value_total survive? ===\")"
+    ]
+  }
+}

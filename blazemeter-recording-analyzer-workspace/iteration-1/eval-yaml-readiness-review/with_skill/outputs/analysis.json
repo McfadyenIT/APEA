@@ -1,0 +1,135 @@
+{
+  "source_file": "blazemeter-recording-analyzer-workspace/sample-recordings/mixed_workload.yaml",
+  "format": "yaml",
+  "platform": "Generic",
+  "auth_model": "jwt",
+  "business_flows": [
+    {
+      "flow_name": "Browse (Guest)",
+      "scenario_source": "execution/scenarios: browse (concurrency 100, ramp-up 60s, hold-for 10m)",
+      "steps": [
+        {
+          "step_name": "Home Page",
+          "method": "GET",
+          "path": "/",
+          "hit_count": 1,
+          "think_time_ms": 1000
+        },
+        {
+          "step_name": "Search",
+          "method": "GET",
+          "path": "/search/results",
+          "hit_count": 1,
+          "think_time_ms": 2000
+        }
+      ]
+    },
+    {
+      "flow_name": "Buy (Authenticated Purchase)",
+      "scenario_source": "execution/scenarios: buy (concurrency 20, ramp-up 30s, hold-for 10m)",
+      "steps": [
+        {
+          "step_name": "Login",
+          "method": "POST",
+          "path": "/api/login",
+          "hit_count": 1,
+          "think_time_ms": 1000
+        },
+        {
+          "step_name": "Add to Cart",
+          "method": "POST",
+          "path": "/api/cart/add",
+          "hit_count": 1,
+          "think_time_ms": 2000
+        },
+        {
+          "step_name": "Place Order",
+          "method": "PUT",
+          "path": "/api/checkout/{cartId}/place-order",
+          "hit_count": 1,
+          "think_time_ms": 1000
+        }
+      ]
+    }
+  ],
+  "parametrization_candidates": [
+    {
+      "field": "keyword",
+      "observed_in": "Search (Browse flow)",
+      "sample_value": "${keyword} (placeholder only — no literal sample value present in recording)",
+      "recommended_column": "search_keyword",
+      "notes": "The recording carries only the ${keyword} placeholder itself, not a captured literal example — there is no sample text at all to judge variety from. Source real keyword values before load testing."
+    },
+    {
+      "field": "email",
+      "observed_in": "Login (Buy flow)",
+      "sample_value": "${email} (placeholder only)",
+      "recommended_column": "username",
+      "notes": "Only the placeholder is present in the recording, no literal recorded value — real credentials need to be sourced/created, with variety across virtual users."
+    },
+    {
+      "field": "password",
+      "observed_in": "Login (Buy flow)",
+      "sample_value": "${password} (placeholder only)",
+      "recommended_column": "password",
+      "notes": "Same situation as email — only a placeholder is present in the recording, no literal sample."
+    },
+    {
+      "field": "sku",
+      "observed_in": "Add to Cart (Buy flow)",
+      "sample_value": "${sku} (placeholder only)",
+      "recommended_column": "sku",
+      "notes": "Only the placeholder is present — needs a real product/SKU catalog sample before load testing."
+    },
+    {
+      "field": "quantity",
+      "observed_in": "Add to Cart (Buy flow)",
+      "sample_value": "${quantity} (placeholder only)",
+      "recommended_column": "quantity",
+      "notes": "Only the placeholder is present — needs representative quantity values (e.g. 1–3) before load testing."
+    }
+  ],
+  "correlation_candidates": [
+    {
+      "field": "token",
+      "produced_by": "Login (Buy flow) response — declared extractor JSON path $.token",
+      "consumed_by": [
+        "Add to Cart (Authorization: Bearer header)",
+        "Place Order (Authorization: Bearer header)"
+      ],
+      "extraction_strategy": "json_path",
+      "expression": "$.token"
+    },
+    {
+      "field": "cartId",
+      "produced_by": "Add to Cart (Buy flow) response — declared extractor JSON path $.cartId",
+      "consumed_by": [
+        "Place Order (path segment /api/checkout/{cartId}/place-order)"
+      ],
+      "extraction_strategy": "json_path",
+      "expression": "$.cartId"
+    }
+  ],
+  "risk_flags": [
+    "No logout/session-end step in either scenario — the Buy flow ends at Place Order with no explicit session termination captured.",
+    "The bearer token is captured once at Login and reused for both Add to Cart and Place Order; with hold-for set to 10 minutes, confirm the server-side token TTL so the load test doesn't fail mid-run on token expiry.",
+    "The 'keyword' field's only representation in the recording is the bare ${keyword} placeholder — unlike the other parametrization candidates there isn't even a single literal sample value to gauge realistic search terms from.",
+    "No CSV/data file is declared inside the YAML itself (csv_datasets is empty) — all five parametrization fields (keyword, email, password, sku, quantity) are referenced only as ${var} placeholders with no accompanying data source, so the test-data file has to be built from scratch rather than adapted from something already in the recording.",
+    "Two independent execution blocks/scenarios with different concurrency (browse: 100, buy: 20) represent two separate simulated populations, not one linear journey — a combined test needs to run both scenarios concurrently at roughly their recorded 5:1 ratio, not merge the steps into a single flow.",
+    "The recording is very short (2 steps in Browse, 3 in Buy) — no product detail page view, cart review, or shipping/payment step appears before Place Order. Confirm with the user whether this is the complete intended journey or a deliberately trimmed sample recording.",
+    "platform_guess is 'Generic' (no Magento/SFCC/Mirakl/Shopify signature detected in hosts or paths) — no platform-specific correlation conventions apply automatically; treat token/cartId handling as generic REST until confirmed otherwise."
+  ],
+  "parsing_metadata": {
+    "total_requests_parsed": 5,
+    "noise_filtered_count": 1,
+    "noise_filtered_examples": [
+      "GET https://static.shop.example.com/assets/app.js (static asset, .js extension)"
+    ],
+    "variables_detected": ["cartId", "email", "keyword", "password", "quantity", "sku", "token"],
+    "scenarios": [
+      {"name": "browse", "concurrency": 100, "ramp_up_seconds": 60, "hold_for_seconds": 600},
+      {"name": "buy", "concurrency": 20, "ramp_up_seconds": 30, "hold_for_seconds": 600}
+    ],
+    "parsing_method": "hand-traced against scripts/parse_recording.py logic — bash/sandbox tool was unavailable in this session, so parse_recording.py could not literally be executed. The YAML is small (55 lines) and was walked line-by-line through the script's actual parse_yaml()/is_noise()/compute_hit_counts()/guess_auth_model() functions rather than eyeballed."
+  }
+}

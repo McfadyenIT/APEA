@@ -1,0 +1,142 @@
+{
+  "source_file": "C:\\Pradish\\Performance Testing\\Performance Orchestration\\blazemeter-recording-analyzer-workspace\\sample-recordings\\browse_login_search.har",
+  "format": "har",
+  "platform": "Generic",
+  "auth_model": "jwt",
+  "business_flows": [
+    {
+      "flow_name": "Browse → Login → Search → Add Laptop to Cart",
+      "steps": [
+        {
+          "step_name": "Browse Home Page",
+          "method": "GET",
+          "path": "/",
+          "hit_count": 1,
+          "think_time_ms": null,
+          "notes": "First request in the recording; page_group 'Home'."
+        },
+        {
+          "step_name": "Legacy URL Redirect",
+          "method": "GET",
+          "path": "/old-home",
+          "hit_count": 1,
+          "think_time_ms": 2100,
+          "notes": "302 redirect back to '/'. Same host, same eventual destination as the step above — reads as a trivial legacy-URL bounce, not an SSO/auth hop. Kept as its own request per HAR noise-filtering rules (redirects are never auto-filtered as noise)."
+        },
+        {
+          "step_name": "Login",
+          "method": "POST",
+          "path": "/api/login",
+          "hit_count": 1,
+          "think_time_ms": 2400,
+          "notes": "JSON body {email, password}. Response returns a JWT in field 'token', a 'customerId', and sets a SESSIONID cookie via Set-Cookie (HttpOnly)."
+        },
+        {
+          "step_name": "Search for Product ('laptop')",
+          "method": "GET",
+          "path": "/search/results",
+          "hit_count": 1,
+          "think_time_ms": 2500,
+          "notes": "Query params q=laptop, sort=relevance. Sent with 'Authorization: Bearer <token>' from Login. Response returns SKU LAP-2001."
+        },
+        {
+          "step_name": "View Product Detail (LAP-2001 / UltraBook 14)",
+          "method": "GET",
+          "path": "/product/LAP-2001",
+          "hit_count": 1,
+          "think_time_ms": 2200,
+          "notes": "SKU in the path matches the SKU just returned by the search response — this looks like the user clicking the first/only search result."
+        },
+        {
+          "step_name": "Add to Cart",
+          "method": "POST",
+          "path": "/api/cart/add",
+          "hit_count": 1,
+          "think_time_ms": 3200,
+          "notes": "Body {sku, quantity}. Response returns cartId. Recording ends here — no checkout, payment, place-order, or logout step follows."
+        }
+      ]
+    }
+  ],
+  "parametrization_candidates": [
+    {
+      "field": "email",
+      "observed_in": "Login",
+      "sample_value": "jane.doe@example.com",
+      "recommended_column": "username",
+      "notes": "Only 1 sample observed — add variety before load testing."
+    },
+    {
+      "field": "password",
+      "observed_in": "Login",
+      "sample_value": "Secret123",
+      "recommended_column": "password",
+      "notes": "Only 1 sample observed; sent in plaintext in the JSON body exactly as the app expects — parametrize verbatim, do not hash/encode."
+    },
+    {
+      "field": "q",
+      "observed_in": "Search for Product ('laptop')",
+      "sample_value": "laptop",
+      "recommended_column": "search_keyword",
+      "notes": "Only 1 sample observed. The accompanying 'sort=relevance' query param looks like a fixed UI default, not a parametrization candidate."
+    },
+    {
+      "field": "sku",
+      "observed_in": "Add to Cart (also appears in the Search response body and the Product Detail path)",
+      "sample_value": "LAP-2001",
+      "recommended_column": "sku",
+      "notes": "Only 1 sample observed. Note the dual nature: in this recording the SKU is *derived* from the search response (same value shows up in the search results, the PDP path, and the cart-add body), so it behaves like a correlation value within one session even though it's fundamentally catalog test data. Decide deliberately: (a) parametrize sku directly for a fixed add-to-cart test, or (b) parametrize the search keyword and extract/correlate the SKU from the search response to simulate a real search-then-select journey. As currently written it is a hardcoded literal that keeps working only as long as LAP-2001 stays in the catalog."
+    },
+    {
+      "field": "quantity",
+      "observed_in": "Add to Cart",
+      "sample_value": 1,
+      "recommended_column": "quantity",
+      "notes": "Only 1 sample observed (always 1) — add variety before load testing."
+    }
+  ],
+  "correlation_candidates": [
+    {
+      "field": "token",
+      "produced_by": "Login (POST /api/login) response body field 'token'",
+      "consumed_by": ["Search for Product ('laptop') (GET /search/results)", "View Product Detail (GET /product/LAP-2001)", "Add to Cart (POST /api/cart/add)"],
+      "extraction_strategy": "json_path",
+      "expression": "$.token",
+      "notes": "Replayed verbatim as 'Authorization: Bearer <token>' on every subsequent request in the recording (found via response_snippet on the Login entry, then confirmed identical across the Authorization headers of the next 3 requests). This is the single biggest replay-breaking risk in this recording: the literal string 'eyJhbGciOiJIUzI1NiJ9.abcdefg' is a JWT and will expire. Hardcoding it means the script works once and then returns 401s on every request after Login on every subsequent run or iteration."
+    },
+    {
+      "field": "SESSIONID",
+      "produced_by": "Login (POST /api/login) — Set-Cookie response header",
+      "consumed_by": ["Not explicitly re-sent as a request Cookie header anywhere in this HAR (browser's automatic cookie jar handled it) — must be captured and replayed explicitly by a load-testing tool."],
+      "extraction_strategy": "regex",
+      "expression": "SESSIONID=([^;]+)",
+      "notes": "Found via response_set_cookie on the Login entry: 'SESSIONID=a1b2c3d4e5f6; Path=/; HttpOnly'. HttpOnly cookie set at login. Because the HAR was captured from a real browser, the browser resent this cookie automatically on later requests without it ever showing up explicitly as a request header in the capture — a load-testing tool will not do this automatically, so it must be extracted and replayed as a Cookie header on every subsequent call or server-side session state may not match what the bearer token implies."
+    },
+    {
+      "field": "cartId",
+      "produced_by": "Add to Cart (POST /api/cart/add) response body field 'cartId'",
+      "consumed_by": ["None observed — the recording ends at Add to Cart."],
+      "extraction_strategy": "json_path",
+      "expression": "$.cartId",
+      "notes": "Found via response_snippet on the Add to Cart entry: '{\"cartId\":\"cart_9f8e7d\",\"itemCount\":1}'. No consumer is observed in this recording, but this is the classic ID that any Checkout / Place Order step layered on top of this flow would need — must not be hardcoded if the journey is extended."
+    },
+    {
+      "field": "customerId",
+      "produced_by": "Login (POST /api/login) response body field 'customerId'",
+      "consumed_by": ["None observed in this recording."],
+      "extraction_strategy": "json_path",
+      "expression": "$.customerId",
+      "notes": "Found via response_snippet on the Login entry (value 98213). Captured by the server at login but never reused anywhere in this recording — flagged as captured-but-unused; may be needed by account/order flows not present in this capture."
+    }
+  ],
+  "risk_flags": [
+    "No logout / session-end step: the recording stops immediately after Add to Cart, mid-session — checkout, place-order, and logout behavior are all unverified.",
+    "The JWT bearer token from Login and the SESSIONID session cookie are both correlation candidates that are easy to miss: the JWT appears as a literal Authorization header value on 3 later requests in the raw HAR, and if copied as-is into a script it will work for exactly one run, then fail with 401s on every iteration after the token expires.",
+    "The SESSIONID cookie is never shown being resent as a request header in this HAR because the capture is browser-based (automatic cookie jar) — a replay tool must extract it from Set-Cookie and add it explicitly, or session state may not match what the bearer token implies.",
+    "Only one session / one journey was recorded (no thread groups or scenarios in a HAR) — no data to infer relative task weighting (e.g. browse-only vs. login-and-buy users), and only one example each of username, password, search keyword, SKU, and quantity, all needing more variety before load testing.",
+    "cartId and customerId are both captured by the server but never consumed later in this recording — can't confirm from this capture alone how a checkout step would use them; revisit when the flow is extended past Add to Cart.",
+    "A 302 redirect from /old-home to '/' appears mid-session. It reads as a trivial legacy-URL bounce (same host, lands back on the already-visited home page) rather than an SSO/auth hop, but it was deliberately kept (not filtered as noise) and is called out here rather than silently folded away.",
+    "Platform detected as Generic (no Magento/SFCC/Mirakl/Shopify signal) — this looks like a custom/headless REST + JWT storefront ('/api/login', '/api/cart/add'), so platform-specific correlation conventions (form_key, quoteId, dwsid) don't apply; only the generic bearer-token + cookie pattern does.",
+    "Recording is short (6 business requests, ~12 seconds, a single session) — token/session lifetime can't be observed directly from one capture; the expiry risk on the JWT is inferred from its format, not confirmed by watching it fail."
+  ]
+}

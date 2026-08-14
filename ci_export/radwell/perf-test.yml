@@ -1,0 +1,18 @@
+# APEA performance test — plain-English config (edit values after the colon)
+# CI runs:  python -m apea.cli --config perf-test.yml --check-sla
+
+target url: https://mcstaging.radwell.eu
+recording file: ci/perf/recording.yaml
+data file: ci/perf/testdata.csv
+
+test type: smoke
+users: 100
+duration: 10m
+workers: 1
+
+cart quantity: 1
+ai repair: false
+
+# Pass/fail gate — the CI job exits non-zero if either is exceeded.
+pass if error rate below: 1%
+pass if p95 below: 3000 ms

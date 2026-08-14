@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0">
+  <hashTree>
+    <TestPlan testname="Magento Guest Checkout" enabled="true">
+      <stringProp name="TestPlan.comments"></stringProp>
+    </TestPlan>
+    <hashTree>
+      <ThreadGroup testname="Guest Checkout Users" enabled="true">
+        <stringProp name="ThreadGroup.num_threads">50</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">60</stringProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <HeaderManager testname="Default Headers" enabled="true">
+          <collectionProp name="HeaderManager.headers">
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">Accept</stringProp>
+              <stringProp name="Header.value">text/html,application/json</stringProp>
+            </elementProp>
+            <elementProp name="" elementType="Header">
+              <stringProp name="Header.name">User-Agent</stringProp>
+              <stringProp name="Header.value">Mozilla/5.0 (compatible; BlazeMeter)</stringProp>
+            </elementProp>
+          </collectionProp>
+        </HeaderManager>
+        <hashTree/>
+
+        <CSVDataSet testname="Test Data" enabled="true">
+          <stringProp name="filename">users.csv</stringProp>
+          <stringProp name="variableNames">username,password,sku,quantity,coupon_code</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+
+        <HTTPSamplerProxy testname="Home Page" enabled="true">
+          <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+          <stringProp name="HTTPSampler.protocol">https</stringProp>
+          <stringProp name="HTTPSampler.path">/</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <RegexExtractor testname="Extract form_key">
+            <stringProp name="RegexExtractor.refname">form_key</stringProp>
+            <stringProp name="RegexExtractor.regex">form_key.*?value="(.+?)"</stringProp>
+          </RegexExtractor>
+          <hashTree/>
+        </hashTree>
+
+        <HTTPSamplerProxy testname="Home Page CSS" enabled="true">
+          <stringProp name="HTTPSampler.domain">static.example-shop.com</stringProp>
+          <stringProp name="HTTPSampler.protocol">https</stringProp>
+          <stringProp name="HTTPSampler.path">/static/version123/frontend/theme/en_US/css/styles.css</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+
+        <HTTPSamplerProxy testname="Google Analytics Beacon" enabled="true">
+          <stringProp name="HTTPSampler.domain">www.google-analytics.com</stringProp>
+          <stringProp name="HTTPSampler.protocol">https</stringProp>
+          <stringProp name="HTTPSampler.path">/collect</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+
+        <ConstantTimer testname="Think Time 1s">
+          <stringProp name="ConstantTimer.delay">1000</stringProp>
+        </ConstantTimer>
+        <hashTree/>
+
+        <TransactionController testname="Login Flow" enabled="true">
+          <boolProp name="TransactionController.includeTimers">false</boolProp>
+        </TransactionController>
+        <hashTree>
+          <HTTPSamplerProxy testname="Login" enabled="true">
+            <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+            <stringProp name="HTTPSampler.protocol">https</stringProp>
+            <stringProp name="HTTPSampler.path">/customer/account/loginPost/</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <stringProp name="HTTPSampler.postBodyRaw">false</stringProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="login[username]" elementType="HTTPArgument">
+                  <stringProp name="Argument.name">login[username]</stringProp>
+                  <stringProp name="Argument.value">testuser1@example.com</stringProp>
+                </elementProp>
+                <elementProp name="login[password]" elementType="HTTPArgument">
+                  <stringProp name="Argument.name">login[password]</stringProp>
+                  <stringProp name="Argument.value">Password123!</stringProp>
+                </elementProp>
+                <elementProp name="form_key" elementType="HTTPArgument">
+                  <stringProp name="Argument.name">form_key</stringProp>
+                  <stringProp name="Argument.value">${form_key}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <ResponseAssertion testname="Login Success Assertion">
+              <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+              <stringProp name="dashboard">dashboard</stringProp>
+            </ResponseAssertion>
+            <hashTree/>
+          </hashTree>
+        </hashTree>
+
+        <ConstantTimer testname="Think Time 2s">
+          <stringProp name="ConstantTimer.delay">2000</stringProp>
+        </ConstantTimer>
+        <hashTree/>
+
+        <HTTPSamplerProxy testname="Search Product" enabled="true">
+          <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+          <stringProp name="HTTPSampler.protocol">https</stringProp>
+          <stringProp name="HTTPSampler.path">/catalogsearch/result/?q=running+shoes</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+
+        <HTTPSamplerProxy testname="View Product Detail" enabled="true">
+          <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+          <stringProp name="HTTPSampler.protocol">https</stringProp>
+          <stringProp name="HTTPSampler.path">/catalog/product/view/id/12345</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+        </HTTPSamplerProxy>
+        <hashTree/>
+
+        <TransactionController testname="Checkout Flow" enabled="true">
+          <boolProp name="TransactionController.includeTimers">false</boolProp>
+        </TransactionController>
+        <hashTree>
+          <HTTPSamplerProxy testname="Add to Cart" enabled="true">
+            <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+            <stringProp name="HTTPSampler.protocol">https</stringProp>
+            <stringProp name="HTTPSampler.path">/checkout/cart/add/</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <stringProp name="HTTPSampler.postBodyRaw">false</stringProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="sku" elementType="HTTPArgument">
+                  <stringProp name="Argument.name">sku</stringProp>
+                  <stringProp name="Argument.value">SKU12345</stringProp>
+                </elementProp>
+                <elementProp name="qty" elementType="HTTPArgument">
+                  <stringProp name="Argument.name">qty</stringProp>
+                  <stringProp name="Argument.value">1</stringProp>
+                </elementProp>
+                <elementProp name="form_key" elementType="HTTPArgument">
+                  <stringProp name="Argument.name">form_key</stringProp>
+                  <stringProp name="Argument.value">${form_key}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <JSONPostProcessor testname="Extract quoteId">
+              <stringProp name="JSONPostProcessor.referenceNames">quoteId</stringProp>
+              <stringProp name="JSONPostProcessor.jsonPathExprs">$.quote_id</stringProp>
+            </JSONPostProcessor>
+            <hashTree/>
+          </hashTree>
+
+          <HTTPSamplerProxy testname="Apply Coupon" enabled="true">
+            <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+            <stringProp name="HTTPSampler.protocol">https</stringProp>
+            <stringProp name="HTTPSampler.path">/checkout/cart/couponPost/</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <stringProp name="HTTPSampler.postBodyRaw">false</stringProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="coupon_code" elementType="HTTPArgument">
+                  <stringProp name="Argument.name">coupon_code</stringProp>
+                  <stringProp name="Argument.value">SAVE10</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree/>
+
+          <HTTPSamplerProxy testname="Checkout Shipping" enabled="true">
+            <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+            <stringProp name="HTTPSampler.protocol">https</stringProp>
+            <stringProp name="HTTPSampler.path">/rest/V1/carts/${quoteId}/shipping-information</stringProp>
+            <stringProp name="HTTPSampler.method">POST</stringProp>
+            <stringProp name="HTTPSampler.postBodyRaw">true</stringProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <stringProp name="Argument.name"></stringProp>
+                  <stringProp name="Argument.value">{"addressInformation":{"shipping_address":{"street":["123 Main St"],"city":"Springfield","postcode":"62704","country_id":"US"}}}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree/>
+
+          <HTTPSamplerProxy testname="Place Order" enabled="true">
+            <stringProp name="HTTPSampler.domain">www.example-shop.com</stringProp>
+            <stringProp name="HTTPSampler.protocol">https</stringProp>
+            <stringProp name="HTTPSampler.path">/rest/V1/carts/${quoteId}/order</stringProp>
+            <stringProp name="HTTPSampler.method">PUT</stringProp>
+            <stringProp name="HTTPSampler.postBodyRaw">true</stringProp>
+            <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+              <collectionProp name="Arguments.arguments">
+                <elementProp name="" elementType="HTTPArgument">
+                  <stringProp name="Argument.name"></stringProp>
+                  <stringProp name="Argument.value">{"paymentMethod":{"method":"checkmo"}}</stringProp>
+                </elementProp>
+              </collectionProp>
+            </elementProp>
+          </HTTPSamplerProxy>
+          <hashTree>
+            <ResponseAssertion testname="Order Success Assertion">
+              <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+              <stringProp name="order_id">order_id</stringProp>
+            </ResponseAssertion>
+            <hashTree/>
+          </hashTree>
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

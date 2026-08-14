@@ -1,0 +1,50 @@
+# ============================================================================
+#  APEA performance test — plain-English configuration
+#  Edit the values on the right of each colon. Lines starting with # are notes.
+#  Run it locally:   python -m apea.cli --config perf-test.yml --check-sla
+#  In CI it runs automatically (see .github/workflows or ci/Jenkinsfile).
+# ============================================================================
+
+# The site under test. If you leave this blank, APEA uses the URL from the
+# recording below.
+target url: https://your-store.example.com
+
+# Your BlazeMeter / JMeter / HAR recording, committed in the repo so CI can read
+# it without any uploading. Path is relative to the repo root.
+recording file: ci/perf/checkout.jmx
+
+# What kind of test to run. One of:
+#   smoke | baseline | load | stress | spike | soak | capacity | volume | failover
+test type: load
+
+# How many concurrent virtual users.
+users: 50
+
+# How long to hold the load. Use s / m / h  (e.g. 30s, 10m, 1h).
+duration: 10m
+
+# Parallel load generators (leave 1 unless you need very high load).
+workers: 1
+
+# The data file APEA told you to upload (card, shipping, credentials, search…),
+# committed in the repo. One row per virtual user.
+data file: ci/perf/testdata.csv
+
+# --- Optional -------------------------------------------------------------
+# Units added per add-to-cart (raise product load).
+cart quantity: 1
+
+# Gateway test-mode payment (only if paying by card). Leave blank otherwise.
+payment method:
+payment additional data:
+
+# CAPTCHA bypass / test-key token, if the test env issues one.
+captcha bypass token:
+
+# Turn on the AI pre-flight self-repair (needs ANTHROPIC_API_KEY in the env).
+ai repair: false
+
+# Pass/fail gate. Presence of either line turns the gate on; the run exits
+# non-zero in CI if the gate fails.
+pass if error rate below: 1%
+pass if p95 below: 3000 ms

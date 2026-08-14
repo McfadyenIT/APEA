@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APEA — AI Performance Engineering Architecture</title>
+<style>
+  :root{
+    --bg:#0d0e11; --panel:#16171c; --panel2:#1d1f26; --line:#2a2c34;
+    --text:#e8e8ea; --muted:#9aa0aa; --red:#e11627; --red-dim:#5e0f18;
+    --new:#4fa3ff; --new-dim:#14324f; --ok:#2ecc71;
+    --shadow:0 1px 0 rgba(255,255,255,.02), 0 8px 24px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    line-height:1.45;padding:28px 32px 48px;}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  h1{font-family:"Space Grotesk",Inter,sans-serif;font-size:26px;margin:0;letter-spacing:.2px}
+  .sub{color:var(--muted);font-size:13px;margin:4px 0 22px}
+  .accentbar{height:3px;width:64px;background:var(--red);border-radius:3px;margin:10px 0 22px}
+
+  .band{margin:0 0 20px}
+  .band-title{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    margin:0 0 10px;font-weight:600}
+
+  .orch{background:linear-gradient(0deg,var(--panel),var(--panel));border:1px solid var(--red-dim);
+    border-left:4px solid var(--red);border-radius:12px;padding:14px 18px;box-shadow:var(--shadow)}
+  .orch b{color:#fff}
+  .orch .desc{color:var(--muted);font-size:12.5px;margin-top:4px}
+
+  .pipe{display:flex;gap:10px;align-items:stretch;overflow-x:auto;padding-bottom:6px}
+  .step{flex:1 1 0;min-width:210px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:14px;box-shadow:var(--shadow);position:relative}
+  .step .no{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;
+    border-radius:8px;background:var(--red);color:#fff;font-weight:700;font-size:13px;
+    font-family:"Space Grotesk",Inter,sans-serif}
+  .step h3{font-size:14px;margin:10px 0 8px;color:#fff}
+  .step ul{margin:0;padding:0;list-style:none}
+  .step li{font-size:12px;color:var(--muted);padding:2px 0 2px 14px;position:relative}
+  .step li::before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;
+    background:var(--red)}
+  .step li.new{color:#cfe4ff}
+  .step li.new::before{background:var(--new)}
+  .arrow{display:flex;align-items:center;color:var(--red);font-size:22px;font-weight:700;flex:0 0 auto}
+
+  .bcg{background:var(--panel);border:1px solid var(--new-dim);border-left:4px solid var(--new);
+    border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+  .bcg .tag{display:inline-block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--new);border:1px solid var(--new-dim);border-radius:20px;padding:2px 10px;margin-bottom:8px}
+  .bcg h3{margin:0 0 10px;font-size:15px;color:#fff}
+  .bcg .cols{display:flex;gap:26px;flex-wrap:wrap}
+  .bcg ul{margin:0;padding:0;list-style:none}
+  .bcg li{font-size:12px;color:#cfe4ff;padding:2px 0 2px 14px;position:relative}
+  .bcg li::before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:var(--new)}
+  .feeds{margin-top:12px;font-size:12px;color:var(--muted)}
+  .feeds b{color:var(--new)}
+  .chip{display:inline-block;background:var(--new-dim);color:#cfe4ff;border-radius:6px;
+    padding:1px 8px;margin:0 4px 4px 0;font-size:11.5px}
+
+  .layers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .layer{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--red);
+    border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+  .layer h3{margin:0 0 8px;font-size:13.5px;color:#fff}
+  .layer ul{margin:0;padding:0;list-style:none}
+  .layer li{font-size:12px;color:var(--muted);padding:2px 0 2px 14px;position:relative}
+  .layer li::before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:var(--red)}
+  .layer li.new{color:#cfe4ff}
+  .layer li.new::before{background:var(--new)}
+
+  .repair{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--red);
+    border-radius:12px;padding:14px 18px;box-shadow:var(--shadow)}
+  .repair h3{margin:0 0 8px;font-size:13.5px;color:#fff}
+  .repair .row{display:flex;gap:26px;flex-wrap:wrap}
+  .repair ul{margin:0;padding:0;list-style:none}
+  .repair li{font-size:12px;color:var(--muted);padding:2px 0 2px 14px;position:relative}
+  .repair li::before{content:"";position:absolute;left:0;top:8px;width:5px;height:5px;border-radius:50%;background:var(--red)}
+  .repair li.new{color:#cfe4ff}
+  .repair li.new::before{background:var(--new)}
+  .loop{color:var(--muted);font-size:12px;margin-top:8px}
+  .loop b{color:var(--red)}
+
+  .legend{display:flex;gap:22px;align-items:center;margin-top:26px;font-size:12px;color:var(--muted);
+    border-top:1px solid var(--line);padding-top:14px;flex-wrap:wrap}
+  .legend .k{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .dot.red{background:var(--red)} .dot.new{background:var(--new)}
+  .foot{color:var(--muted);font-size:11.5px;margin-top:10px}
+</style>
+</head>
+<body>
+  <h2 class="sr-only">APEA AI Performance Engineering architecture: an orchestrated pipeline
+  from recording and browser-context analysis through parameterization, generation, validation,
+  execution and root-cause analysis, with a shared Browser Context Graph, knowledge, memory,
+  platform registry and self-repair layers.</h2>
+
+  <h1>APEA — AI Performance Engineering Architecture</h1>
+  <div class="sub">Recording-first · orchestrated · self-healing · now with first-class browser-interaction support (iFrames, Shadow DOM, popups, OAuth / 3DS, payment gateways)</div>
+  <div class="accentbar"></div>
+
+  <!-- ORCHESTRATION -->
+  <div class="band">
+    <div class="band-title">Orchestration</div>
+    <div class="orch">
+      <b>APEA Orchestrator · Decision Engine</b>
+      <div class="desc">Routes every pipeline stage, decides CONTINUE / RETRY / INVOKE-CLAUDE / STOP / ESCALATE,
+      and consults the Knowledge Base, Memory and Platform Registry at each step. Coordinates the closed-loop self-repair.</div>
+    </div>
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="band">
+    <div class="band-title">The Pipeline &nbsp;·&nbsp; orchestration flow (order preserved)</div>
+    <div class="pipe">
+
+      <div class="step">
+        <span class="no">01</span>
+        <h3>Recording &amp; Browser Context Analysis</h3>
+        <ul>
+          <li>Parse recordings</li>
+          <li>Identify business flows</li>
+          <li class="new">Detect iFrames</li>
+          <li class="new">Detect nested iFrames</li>
+          <li class="new">Detect Shadow DOM</li>
+          <li class="new">Detect browser tabs / windows</li>
+          <li class="new">Detect OAuth redirects</li>
+          <li class="new">Detect 3DS authentication flows</li>
+          <li class="new">Detect cross-domain navigation</li>
+          <li class="new">Build Browser Context Graph</li>
+        </ul>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div class="step">
+        <span class="no">02</span>
+        <h3>Parameterization &amp; Correlation</h3>
+        <ul>
+          <li>Correlate dynamic values</li>
+          <li class="new">Dynamic iframe tokens</li>
+          <li class="new">Payment Intent IDs</li>
+          <li class="new">Client Secret</li>
+          <li class="new">JWT</li>
+          <li>CSRF</li>
+          <li class="new">Frame identifiers</li>
+          <li class="new">Window identifiers</li>
+          <li class="new">OAuth state</li>
+          <li class="new">Dynamic browser context</li>
+        </ul>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div class="step">
+        <span class="no">03</span>
+        <h3>Generator</h3>
+        <ul>
+          <li>FSM</li>
+          <li>Performance scripts</li>
+          <li class="new">Browser Context Model</li>
+          <li class="new">Frame switching logic</li>
+          <li class="new">Window switching logic</li>
+          <li class="new">Shadow DOM traversal</li>
+          <li>Correlation rules</li>
+          <li class="new">Dynamic token extraction</li>
+        </ul>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div class="step">
+        <span class="no">04</span>
+        <h3>Validation</h3>
+        <ul>
+          <li class="new">iFrame availability</li>
+          <li class="new">Frame hierarchy</li>
+          <li class="new">Shadow DOM</li>
+          <li class="new">Cross-domain navigation</li>
+          <li>Dynamic token correlation</li>
+          <li class="new">Browser context consistency</li>
+        </ul>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div class="step">
+        <span class="no">05</span>
+        <h3>Execution</h3>
+        <ul>
+          <li>Engine abstraction (Locust)</li>
+          <li>Distributed workers</li>
+          <li>Live metrics &amp; call feed</li>
+          <li>Per-group throughput</li>
+        </ul>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div class="step">
+        <span class="no">06</span>
+        <h3>Analyzer / RCA</h3>
+        <ul>
+          <li>SLA &amp; error analysis</li>
+          <li class="new">iFrame failures</li>
+          <li class="new">Frame detachments</li>
+          <li class="new">Shadow DOM failures</li>
+          <li class="new">Popup failures</li>
+          <li class="new">Payment gateway failures</li>
+          <li class="new">OAuth failures</li>
+          <li class="new">Browser context failures</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SHARED ARTIFACT -->
+  <div class="band">
+    <div class="band-title">Shared Artifact &nbsp;·&nbsp; produced by Step 01, consumed downstream</div>
+    <div class="bcg">
+      <span class="tag">New · shared between Step 01 and Step 02</span>
+      <h3>Browser Context Graph</h3>
+      <div class="cols">
+        <ul>
+          <li>Window hierarchy</li>
+          <li>Frame hierarchy</li>
+          <li>Nested frame relationships</li>
+        </ul>
+        <ul>
+          <li>Shadow DOM hierarchy</li>
+          <li>Popup relationships</li>
+        </ul>
+        <ul>
+          <li>Cross-domain navigation</li>
+          <li>Browser storage metadata</li>
+        </ul>
+      </div>
+      <div class="feeds">
+        <b>Feeds →</b>
+        <span class="chip">Parameterization</span>
+        <span class="chip">Generator</span>
+        <span class="chip">Validation</span>
+        <span class="chip">Repair</span>
+        <span class="chip">Analyzer</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- KNOWLEDGE & STATE -->
+  <div class="band">
+    <div class="band-title">Knowledge &amp; State &nbsp;·&nbsp; consulted by the Orchestrator at every stage</div>
+    <div class="layers">
+
+      <div class="layer">
+        <h3>Knowledge Base</h3>
+        <ul>
+          <li>Platform rules &amp; known bugs</li>
+          <li>Correlation &amp; repair patterns</li>
+          <li class="new">iFrame patterns</li>
+          <li class="new">Stripe · Adyen · PayPal</li>
+          <li class="new">Cybersource · Braintree</li>
+          <li class="new">Shadow DOM patterns</li>
+          <li class="new">OAuth patterns</li>
+          <li class="new">3DS authentication patterns</li>
+        </ul>
+      </div>
+
+      <div class="layer">
+        <h3>Memory</h3>
+        <ul>
+          <li>Learned per-target facts</li>
+          <li class="new">Learned browser context</li>
+          <li class="new">Payment flow patterns</li>
+          <li class="new">Window relationships</li>
+          <li class="new">Frame relationships</li>
+          <li class="new">Platform-specific browser behaviors</li>
+        </ul>
+      </div>
+
+      <div class="layer">
+        <h3>Platform Registry</h3>
+        <ul>
+          <li>Platform detection &amp; checkout mode</li>
+          <li class="new">iFrame capability</li>
+          <li class="new">Shadow DOM capability</li>
+          <li class="new">Popup capability</li>
+          <li class="new">OAuth capability</li>
+          <li class="new">WebSocket capability</li>
+          <li class="new">GraphQL capability</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- REPAIR / HEAL LOOP -->
+  <div class="band">
+    <div class="band-title">Self-Repair &nbsp;·&nbsp; closed loop, KB-first then Claude</div>
+    <div class="repair">
+      <h3>Repair Agent</h3>
+      <div class="row">
+        <ul>
+          <li class="new">Detect &amp; repair iFrame changes</li>
+          <li class="new">Nested frame changes</li>
+          <li class="new">Shadow DOM changes</li>
+          <li class="new">Popup changes</li>
+        </ul>
+        <ul>
+          <li class="new">OAuth flow changes</li>
+          <li class="new">Payment gateway updates</li>
+          <li class="new">Browser context changes</li>
+        </ul>
+      </div>
+      <div class="loop"><b>Loop →</b> Analyzer / RCA findings + Browser Context Graph → Repair → regenerate via Generator → re-validate → re-run.</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="k"><span class="dot red"></span> Existing APEA capability</span>
+    <span class="k"><span class="dot new"></span> New — browser-interaction support</span>
+  </div>
+  <div class="foot">Pipeline order and orchestration flow unchanged: 01 → 02 → 03 → 04 → 05 → 06, with the Repair loop and the Knowledge / Memory / Platform Registry layers consulted throughout. Browser-interaction handling is integrated as native APEA features, not a bolt-on.</div>
+
+</body>
+</html>

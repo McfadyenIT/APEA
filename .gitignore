@@ -1,0 +1,27 @@
+# Secrets — never commit your API key
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment (regenerable from requirements.txt)
+.venv/
+venv/
+env/
+
+# Caches
+.apea_llm_cache/
+.pytest_cache/
+.mypy_cache/
+
+# APEA runtime artifacts
+projects/
+uploads/
+saved_scripts/
+apea_history.db
+apea_error.log
+*.log
+
+# Debug reference screenshots (large binaries, not source)
+Screenshots/

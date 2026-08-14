@@ -1,0 +1,5 @@
+username,password,search_keyword,product_id,sku,quantity,coupon_code,address_street,address_city,address_postcode,address_country,payment_method
+testuser1@example.com,Password123!,running shoes,12345,SKU12345,1,SAVE10,123 Main St,Springfield,62704,US,checkmo
+testuser2@example.com,Password456!,trail sneakers,23456,SKU23456,2,SAVE10,456 Oak Ave,Rivertown,73301,US,checkmo
+testuser3@example.com,Password789!,hiking boots,34567,SKU34567,1,,789 Pine Rd,Lakeview,90210,US,checkmo
+testuser4@example.com,Password321!,running shoes,12345,SKU12345,3,SAVE10,321 Elm St,Hillside,10001,US,checkmo
