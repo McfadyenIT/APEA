@@ -961,6 +961,19 @@ _FLOW = {"login_ok": 0, "login_fail": 0, "orders": 0, "heals": 0, "captcha": 0,
          "flow_model": _FLOW_MODEL}
 _LOCK = threading.Lock()
 _HAS_REST = __HAS_REST__
+# JMeter-style ORDER PATH — opt in with env var APEA_RECORDED_CHECKOUT=1.
+# By default a Magento REST target places the order through APEA's own
+# bearer-token REST sequence, which builds its OWN cart. That is robust, but on
+# a store which prices the line in a custom STOREFRONT module the REST cart is
+# never priced, so every order captures shipping/tax only and the recorded
+# storefront cart is discarded. Setting this replays the RECORDED checkout
+# instead — still fully correlated and parameterized, unlike faithful mode which
+# drops correlation and goes stale on form_key — so the order is placed from the
+# same session cart the storefront priced. This is how a correlated JMeter
+# script behaves. Trade-off: the recorded checkout POSTs are more brittle than
+# the validator, which is why they are not the default.
+_RECORDED_CHECKOUT = (str(os.getenv("APEA_RECORDED_CHECKOUT", "")).strip().lower()
+                      not in ("", "0", "false", "no"))
 _HAS_LOGIN_STEP = __HAS_LOGIN_STEP__
 LOGIN_URLS = __LOGIN_URLS__
 _REST_PREFIX = __REST_PREFIX__
@@ -1785,7 +1798,7 @@ __BROWSE_TASKS__
         # validator — never replay the recorded checkout POSTs (that produced the
         # estimate->totals->shipping->payment cascade of 400s). A missing token is
         # a clean STOP at Login, not a cascade.
-        rest_order = _HAS_REST
+        rest_order = _HAS_REST and not _RECORDED_CHECKOUT
         _note_mode("rest-checkout (validator)" if rest_order else "recorded-replay")
         for step in FLOW_STEPS:
             p = (step.get("path") or "").lower()
