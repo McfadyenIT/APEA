@@ -66,6 +66,15 @@ def _ordered_sku(flow: dict):
         m = re.search(r"sku=([^\s]+)", str(q.get("note") or ""))
         if m:
             return m.group(1)
+    # Prefer the sku from a SUCCESSFUL add-to-cart response — the product that
+    # really landed in the cart. Falling straight through to every request body
+    # picks up failed (out-of-stock) attempts and names the wrong product.
+    for s in (flow.get("timeline") or []):
+        if not s.get("ok") or "items" not in str(s.get("url") or "").lower():
+            continue
+        m = re.search(r'"sku"\s*:\s*"([^"]+)"', str(s.get("body") or ""))
+        if m:
+            return m.group(1)
     for s in (flow.get("timeline") or []):
         m = re.search(r'"sku"\s*:\s*"([^"]+)"', str(s.get("req") or ""))
         if m:
@@ -89,8 +98,11 @@ def _price_source(discovery: dict, flow: dict) -> dict:
             return {"type": "html/js embedded", "location": (s.get("path") or "")[:120]}
     for s in (flow.get("timeline") or []):
         p = str(s.get("url") or s.get("name") or "").lower()
-        if any(k in p for k in ("pricing", "/price", "getitbyproductdetail",
-                                "getitbycart", "/product/")):
+        # "getitby*" endpoints are DELIVERY-DATE services (lead time / ship date):
+        # their responses carry qty, leadTime and ship dates, never a price. They
+        # were matched here previously and mislabelled the price origin, so they
+        # are deliberately NOT treated as a pricing API.
+        if any(k in p for k in ("pricing", "/price", "/product/")):
             return {"type": "pricing api (client-invoked)",
                     "location": (s.get("url") or s.get("name") or "")[:120]}
     return {"type": "client-calculated / not in recording", "location": None}
@@ -134,8 +146,23 @@ def discover(discovery: dict, analysis: dict) -> dict | None:
         br_price, cur, br_source = _browser_price(analysis)
         sku = _ordered_sku(flow)
         if api_price is not None or br_price is not None:
-            mismatch = bool(br_price and (api_price in (0, None) or api_price == 0.0))
+            # Only compare two prices that belong to the SAME product. The heal
+            # records which sku it priced; when that is a DIFFERENT product from
+            # the one ordered, the numbers are not comparable and firing a
+            # "mismatch" would be meaningless (this is what produced the bogus
+            # "$87.8 in the browser vs 0 in the API" report).
+            heal_sku = (analysis.get("price_heal") or {}).get("for_sku")
+            same_product = not (heal_sku and sku and str(heal_sku) != str(sku))
+            mismatch = bool(br_price and same_product
+                            and (api_price in (0, None) or api_price == 0.0))
             src = _price_source(discovery, flow)
+            _source = {"resolved_from": br_source or "unresolved",
+                       "origin": src, "currency": cur, "priced_sku": heal_sku}
+            if not same_product:
+                _source["note"] = (
+                    "browser price is for sku %s but the ordered sku is %s — "
+                    "different products, so no price comparison was made"
+                    % (heal_sku, sku))
             price_dep = _dim(
                 "product_price",
                 # price is looked up/computed at runtime — NOT a value to freeze in a
@@ -144,10 +171,10 @@ def discover(discovery: dict, analysis: dict) -> dict | None:
                 CLIENT_CALCULATED if mismatch else RUNTIME_DERIVED,
                 api_value=api_price, browser_value=br_price,
                 business_key={"name": "sku", "value": sku} if sku else None,
-                source={"resolved_from": br_source or "unresolved",
-                        "origin": src, "currency": cur},
+                source=_source,
                 consumers=[{"endpoint": "carts/mine/items", "field": "price"}],
-                confidence="high" if br_price else "low", mismatch=mismatch)
+                confidence=("high" if (br_price and same_product) else "low"),
+                mismatch=mismatch)
             deps.append(price_dep)
             if mismatch:
                 recs.append({"priority": "P1",

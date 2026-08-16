@@ -1395,6 +1395,14 @@ def _qtrace(stage, quote_id, note=""):
         _write_stats()
 
 
+def _line_price(item):
+    """Numeric line price from a Magento quote-item dict; 0.0 when absent."""
+    try:
+        return float((item or {}).get("price") or 0)
+    except Exception:
+        return 0.0
+
+
 def _extract_quote_id(body):
     """Pull a Magento quote/cart id from a carts/mine response. Handles a bare
     numeric id (POST /carts/mine), a quote object with 'id', or a cart item with
@@ -1610,6 +1618,12 @@ def _load_testdata():
 
 
 FLOW_STEPS = __FLOW__
+# True when the recording contains the STOREFRONT add-to-cart controller. That
+# path runs the store's own cart pricing (custom modules, per-customer/contract
+# price); the REST /carts/mine/items endpoint bypasses it and can land the line
+# at price 0. When present, the REST checkout reuses the quote it produced.
+_STOREFRONT_CART_ADD = any("checkout/cart/add" in str(s.get("path") or "").lower()
+                           for s in FLOW_STEPS)
 
 
 class WebsiteUser(HttpUser):
@@ -2126,7 +2140,33 @@ __BROWSE_TASKS__
         # out-of-stock / "qty not available" response substitutes the NEXT product
         # (hybrid heal); a non-stock error is a real failure and stops at once.
         sku, qid_add, added, last_rsn = "", "", False, ""
-        for _ci, _cand in enumerate(cands[:8]):
+        # 2a) PRICE-CORRECT PATH. When the recording contains the storefront
+        # add-to-cart controller it has already run this iteration, writing to
+        # THIS SAME customer quote. Stores that price the line in a custom cart
+        # module (per-customer / contract / surplus pricing) only apply it on
+        # that path — REST /carts/mine/items bypasses the module and the item
+        # lands at price 0, producing 0-value orders. So if the quote already
+        # holds a PRICED line, keep it rather than adding a second, unpriced one.
+        if _STOREFRONT_CART_ADD:
+            _ok0, _st0, _b0 = self._rc("Cart contains items", "GET",
+                                       _REST_PREFIX + _EP["items"], headers=auth,
+                                       soft=True)
+            try:
+                _pre = json.loads(_b0 or "[]")
+            except Exception:
+                _pre = []
+            _priced = ([i for i in _pre if _line_price(i) > 0]
+                       if isinstance(_pre, list) else [])
+            if _priced:
+                sku, added = str(_priced[0].get("sku") or ""), True
+                qid_add = _extract_quote_id(_b0) or cart_id
+                _qtrace("storefront cart/add (priced)", qid_add,
+                        "sku=%s price=%s" % (sku, _priced[0].get("price")))
+                _clog_annotate(
+                    "storefront add-to-cart priced this quote: sku=%s price=%s — "
+                    "skipping the REST add (it would land at price 0)"
+                    % (sku, _priced[0].get("price")))
+        for _ci, _cand in enumerate([] if added else cands[:8]):
             _csku = _cand["sku"]
             cart_item = {"sku": _csku, "qty": _CART_QTY}
             if _cand.get("item_options"):

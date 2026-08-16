@@ -484,6 +484,17 @@ def _price_heal(run_dir, discovery, analysis) -> None:
             return
         base = (discovery or {}).get("base_url") or ""
         term = store = sku = None
+        # The sku to price is the one that actually LANDED IN THE CART. Read it
+        # from a SUCCESSFUL add-to-cart RESPONSE: scanning every request instead
+        # picks up failed (out-of-stock) attempts and prices a different product,
+        # which then reports as a bogus browser-vs-API "mismatch".
+        for s in timeline:
+            if not s.get("ok") or "items" not in str(s.get("url") or "").lower():
+                continue
+            m = _re.search(r'"sku"\s*:\s*"([^"]+)"', str(s.get("body") or ""))
+            if m:
+                sku = m.group(1)
+                break
         for s in timeline:
             if term is None:
                 m = _re.search(r"term='([^']+)'", str(s.get("extra") or ""))
@@ -514,11 +525,13 @@ def _price_heal(run_dir, discovery, analysis) -> None:
         res = price_resolver.resolve(base, sku or term or pid or "", store=store,
                                      match_hints=[sku, pid, term])
         if not res:
-            analysis["price_heal"] = {"resolved": False, "note":
+            analysis["price_heal"] = {"resolved": False, "for_sku": sku, "note":
                 "items priced 0 by the API (client-side-priced catalog); the real "
                 "price could not be scraped from the HTML — the browser track reads it"}
             return
-        analysis["price_heal"] = {"resolved": True, **res}
+        # for_sku records WHICH product this price belongs to, so the business-data
+        # gate can refuse to compare it against a different product's API price.
+        analysis["price_heal"] = {"resolved": True, "for_sku": sku, **res}
         analysis["recommendations"] = ([{"priority": "P1",
             "title": "Catalog price is 0 — real price resolved from the storefront",
             "detail": ("The API added the product at price 0 (client-side-priced "
