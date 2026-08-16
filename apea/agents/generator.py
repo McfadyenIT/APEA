@@ -2737,10 +2737,18 @@ __BROWSE_TASKS__
             from urllib.parse import quote_plus as _qp
             kw = _qp(str(random.choice(terms)))
             path = re.sub(r"([?&]q=)[^&]*", lambda m: m.group(1) + kw, path)
-        # add-to-cart using product ids from the uploaded CSV
+        # add-to-cart using product ids from the uploaded CSV. The STOREFRONT
+        # controller addresses products by NUMERIC entity id, so substituting a
+        # sku here (e.g. "c30700506") breaks the add SILENTLY: Magento cannot load
+        # the product, the request still returns 200/302, nothing enters the quote,
+        # and checkout falls back to an unpriced REST add. Only substitute a
+        # numeric id; otherwise keep the recorded one, which is known to work.
         if self.product_ids and "checkout/cart/add" in path and "/product/" in path:
-            pid = str(random.choice(self.product_ids))
-            path = re.sub(r"(/product/)\d+", lambda m: m.group(1) + pid, path)
+            _npids = [p for p in (str(x).strip() for x in self.product_ids)
+                      if p.isdigit()]
+            if _npids:
+                pid = random.choice(_npids)
+                path = re.sub(r"(/product/)\d+", lambda m: m.group(1) + pid, path)
         # cart quantity override: raise units per add-to-cart to increase load
         _low = (path or "").lower()
         if _CART_QTY > 1 and any(k in _low for k in _ADD_CART_SIGNALS):
