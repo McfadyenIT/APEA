@@ -1637,6 +1637,11 @@ FLOW_STEPS = __FLOW__
 # at price 0. When present, the REST checkout reuses the quote it produced.
 _STOREFRONT_CART_ADD = any("checkout/cart/add" in str(s.get("path") or "").lower()
                            for s in FLOW_STEPS)
+# The recorded storefront cart-add step(s). The REST checkout validator replays
+# these ITSELF, after the customer quote exists, so the priced line cannot land
+# in a different quote than the one the order is placed from.
+_SF_CART_ADD_STEPS = [s for s in FLOW_STEPS
+                      if "checkout/cart/add" in str(s.get("path") or "").lower()]
 
 
 class WebsiteUser(HttpUser):
@@ -1805,6 +1810,14 @@ __BROWSE_TASKS__
             # For a Magento REST target, SKIP the fragile recorded checkout POSTs —
             # we place the order via the robust API sequence below instead.
             if rest_order and any(k in p for k in self._REST_CHECKOUT_STEPS):
+                continue
+            # The storefront cart-add is what PRICES the line on a store that
+            # applies price in a custom cart module. Running it HERE is a race:
+            # the validator creates/loads the customer quote afterwards, so the
+            # priced item can land in a different quote than the order is placed
+            # from — which prices some orders and not others. The validator
+            # replays it itself, once the quote exists.
+            if rest_order and _SF_CART_ADD_STEPS and "checkout/cart/add" in p:
                 continue
             if not _grp_active(step, active_groups):
                 continue
@@ -2153,13 +2166,16 @@ __BROWSE_TASKS__
         # out-of-stock / "qty not available" response substitutes the NEXT product
         # (hybrid heal); a non-stock error is a real failure and stops at once.
         sku, qid_add, added, last_rsn = "", "", False, ""
-        # 2a) PRICE-CORRECT PATH. When the recording contains the storefront
-        # add-to-cart controller it has already run this iteration, writing to
-        # THIS SAME customer quote. Stores that price the line in a custom cart
-        # module (per-customer / contract / surplus pricing) only apply it on
-        # that path — REST /carts/mine/items bypasses the module and the item
-        # lands at price 0, producing 0-value orders. So if the quote already
-        # holds a PRICED line, keep it rather than adding a second, unpriced one.
+        # 2a) PRICE-CORRECT PATH. Stores that apply the line price in a custom
+        # STOREFRONT cart module never price a REST-added item — it lands at 0
+        # and the order captures shipping/tax only. So replay the RECORDED
+        # storefront cart-add HERE, now that POST /carts/mine has established
+        # the customer's active quote, guaranteeing the priced line lands in the
+        # quote this order is placed from. (Replaying it earlier, in the
+        # FLOW_STEPS loop, races the quote and prices only some orders.)
+        for _sfs in _SF_CART_ADD_STEPS:
+            self._run_step(_sfs)
+        # Then reuse that priced line instead of adding an unpriced one by REST.
         if _STOREFRONT_CART_ADD:
             _ok0, _st0, _b0 = self._rc("Cart contains items", "GET",
                                        _REST_PREFIX + _EP["items"], headers=auth,
@@ -2285,6 +2301,23 @@ __BROWSE_TASKS__
                               "disabled / out-of-stock / wrong store view, or the add wrote to a "
                               "different quote (quote create=%s add=%s get=%s). STOP before "
                               "shipping/payment." % (sku, cart_id or "?", qid_add or "?", qid_get or "?"))
+        # 3b) CART VALUE GATE. The cart has items — but are they worth anything?
+        # A 0-priced line means the storefront pricing module did not run, and
+        # placing the order anyway writes a worthless order to the store while
+        # the report reads as a pass. Only enforced when the recording HAS a
+        # storefront cart-add (i.e. the store is known to price that way), so
+        # genuinely 0-priced catalogues are unaffected.
+        if _SF_CART_ADD_STEPS:
+            _line_prices = ([_line_price(i) for i in items]
+                            if isinstance(items, list) else [])
+            if not any(p > 0 for p in _line_prices):
+                return self._stop("Cart contains items", st,
+                    "cart line price is 0 (sku='%s', quote=%s) — the storefront "
+                    "pricing module did not apply. Placing this order would create "
+                    "a 0-value order that captures shipping/tax only. STOP before "
+                    "shipping/payment." % (sku, cart_id or "?"))
+            _clog_annotate("cart value OK: %d item(s), line price(s)=%s"
+                           % (n_items, [p for p in _line_prices]))
         # 4) Shipping methods available
         ok, st, body = self._rc("Shipping methods available", "POST",
             _REST_PREFIX + _EP["estimate_shipping"],
