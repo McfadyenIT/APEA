@@ -2162,6 +2162,30 @@ __BROWSE_TASKS__
         cart_id = _extract_quote_id(body) or (body or "").strip().strip('"')  # token's active quote
         _qtrace("POST /carts/mine (token active quote)", cart_id)
         _set_state(cart_id=cart_id, state="CART_CREATED")
+        # 1b) START FROM AN EMPTY CART. A customer's quote persists between
+        # iterations AND between runs, and every add stacks another unit onto it.
+        # Once the running total exceeds available stock Magento rejects the order
+        # with "The requested qty is not available" — and because the order never
+        # completes, the quote is never cleared, so each attempt makes it worse.
+        # Clearing first means every iteration buys exactly what the data says.
+        _okc, _stc, _bc = self._rc("Cart contains items", "GET",
+                                   _REST_PREFIX + _EP["items"], headers=auth,
+                                   soft=True)
+        try:
+            _stale = json.loads(_bc or "[]")
+        except Exception:
+            _stale = []
+        _stale = [i for i in _stale if isinstance(i, dict)] if isinstance(_stale, list) else []
+        if _stale:
+            for _it in _stale:
+                _iid = _it.get("item_id")
+                if _iid is None:
+                    continue
+                self._rc("Cart cleared", "DELETE",
+                         "%s%s/%s" % (_REST_PREFIX, _EP["items"], _iid),
+                         headers=auth, soft=True)
+            _clog_annotate("cleared %d leftover cart line(s) (qty %s) before adding"
+                           % (len(_stale), [i.get("qty") for i in _stale]))
         # 2) Items added — try candidates until one is actually purchasable. An
         # out-of-stock / "qty not available" response substitutes the NEXT product
         # (hybrid heal); a non-stock error is a real failure and stops at once.
