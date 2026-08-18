@@ -108,6 +108,42 @@ def _price_source(discovery: dict, flow: dict) -> dict:
     return {"type": "client-calculated / not in recording", "location": None}
 
 
+# The reason text itself can contain brackets ("memory (a prior run ...)"), so
+# anchor on the "; cart offered" tail rather than the first closing bracket.
+_PAY_USED = re.compile(r"payment method used:\s*'([^']*)'\s*\((.*)\); cart offered")
+_PAY_REQ = re.compile(r"requested payment_method='([^']*)'")
+
+
+def _payment_dim(flow: dict):
+    """Which payment method the run ACTUALLY used, next to the one the data asked
+    for. A hosted card gateway tokenises the card in a third-party iframe, so it
+    cannot be completed at the HTTP layer; APEA substitutes an offline method and
+    logs why. Surfacing that here stops a reader of the order (or the report)
+    concluding the test paid by card when it did not."""
+    used = reason = requested = None
+    for s in (flow.get("timeline") or []):
+        x = str(s.get("extra") or "")
+        m = _PAY_USED.search(x)
+        if m and not used:
+            used, reason = m.group(1), m.group(2)
+        m = _PAY_REQ.search(x)
+        if m and not requested:
+            requested = m.group(1)
+    if not (used or requested):
+        return None
+    if requested and used and requested != used:
+        shown = ("requested %s -> used %s (substituted: %s)"
+                 % (requested, used, reason or "not HTTP-replayable"))
+    else:
+        shown = "%s%s" % (used or requested, (" (%s)" % reason) if reason else "")
+    return _dim("payment_method", PARAMETER if requested else RUNTIME_DERIVED,
+                value=shown,
+                source={"origin": {"type": ("test-data csv" if requested
+                                            else "cart payment-methods response")}},
+                consumers=[{"endpoint": "carts/mine/payment-information",
+                            "field": "paymentMethod.method"}])
+
+
 def _dim(name, classification, value=None, api_value=None, browser_value=None,
          business_key=None, source=None, consumers=None, confidence="high",
          mismatch=False):
@@ -206,6 +242,13 @@ def discover(discovery: dict, analysis: dict) -> dict | None:
         if cur:
             deps.append(_dim("currency", BUSINESS_REFERENCE, value=cur,
                              source={"origin": {"type": "storefront locale"}}))
+        # Payment method actually used vs requested. Deliberately NOT flagged as a
+        # mismatch: substituting an offline method for a hosted card gateway is an
+        # accepted, documented limitation of HTTP replay, not a defect — flagging
+        # it would fail the fidelity gate on every run and devalue the real signal.
+        _pay = _payment_dim(flow)
+        if _pay:
+            deps.append(_pay)
 
         # --- optional Claude enrichment: structured source + consumers ---------
         _ai = _ai_dependencies(discovery, deps)
