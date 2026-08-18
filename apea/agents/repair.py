@@ -25,6 +25,10 @@ from .. import db
 from ..knowledge import KB
 
 PREFLIGHT_SECONDS = int(os.environ.get("APEA_PREFLIGHT_SECONDS", "18"))
+# Business-value pre-flight gate. ON by default: it is the only check that catches
+# a run which creates orders worth nothing. Disable with APEA_PREFLIGHT_GATE=0.
+PREFLIGHT_GATE = (os.environ.get("APEA_PREFLIGHT_GATE", "1").strip().lower()
+                  not in ("0", "false", "no", "off"))
 
 
 def _kb_rules_snippet() -> str:
@@ -118,6 +122,58 @@ def _read_flow(run_dir: Path) -> dict:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {}
+
+
+def preflight_value_gate(run_dir, base_url: str) -> dict:
+    """Run ONE user through the journey and check the transaction is REAL before
+    spending a whole load run on it.
+
+    A load test that returns 200 everywhere but creates orders worth nothing looks
+    like a pass in every other report — that is the failure this gate exists for.
+
+    Verdicts:
+      pass     an order was created AND carried a non-zero value
+      blocked  an order was created but is worth 0 — the load run would write
+               worthless orders to the store and still report success
+      warn     no order completed; could be transient (stock, a flaky login), so
+               the caller continues — the full run has many more attempts
+      skipped  gate disabled, or the pre-flight could not be evaluated
+
+    Costs one real order against the target. Never raises.
+    """
+    run_dir = Path(run_dir)
+    if not PREFLIGHT_GATE:
+        return {"verdict": "skipped", "ok": True,
+                "reason": "pre-flight value gate disabled (APEA_PREFLIGHT_GATE=0)"}
+    try:
+        _run_preflight(run_dir, base_url)
+        flow = _read_flow(run_dir)
+        orders = int(flow.get("orders") or 0)
+        values = [v for v in (flow.get("order_values") or [])
+                  if isinstance(v, (int, float))]
+        total = float(flow.get("order_value_total") or 0.0)
+        state = flow.get("checkout_state") or {}
+        if orders <= 0:
+            return {"verdict": "warn", "ok": True, "orders": 0, "value_total": 0.0,
+                    "reason": ("pre-flight placed no order (%s) — continuing, because "
+                               "this is often transient (stock, a flaky login) and the "
+                               "full run retries many times"
+                               % (state.get("stop_reason") or "no reason recorded"))}
+        if (values and not any(v > 0 for v in values)) or (not values and total <= 0):
+            return {"verdict": "blocked", "ok": False, "orders": orders,
+                    "value_total": total,
+                    "reason": ("pre-flight created %d order(s) with a total value of %s. "
+                               "The product price is not reaching the order, so a load run "
+                               "would write worthless orders to the store and still report "
+                               "a pass. Fix the test data or the pricing path and re-run, "
+                               "or set APEA_PREFLIGHT_GATE=0 to override."
+                               % (orders, total))}
+        return {"verdict": "pass", "ok": True, "orders": orders, "value_total": total,
+                "reason": "pre-flight placed %d order(s) worth %s" % (orders, total)}
+    except Exception as exc:
+        return {"verdict": "skipped", "ok": True,
+                "reason": "pre-flight value gate error: %s: %s"
+                          % (type(exc).__name__, exc)}
 
 
 def _site_context(discovery: dict) -> dict:

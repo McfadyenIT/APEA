@@ -1128,11 +1128,24 @@ def run(req: RunReq):
                 rd, disc, lambda d: generator_agent.generate(d, plan_cfg, run_dir, **_gen_kwargs))
 
         heal_cb = _heal_cb if _llm.available() else None
+
+        # BUSINESS-VALUE PRE-FLIGHT. One user, one journey: does a real, correctly
+        # valued order actually happen? A run that returns 200 everywhere while
+        # creating 0-value orders reads as a pass in every other section of the
+        # report, so this is the only place that catches it. Blocks before the load
+        # run, so no worthless orders are written and no time is wasted.
+        preflight_gate = repair_agent.preflight_value_gate(run_dir, disc["base_url"])
+        if not preflight_gate.get("ok", True):
+            raise HTTPException(status_code=409,
+                                detail="Pre-flight value gate: "
+                                       + str(preflight_gate.get("reason", "")))
+
         executor_agent.start(run_id, run_dir, disc["base_url"], plan_cfg, project_id,
                              disc, heal_cb=heal_cb)
 
         return {
             "run_id": run_id,
+            "preflight_gate": preflight_gate,
             "plan": plan_cfg,
             "workload": workload,
             "review": audit,
@@ -1473,8 +1486,15 @@ def run_saved(req: RunSavedReq):
     if _rs_kwargs and _llm.available():
         heal_cb = lambda rd: repair_agent.post_run_repair(
             rd, disc, lambda d: generator_agent.generate(d, plan_cfg, run_dir, **_rs_kwargs))
+    # Same business-value gate on the saved-script path (see /api/run).
+    preflight_gate = repair_agent.preflight_value_gate(run_dir, target)
+    if not preflight_gate.get("ok", True):
+        raise HTTPException(status_code=409,
+                            detail="Pre-flight value gate: "
+                                   + str(preflight_gate.get("reason", "")))
     executor_agent.start(run_id, run_dir, target, plan_cfg, project_id, disc, heal_cb=heal_cb)
     return {"run_id": run_id, "plan": plan_cfg, "name": meta.get("name"),
+            "preflight_gate": preflight_gate,
             "review": review, "scripts_index": gen.get("scripts_index", []),
             "script_preview": (gen.get("script") or "")[:4000]}
 
