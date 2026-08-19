@@ -218,6 +218,11 @@
       <h2>2 · Recording analysis</h2>
       <div class="grid-k" id="discKpis"></div>
       <label>Recorded journey</label><div id="discJourneys"></div>
+      <!-- Payment strategy. A hosted card gateway cannot be completed by ANY
+           HTTP-level tool, so APEA silently substitutes an offline method. That
+           surprise is surfaced HERE, in the main flow, rather than only in the
+           collapsed browser-track panel where nobody found it. -->
+      <div id="paymentStrategy" style="margin-top:12px"></div>
       <div class="chips" id="discTech" style="display:none"></div>
       <label style="margin-top:14px">Calls going into the script
         <span class="muted">— APEA auto-selected the real API &amp; REST calls; untick any you don't want in the load test</span></label>
@@ -954,6 +959,34 @@ function populateGateways(detected){
     : `No hosted card gateway detected in this recording — the browser track will just navigate. (Set Browser VUs to 0 to skip it.)`;
 }
 
+// Hosted card gateways tokenise the card inside the gateway's own iframe, so no
+// HTTP-level tool can complete the payment. APEA quietly falls back to an offline
+// method; this states that up front and offers the three real options, so the
+// choice is made deliberately instead of discovered on the order page.
+function renderPaymentStrategy(detected){
+  const el = $('#paymentStrategy'); if(!el) return;
+  if(!detected){ el.innerHTML = ''; return; }
+  const name = GATEWAY_LABELS[detected] || detected;
+  el.innerHTML =
+    '<div style="border-left:4px solid #e6a700;background:#161618;border-radius:8px;padding:12px 14px">'
+    + '<b>💳 Card payment cannot be replayed over HTTP — choose how to test it</b>'
+    + '<div class="muted" style="margin-top:6px;font-size:13px">'
+    + 'This recording pays with <b>' + name + '</b>. The card is entered inside the '
+    + "gateway's own iframe, so no HTTP-level tool (APEA, JMeter, k6, Gatling) can "
+    + 'complete it. Pick one:'
+    + '<ol style="margin:8px 0 0 18px">'
+    + '<li><b>Offline method for volume</b> <i>(default — nothing to do)</i>. APEA uses an '
+    + 'offline method such as net terms or bank transfer. Everything except the gateway '
+    + 'hop is tested, and the report states which method it actually used.</li>'
+    + '<li><b>Measure the real card journey</b> — set <b>Browser VUs</b> to 2–5 in '
+    + 'Advanced options. A few real browsers drive the card form alongside the HTTP load. '
+    + 'This is how LoadRunner and NeoLoad do it; browsers are too heavy to run in bulk.</li>'
+    + '<li><b>Virtualise the gateway</b> — point the test environment at a mock that returns '
+    + 'a token with realistic delay. Give it the delay the real gateway has, or the test '
+    + 'proves only that you are fast when your dependencies are instant.</li>'
+    + '</ol></div></div>';
+}
+
 function _evidenceLabel(ev){
   if(ev==='typed') return 'typed in browser';
   if(ev==='ai-detected') return 'AI-detected';
@@ -996,6 +1029,7 @@ function renderAnalysis(a){
   if(a.error) $('#discJourneys').innerHTML += `<p class="muted" style="color:#e11627">Parse note: ${a.error}</p>`;
   renderCallSelector(a.calls, a.dropped);
   populateGateways(a.detected_gateway);
+  renderPaymentStrategy(a.detected_gateway);
   $('#anUiSteps').innerHTML = renderUiSteps(a.ui_steps);
   $('#anCorr').innerHTML = (a.correlations||[]).length
     ? a.correlations.map(c=>`<div class="rec">🔗 <b>${c.value}</b> <span class="muted">(from ${c.field})</span><div class="d">${c.handling}</div></div>`).join('')

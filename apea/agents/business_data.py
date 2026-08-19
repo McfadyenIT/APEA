@@ -114,7 +114,38 @@ _PAY_USED = re.compile(r"payment method used:\s*'([^']*)'\s*\((.*)\); cart offer
 _PAY_REQ = re.compile(r"requested payment_method='([^']*)'")
 
 
-def _payment_dim(flow: dict):
+def _browser_card_note(analysis: dict) -> str:
+    """What the real-browser track (Track B) measured for the CARD step, when it
+    ran. The offline method carries the volume and the browser track measures the
+    real card journey alongside it — the LoadRunner/NeoLoad hybrid shape. Those
+    two facts lived in separate report sections, so a reader saw "netterms" and
+    concluded the card was never tested. This joins them."""
+    bt = (analysis or {}).get("browser_track") or {}
+    summary = bt.get("summary") or {}
+    endpoints = bt.get("endpoints") or []
+    if not (summary or endpoints):
+        return ""
+    bits = ["card journey measured by the browser track"]
+    gw = summary.get("gateway")
+    if gw:
+        bits.append("gateway=%s" % gw)
+    for e in endpoints:
+        if "pay" in str(e.get("name") or "").lower() and e.get("p95"):
+            try:
+                bits.append("card step p95=%dms" % int(float(e["p95"])))
+            except (TypeError, ValueError):
+                pass
+            break
+    ok = summary.get("payment_ok")
+    if ok is False:
+        bits.append("card step FAILED (%s)"
+                    % (summary.get("payment_err") or "reason not recorded"))
+    elif ok:
+        bits.append("card step OK")
+    return "; ".join(bits)
+
+
+def _payment_dim(flow: dict, analysis: dict | None = None):
     """Which payment method the run ACTUALLY used, next to the one the data asked
     for. A hosted card gateway tokenises the card in a third-party iframe, so it
     cannot be completed at the HTTP layer; APEA substitutes an offline method and
@@ -136,6 +167,9 @@ def _payment_dim(flow: dict):
                  % (requested, used, reason or "not HTTP-replayable"))
     else:
         shown = "%s%s" % (used or requested, (" (%s)" % reason) if reason else "")
+    _card = _browser_card_note(analysis)
+    if _card:
+        shown = "%s | %s" % (shown, _card)
     return _dim("payment_method", PARAMETER if requested else RUNTIME_DERIVED,
                 value=shown,
                 source={"origin": {"type": ("test-data csv" if requested
@@ -246,7 +280,7 @@ def discover(discovery: dict, analysis: dict) -> dict | None:
         # mismatch: substituting an offline method for a hosted card gateway is an
         # accepted, documented limitation of HTTP replay, not a defect — flagging
         # it would fail the fidelity gate on every run and devalue the real signal.
-        _pay = _payment_dim(flow)
+        _pay = _payment_dim(flow, analysis)
         if _pay:
             deps.append(_pay)
 
