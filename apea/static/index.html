@@ -1384,7 +1384,7 @@ async function pollRun(){
   let s; try{ s=await api('/api/run/'+currentRun); }catch(e){ return; }
   const st=s.status||'';
   $('#liveStatus').textContent=st;
-  $('#liveStatus').className='badge '+(st==='completed'?'b-ok':(st==='error'||st==='stopped')?'b-bad':'b-run');
+  $('#liveStatus').className='badge '+(st==='completed'?'b-ok':(st==='error'||st==='stopped'||st==='failed')?'b-bad':'b-run');
   $('#btnStop').style.display=['starting','running','analyzing'].includes(st)?'':'none';
   $('#livePhase').textContent=(s.phase||'')+(s.error?(' — '+s.error):'');
   renderBrowserTrack(s.browser_track);
@@ -1415,7 +1415,11 @@ async function pollRun(){
   }
   renderTimeline(s);      // live checkout timeline + state + build + mode
   pollCalls();            // live per-request feed (JMeter View-Results-Tree style)
-  if(st==='completed'||st==='stopped'){ clearInterval(poll); pushLive(s); showResults(s.analysis, s); setTimeout(pollCalls, 800); }
+  // 'failed' is TERMINAL too — a run whose card payment didn't clear still ran,
+  // still has metrics and a report, and is exactly the run you want to read.
+  // Omitting it here left the results card hidden (no report buttons) and the
+  // poller running forever.
+  if(st==='completed'||st==='stopped'||st==='failed'){ clearInterval(poll); pushLive(s); showResults(s.analysis, s); setTimeout(pollCalls, 800); }
   if(st==='error'){ clearInterval(poll); setTimeout(pollCalls, 800); }
 }
 
