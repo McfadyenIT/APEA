@@ -2429,6 +2429,7 @@ __BROWSE_TASKS__
         _mem_pay = _APPLIED_MEMORY.get("payment_method")
         if _mem_pay and _mem_pay in codes and not _STRICT:
             method, _chosen_reason = _mem_pay, "memory (a prior run placed an order with it)"
+        _sub_note = ""      # "requested X -> used Y" note, folded into the final annotation
         _csv_pay = str((getattr(self, "_row", None) or {}).get("payment_method") or "").strip()
         if _csv_pay:
             _csv_hosted = any(g in _csv_pay.lower() for g in _HOSTED_GATEWAYS)
@@ -2437,9 +2438,13 @@ __BROWSE_TASKS__
             else:
                 _why = ("not enabled on this cart" if _csv_pay not in codes
                         else "a hosted card gateway that HTTP replay can't complete without a token")
-                _clog_annotate("testdata.csv requested payment_method='%s' but it is %s — "
-                               "using '%s' (%s) instead; available=%s"
-                               % (_csv_pay, _why, method or "(none)", _chosen_reason, codes))
+                # HOLD this, don't annotate yet. _clog_annotate REPLACES the last
+                # entry's note, so annotating here then again below silently threw
+                # the substitution away — and "you asked for card, you got net
+                # terms" is exactly the line a reader needs. Folded in below.
+                _sub_note = ("testdata.csv requested payment_method='%s' but it is %s — "
+                             "using '%s' (%s) instead"
+                             % (_csv_pay, _why, method or "(none)", _chosen_reason))
         if _FORCED_PAYMENT:
             method, _chosen_reason = _FORCED_PAYMENT, "explicit payment_method override"
         if _STRICT and not method:
@@ -2468,8 +2473,9 @@ __BROWSE_TASKS__
         pm = {"method": method}
         # Transparency: record the method actually used + WHY, and the address source,
         # so the report never silently disagrees with the testdata.csv the user sees.
-        _clog_annotate("payment method used: '%s' (%s); cart offered %s"
-                       % (method, _chosen_reason, codes))
+        _clog_annotate("payment method used: '%s' (%s); cart offered %s%s"
+                       % (method, _chosen_reason, codes,
+                          (" | " + _sub_note) if _sub_note else ""))
         _csv_country = str((getattr(self, "_row", None) or {}).get("country_id") or "").strip()
         _acct_country = str((self._billing or {}).get("country_id") or "").strip()
         if _csv_country and _acct_country and _csv_country != _acct_country:
