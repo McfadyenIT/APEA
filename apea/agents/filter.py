@@ -46,6 +46,19 @@ _BINARY_ASSET_RE = re.compile(
     r"\.(png|jpe?g|gif|bmp|svg|webp|ico|css|js|mjs|map|woff2?|ttf|eot|otf|"
     r"mp4|webm|mov|avi|mp3|wav|wasm|pdf|scss|less)(\?|$)", re.I)
 
+# Framework static mounts. A FILE under one of these is served by the web server
+# or CDN, never by the application — whatever its extension, and even when the
+# page fetches it by XHR. Magento's Knockout UI templates are the case that
+# matters: /static/version…/…/template/summary.html is an .html file fetched via
+# XHR, so the extension and XHR rules both said "real call" and it was being
+# load-tested. Measuring those measures nginx, not the application.
+_STATIC_MOUNT_RE = re.compile(
+    r"/(?:pub/)?(?:static|media|assets|_next/static|_nuxt|"
+    r"wp-content|wp-includes)/", re.I)
+# Only treat a static-mount path as an asset when it actually names a FILE, so a
+# real endpoint like POST /media/upload is still load-tested.
+_HAS_FILE_EXT_RE = re.compile(r"/[^/?]+\.[a-z0-9]{1,6}(?:\?|$)", re.I)
+
 
 def is_asset(path: str) -> bool:
     """True if the path points at a static asset/document (drop it from the flow)."""
@@ -72,6 +85,15 @@ def is_tracker(path: str) -> bool:
     return bool(_TRACKER_RE.search(path or ""))
 
 
+def is_static_mount_file(path: str) -> bool:
+    """True for a FILE under a framework static mount (/static/, /media/,
+    /assets/, /_next/static/, wp-content, …). Served by the web server or CDN,
+    so load-testing it measures nginx rather than the application. Requires a
+    real filename, so POST /media/upload stays a testable endpoint."""
+    p = path or ""
+    return bool(_STATIC_MOUNT_RE.search(p.split("?")[0]) and _HAS_FILE_EXT_RE.search(p))
+
+
 def is_static_request(method: str, path: str, xhr: bool = False,
                       json: bool = False) -> bool:
     """True if this request should be EXCLUDED from an API load test: a CORS
@@ -86,6 +108,11 @@ def is_static_request(method: str, path: str, xhr: bool = False,
     # beacon like /collect?v=1 counted as "dynamic" and was load-tested, despite
     # the UI promising trackers were filtered out.
     if is_tracker(path):
+        return True
+    # A file under a framework static mount is served by nginx/CDN, not the app.
+    # Checked BEFORE the dynamic rules: Magento's Knockout templates are .html
+    # files fetched by XHR, so both of those rules called them a real call.
+    if is_static_mount_file(path):
         return True
     if is_dynamic_request(method, path, xhr, json):
         # a real call: drop only if it's an unmistakable binary/style/media asset
@@ -123,6 +150,8 @@ def static_reason(method: str, path: str, xhr: bool = False,
         return "CORS preflight (OPTIONS) — never replayable"
     if is_tracker(path):
         return "third-party tracker / analytics beacon"
+    if is_static_mount_file(path):
+        return "static file served by the web server / CDN (not the application)"
     if _BINARY_ASSET_RE.search(path or "") or is_asset(path):
         return "static asset (css / js / image / font / media / doc)"
     return "page navigation (dynamic page, excluded from an API-only run)"
