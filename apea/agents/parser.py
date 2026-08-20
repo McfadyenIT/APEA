@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .filter import (is_asset, is_ignored_method, is_instrumentation_noise,
-                     is_static_request, static_reason)
+                     is_static_request, primary_host, static_reason)
 
 # Cap on how many filtered-noise items we retain for the UI (count is unbounded).
 _DROPPED_CAP = 800
@@ -77,7 +77,19 @@ def _parse_jmx(p: Path, include_static: bool = False) -> dict:
     endpoints = []
     static_dropped = 0
     dropped = []
-    for sampler in root.iter("HTTPSamplerProxy"):
+    # Host under test = the most common sampler host. A JMeter recording can
+    # contain third-party hosts (CDNs, analytics, gateways); those keep only
+    # their PATH, so replaying them hits the TARGET with a bogus URL and reports
+    # a false failure. The Taurus/YAML parser already dropped them — JMX did not.
+    _samplers = list(root.iter("HTTPSamplerProxy"))
+    _host_of = []
+    for s in _samplers:
+        sp = {x.get("name"): (x.text or "") for x in s.findall("stringProp")}
+        _p = sp.get("HTTPSampler.path") or ""
+        _host_of.append(_p if _p.startswith("http")
+                        else "https://" + (sp.get("HTTPSampler.domain") or ""))
+    _main_host = primary_host(_host_of)
+    for sampler in _samplers:
         props = {sp.get("name"): (sp.text or "") for sp in sampler.findall("stringProp")}
         method = (props.get("HTTPSampler.method") or "GET").upper()
         path = props.get("HTTPSampler.path") or "/"
@@ -87,10 +99,23 @@ def _parse_jmx(p: Path, include_static: bool = False) -> dict:
             u = urlparse(path)
             path = u.path + (f"?{u.query}" if u.query else "")
             base = base or f"{u.scheme}://{u.netloc}"
-        elif dom and not base:
-            base = f"{proto}://{dom}"
+            _this_host = u.netloc
+        else:
+            _this_host = dom
+            if dom and not base:
+                base = f"{proto}://{dom}"
+        if _main_host and _this_host and _this_host != _main_host:
+            if len(dropped) < _DROPPED_CAP:
+                dropped.append({"method": method, "path": path,
+                                "reason": "third-party host (%s)" % _this_host})
+            continue
         if not path.startswith("/"):
             path = "/" + path
+        if is_ignored_method(method):     # never replayable, even with include_static
+            if len(dropped) < _DROPPED_CAP:
+                dropped.append({"method": method, "path": path,
+                                "reason": static_reason(method, path)})
+            continue
         if not include_static and is_static_request(method, path):
             static_dropped += 1
             if len(dropped) < _DROPPED_CAP:
@@ -113,7 +138,16 @@ def _parse_har(p: Path, include_static: bool = False) -> dict:
     endpoints = []
     static_dropped = 0
     dropped = []
-    for entry in data.get("log", {}).get("entries", []):
+    _entries = data.get("log", {}).get("entries", [])
+    # A HAR is a raw browser export: EVERY request is in it, including analytics,
+    # CDNs, fonts and the payment gateway. Those keep only their PATH, so without
+    # this they get replayed against the target as bogus URLs and show up as site
+    # failures. Host under test = the most common one in the capture.
+    _main_host = primary_host([(e.get("request") or {}).get("url", "")
+                               for e in _entries])
+    if _main_host and not base:
+        base = "https://" + _main_host
+    for entry in _entries:
         req = entry.get("request", {})
         url = req.get("url", "")
         method = (req.get("method") or "GET").upper()
@@ -122,8 +156,18 @@ def _parse_har(p: Path, include_static: bool = False) -> dict:
         u = urlparse(url)
         if not base and u.netloc:
             base = f"{u.scheme}://{u.netloc}"
+        if _main_host and u.netloc and u.netloc != _main_host:
+            if len(dropped) < _DROPPED_CAP:
+                dropped.append({"method": method, "path": url,
+                                "reason": "third-party host (%s)" % u.netloc})
+            continue
         path = u.path or "/"
         full = path + (f"?{u.query}" if u.query else "")
+        if is_ignored_method(method):     # never replayable, even with include_static
+            if len(dropped) < _DROPPED_CAP:
+                dropped.append({"method": method, "path": full,
+                                "reason": static_reason(method, full)})
+            continue
         if not include_static and is_static_request(method, full):
             static_dropped += 1
             if len(dropped) < _DROPPED_CAP:
