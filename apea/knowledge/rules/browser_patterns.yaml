@@ -204,11 +204,88 @@ replay_profiles:
     reasons:
       - "Replayable ONLY IF the merchant getParams endpoint is callable per VU AND the CyberSource POST is accepted in sandbox — decide from the captured sequence, not by assumption."
 
+  # --- CyberSource: THREE DISTINCT integrations, not one -------------------
+  # "paradoxlabs_cybersource" above is the Magento MODULE. WHICH CyberSource
+  # integration it is configured for decides whether HTTP replay is possible at
+  # all, and the three were previously collapsed into the loose label "Flex
+  # Microform". They are separate mechanisms with separate endpoints:
+  #
+  #   Secure Acceptance  the merchant signs the form SERVER-SIDE; the card fields
+  #                      are excluded from the signature because the customer
+  #                      types them. Underneath the hosted UI this is a signed
+  #                      HTTP form POST — so a browser rendering CyberSource
+  #                      content does NOT prove the protocol is unreproducible.
+  #   Microform v2       /microform/v2/sessions, then Microform JS calls
+  #                      createToken() inside a CyberSource iframe. Genuinely
+  #                      needs a browser: there is no server-side equivalent.
+  #   Flex API v2        /flex/v2/sessions -> one-time JWK -> JWE ->
+  #                      /flex/v2/tokens. Fully server-side, so a VU can mint its
+  #                      own token and it scales.
+  cybersource_secure_acceptance:
+    replayable: conditional          # a CANDIDATE — prove with one sandbox txn
+    mechanism: signed_form_replay
+    requires_validation: true
+    mint:
+      description: >-
+        Per VU: POST the merchant's own getParams / secureAccept endpoint to mint
+        a FRESH signed parameter set (access_key, profile_id, transaction_uuid,
+        signed_date_time, signed_field_names, signature), then POST those plus a
+        PUBLIC sandbox test card to the CyberSource test endpoint. No JWE, no
+        token factory, and no need for the merchant backend to accept a different
+        token type — this is ordinary correlation of dynamic signed fields.
+      needs: [merchant_getparams_endpoint, sandbox_profile, public_test_card]
+      mint_endpoint_hint: "store getParams / secureAccept (from capture)"
+    confirm_endpoint_hint: "testsecureacceptance.cybersource.com/pay (sandbox)"
+    blockers:
+      - "signature / access_key / transaction_uuid are single-use and time-bound — mint per VU, never reuse a captured set."
+      - "Payer Authentication (3DS / SCA) can still divert an individual transaction to an ACS challenge, which needs the browser track."
+    reasons:
+      - "Underneath the hosted UI this is a signed HTTP form POST, so protocol replay is a CANDIDATE — prove it with one sandbox transaction before relying on it."
+
+  cybersource_microform_v2:
+    replayable: false
+    mechanism: browser_client_tokenization
+    mint:
+      description: >-
+        No server-side path exists. /microform/v2/sessions returns a capture
+        context only the Microform JS can use, and microform.createToken() runs
+        inside a CyberSource-hosted iframe.
+      needs: [browser]
+    reasons:
+      - "Tokenization happens in CyberSource's iframe via client-side JavaScript — an HTTP-level tool cannot reproduce it."
+    alternatives:
+      - "cybersource_flex_api_v2 — substitute a server-side token, but first prove the merchant backend accepts that token type"
+      - "browser track — drive the real iframe with a few VUs"
+      - "payment virtualization — for high-volume capacity testing"
+
+  cybersource_flex_api_v2:
+    replayable: true
+    mechanism: server_side_jwe_tokenization
+    mint:
+      description: >-
+        Per VU: POST /flex/v2/sessions for a capture context carrying a one-time
+        public key, encrypt a PUBLIC sandbox test card as JWE, POST that to
+        /flex/v2/tokens, and inject the returned transient token into the
+        merchant's payment request. Fully server-side, so it scales.
+      needs: [sandbox_rest_credentials, public_test_card]
+      mint_endpoint_hint: "apitest.cybersource.com/flex/v2/sessions then /flex/v2/tokens"
+    blockers:
+      - "A transient token is valid ~15 minutes or until ONE successful authorization — mint per VU, never share one."
+      - "COMPATIBILITY: a Flex token can carry a different token type than a Microform one, and the merchant backend may validate that shape. Prove one transaction end to end before building on this."
+    reasons:
+      - "Documented server-side flow, so a VU can mint its own token without a browser."
+
   # Signature hints let the classifier map a captured host/path to a profile even
   # when the runner didn't tag a gateway. Substring match, case-insensitive.
+  # Ordered MOST SPECIFIC FIRST: the three CyberSource integrations must win over
+  # the generic module label, or the classifier reports the wrong strategy.
   _signatures:
     stripe: ["js.stripe.com", "api.stripe.com", "stripe"]
-    paradoxlabs_cybersource: ["cybersource", "secureacceptance", "flex.cybersource"]
+    cybersource_flex_api_v2: ["/flex/v2/sessions", "/flex/v2/tokens"]
+    cybersource_microform_v2: ["/microform/v2/sessions", "microform", "flex-microform"]
+    cybersource_secure_acceptance: ["secureaccept/getparams", "secureacceptance",
+                                    "testsecureacceptance"]
+    paradoxlabs_cybersource: ["cybersource", "flex.cybersource"]
     adyen: ["adyen", "checkoutshopper"]
     braintree: ["braintree", "paypal"]
     checkout_com: ["checkout.com"]
