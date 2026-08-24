@@ -165,12 +165,17 @@ paradoxlabs_cybersource:
 #              false        cannot be replayed (hard blocker)
 #              unknown      no profile; rely purely on captured evidence
 #
-# EVIDENCE CLASSES — keep these apart. Gateway field names appear in a store's
-# own JavaScript bundles (e.g. ParadoxLabs_CyberSource JS lists access_key,
-# signature, transaction_uuid). That is IMPLEMENTATION evidence: it tells you
-# which integration the store uses. It is NOT traffic evidence and must never be
-# promoted to "we captured a signed package". Only a real captured request or
-# response counts towards a replayability verdict.
+# EVIDENCE CLASSES — a general APEA rule, not only a CyberSource one:
+#
+#   Static-code evidence identifies a LIKELY INTEGRATION.
+#   Runtime traffic evidence proves the ACTUAL TRANSACTION FLOW.
+#
+# Gateway field names appear in a store's own JavaScript bundles — the
+# ParadoxLabs_CyberSource JS lists access_key, signature and transaction_uuid.
+# That tells you which integration the store uses. It must NEVER be promoted to
+# "we captured a signed package": only a real captured request or response
+# counts towards a replayability verdict. Conflating the two produced a false
+# positive here, and the same trap exists for every gateway.
 # ---------------------------------------------------------------------------
 replay_profiles:
   _default:
@@ -285,6 +290,26 @@ replay_profiles:
         - "P0-A2  every signed value reaches CyberSource unchanged, with signed_field_names order intact"
         - "P0-A3  one sandbox POST to the TEST endpoint returns ACCEPT"
         - "P0-A4  the return leg reaches the store and the order is marked paid"
+      # THREE capture groups prove FOUR gates — group 3 covers both A3 and A4.
+      # Listed so the evidence is gathered once, completely, rather than in
+      # fragments that later can't be told apart.
+      capture_checklist:
+        - group: "1. store getParams response"
+          save: "raw response body + decoded JSON/form fields"
+          proves: [P0-A1]
+        - group: "2. CyberSource /pay request"
+          save: "URL, method, headers, decoded form fields — card values REDACTED"
+          proves: [P0-A2]
+          compare: "signed fields semantically; preserve signed_field_names order"
+        - group: "3. CyberSource /pay response + return-to-store traffic"
+          save: "the decision/result, then every redirect / POST / callback until the order is marked paid"
+          proves: [P0-A3, P0-A4]
+      # Three states, not two. A missing capture is NOT a failed gate: if
+      # CyberSource returns ACCEPT but the capture missed the merchant return
+      # callback, P0-A4 is INCONCLUSIVE — recording it as FAIL would wrongly
+      # close off a strategy that may work.
+      result_states: [PASS, FAIL, INCONCLUSIVE]
+      overall_states: [PROVEN, NOT_REPLAYABLE, MORE_EVIDENCE_REQUIRED]
       return_leg:
         note: >-
           CyberSource signs its RESPONSE fields as well, so the return leg is

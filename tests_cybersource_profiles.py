@@ -158,6 +158,26 @@ print("\n=== still unproven ===")
 check("replayable conditional", sa.get("replayable"), "conditional")
 check("no validated_strategy", "validated_strategy" in sa, False)
 
+print("\n=== capture checklist: 3 groups covering 4 gates ===")
+cc = vg.get("capture_checklist") or []
+check("three capture groups", len(cc), 3)
+proved = [g for grp in cc for g in (grp.get("proves") or [])]
+check("all four gates covered", sorted(set(proved)),
+      ["P0-A1", "P0-A2", "P0-A3", "P0-A4"])
+check("group 3 covers A3 and A4", cc[2].get("proves") if len(cc) > 2 else None,
+      ["P0-A3", "P0-A4"])
+check("card values redacted in group 2",
+      "REDACT" in (cc[1].get("save", "").upper() if len(cc) > 1 else ""), True)
+
+print("\n=== three result states, not two ===")
+check("per-gate states", vg.get("result_states"), ["PASS", "FAIL", "INCONCLUSIVE"])
+check("overall states", vg.get("overall_states"),
+      ["PROVEN", "NOT_REPLAYABLE", "MORE_EVIDENCE_REQUIRED"])
+
+print("\n=== evidence-class rule is stated generally ===")
+check("static-code vs runtime-traffic rule",
+      "Static-code evidence identifies a LIKELY INTEGRATION" in raw, True)
+
 print()
 print("FAILURES:", len(fails))
 sys.exit(1 if fails else 0)
