@@ -62,6 +62,68 @@ print("   verdict:", (out or {}).get("replayable"),
       "| mechanism:", (out or {}).get("mechanism"))
 check("classify() returned something", bool(out), True)
 
+
+"""Safeguards and the validation gate must be present and correct on the
+Secure Acceptance profile, and the profile must NOT claim to be proven."""
+import sys
+import yaml
+sys.path.insert(0, '/var/www/html/apea')
+
+doc = yaml.safe_load(open(
+    "/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+    encoding="utf-8"))
+prof = (doc or {}).get("replay_profiles") or {}
+sa = prof.get("cybersource_secure_acceptance") or {}
+fails = []
+
+
+def check(label, got, want):
+    ok = got == want
+    print("   %-60s %-6s %s" % (label[:60], "OK" if ok else "FAIL",
+                                "" if ok else "(got %r)" % (got,)))
+    if not ok:
+        fails.append(label)
+
+
+print("=== still unproven — must not claim otherwise ===")
+check("replayable is conditional", sa.get("replayable"), "conditional")
+check("requires_validation", sa.get("requires_validation"), True)
+check("no validated_strategy yet", "validated_strategy" in sa, False)
+
+print("\n=== safeguards ===")
+sg = sa.get("safeguards") or {}
+check("sandbox only", sg.get("environment"), "sandbox_only")
+check("allowed submit host is the TEST endpoint",
+      sg.get("allowed_submit_hosts"), ["testsecureacceptance.cybersource.com"])
+check("production endpoint forbidden",
+      sg.get("forbid_submit_hosts"), ["secureacceptance.cybersource.com"])
+for k in ("real_pan_prohibited", "redact_card_number", "redact_cvn"):
+    check(k, sg.get(k), True)
+check("request bodies not saved", sg.get("save_request_body"), False)
+
+print("\n=== blockers cover freshness and immutability ===")
+blob = " ".join(sa.get("blockers") or []).lower()
+check("uniqueness of transaction_uuid stated", "unique" in blob, True)
+check("immutability of the signed package stated", "immutable" in blob, True)
+check("names the signed business fields",
+      all(x in blob for x in ("amount", "currency", "reference_number")), True)
+check("3DS can still divert to a challenge", "acs challenge" in blob, True)
+
+print("\n=== validation gate + 3DS ===")
+vg = (sa.get("validation_gate") or {}).get("required_evidence") or []
+check("three pieces of required evidence", len(vg), 3)
+check("3ds challenge needs a browser",
+      (sa.get("3ds_challenge") or {}).get("browser_required"), True)
+
+print("\n=== the evidence-class rule is written down ===")
+raw = open("/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+           encoding="utf-8").read()
+check("EVIDENCE CLASSES note present", "EVIDENCE CLASSES" in raw, True)
+check("names the JS false-positive trap",
+      "ParadoxLabs_CyberSource JS" in raw, True)
+
+
+
 print()
 print("FAILURES:", len(fails))
 sys.exit(1 if fails else 0)

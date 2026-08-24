@@ -164,6 +164,13 @@ paradoxlabs_cybersource:
 #              conditional  possible only if specific conditions hold; check evidence
 #              false        cannot be replayed (hard blocker)
 #              unknown      no profile; rely purely on captured evidence
+#
+# EVIDENCE CLASSES — keep these apart. Gateway field names appear in a store's
+# own JavaScript bundles (e.g. ParadoxLabs_CyberSource JS lists access_key,
+# signature, transaction_uuid). That is IMPLEMENTATION evidence: it tells you
+# which integration the store uses. It is NOT traffic evidence and must never be
+# promoted to "we captured a signed package". Only a real captured request or
+# response counts towards a replayability verdict.
 # ---------------------------------------------------------------------------
 replay_profiles:
   _default:
@@ -237,10 +244,35 @@ replay_profiles:
       mint_endpoint_hint: "store getParams / secureAccept (from capture)"
     confirm_endpoint_hint: "testsecureacceptance.cybersource.com/pay (sandbox)"
     blockers:
-      - "signature / access_key / transaction_uuid are single-use and time-bound — mint per VU, never reuse a captured set."
+      - "transaction_uuid must be UNIQUE per transaction (CyberSource uses it to detect duplicates) and signed_date_time is time-bound. Mint a fresh package per VU per iteration; a recorded package cannot be replayed 1,000 times."
+      - "The returned signed package is IMMUTABLE. signed_field_names covers the business fields (amount, currency, reference_number, transaction_type, locale, payment_method), so altering any of them after signing invalidates the signature and CyberSource rejects it. Correlation must copy the package through unchanged — it cannot parameterise amount or currency."
       - "Payer Authentication (3DS / SCA) can still divert an individual transaction to an ACS challenge, which needs the browser track."
+    # Card fields move from CyberSource's hosted form into the load script under
+    # this strategy — CyberSource excludes card_number and card_cvn from the
+    # merchant signature precisely because the customer normally types them. That
+    # is acceptable for a sandbox proof with approved test cards and unacceptable
+    # anywhere else, so the constraints are recorded here BEFORE anything is built.
+    safeguards:
+      environment: sandbox_only
+      allowed_submit_hosts: ["testsecureacceptance.cybersource.com"]
+      forbid_submit_hosts: ["secureacceptance.cybersource.com"]
+      real_pan_prohibited: true
+      redact_card_number: true
+      redact_cvn: true
+      save_request_body: false
     reasons:
       - "Underneath the hosted UI this is a signed HTTP form POST, so protocol replay is a CANDIDATE — prove it with one sandbox transaction before relying on it."
+    # Promote to protocol_supported: true / validated_strategy:
+    # dynamic_signed_form_replay ONLY after a sandbox transaction returns ACCEPT.
+    # Keep 3ds_challenge.browser_required true even then: Secure Acceptance can be
+    # configured for Payer Authentication, including 3DS 2.0.
+    validation_gate:
+      required_evidence:
+        - "getParams RESPONSE captured, containing the complete fresh signed package"
+        - "the browser's POST to CyberSource captured, with values matching that response"
+        - "one sandbox transaction replayed from a fresh package returning ACCEPT"
+    3ds_challenge:
+      browser_required: true
 
   cybersource_microform_v2:
     replayable: false
