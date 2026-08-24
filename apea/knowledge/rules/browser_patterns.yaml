@@ -267,10 +267,30 @@ replay_profiles:
     # Keep 3ds_challenge.browser_required true even then: Secure Acceptance can be
     # configured for Payer Authentication, including 3DS 2.0.
     validation_gate:
+      # Compare SEMANTICALLY, after form-decoding — never byte for byte. "%20"
+      # vs "+", HTTP body parameter ordering and re-encoding differences are all
+      # legitimate and would otherwise produce false negatives. What must match
+      # exactly is every SIGNED field's decoded value and, critically, the ORDER
+      # of the signed_field_names list, because the signature is computed over
+      # the name=value pairs in that sequence.
+      compare: semantic_after_form_decode
+      order_sensitive: [signed_field_names]
+      # Expected to appear ONLY in the submission, never in the signed package:
+      # CyberSource excludes these from the merchant signature because the
+      # customer normally types them. Their absence from getParams is correct,
+      # not a missing field.
+      expected_only_in_submission: [card_number, card_cvn]
       required_evidence:
-        - "getParams RESPONSE captured, containing the complete fresh signed package"
-        - "the browser's POST to CyberSource captured, with values matching that response"
-        - "one sandbox transaction replayed from a fresh package returning ACCEPT"
+        - "P0-A1  getParams RESPONSE captured and carries a complete FRESH signed package"
+        - "P0-A2  every signed value reaches CyberSource unchanged, with signed_field_names order intact"
+        - "P0-A3  one sandbox POST to the TEST endpoint returns ACCEPT"
+        - "P0-A4  the return leg reaches the store and the order is marked paid"
+      return_leg:
+        note: >-
+          CyberSource signs its RESPONSE fields as well, so the return leg is
+          itself correlatable. Without P0-A4 the proof covers only that a payment
+          can be SUBMITTED — not that the store's order completes the same
+          lifecycle the browser produces.
     3ds_challenge:
       browser_required: true
 

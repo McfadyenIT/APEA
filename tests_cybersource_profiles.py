@@ -111,7 +111,7 @@ check("3DS can still divert to a challenge", "acs challenge" in blob, True)
 
 print("\n=== validation gate + 3DS ===")
 vg = (sa.get("validation_gate") or {}).get("required_evidence") or []
-check("three pieces of required evidence", len(vg), 3)
+check("four pieces of required evidence", len(vg), 4)
 check("3ds challenge needs a browser",
       (sa.get("3ds_challenge") or {}).get("browser_required"), True)
 
@@ -123,6 +123,40 @@ check("names the JS false-positive trap",
       "ParadoxLabs_CyberSource JS" in raw, True)
 
 
+
+vg = sa.get("validation_gate") or {}
+print("\n=== comparison semantics ===")
+check("compare is semantic, not byte-for-byte",
+      vg.get("compare"), "semantic_after_form_decode")
+check("signed_field_names is order-sensitive",
+      vg.get("order_sensitive"), ["signed_field_names"])
+check("card fields expected only in the submission",
+      vg.get("expected_only_in_submission"), ["card_number", "card_cvn"])
+
+raw = open("/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+           encoding="utf-8").read()
+check("the phrase 'byte for byte' is gone as a requirement",
+      "match byte for byte" in raw, False)
+
+print("\n=== four gates, in order ===")
+ev = vg.get("required_evidence") or []
+check("four required evidence items", len(ev), 4)
+for i, tag in enumerate(("P0-A1", "P0-A2", "P0-A3", "P0-A4")):
+    check("%s present and in position" % tag,
+          ev[i].strip().startswith(tag) if i < len(ev) else False, True)
+check("A4 is the return leg",
+      "return leg" in (ev[3].lower() if len(ev) > 3 else ""), True)
+
+print("\n=== return leg is explained ===")
+rl = (vg.get("return_leg") or {}).get("note", "")
+check("notes CyberSource signs its response too",
+      "signs its response" in rl.lower(), True)
+check("distinguishes submitted from completed",
+      "submitted" in rl.lower(), True)
+
+print("\n=== still unproven ===")
+check("replayable conditional", sa.get("replayable"), "conditional")
+check("no validated_strategy", "validated_strategy" in sa, False)
 
 print()
 print("FAILURES:", len(fails))
