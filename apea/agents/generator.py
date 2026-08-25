@@ -1165,7 +1165,53 @@ def _apply_row(body, row):
     return _set_fields(body, fieldmap)
 
 
-def _inject_payment(body):
+_ADDL_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
+
+
+def _row_addl(row):
+    """Resolve {{csv_column}} placeholders in the payment additional_data against
+    THIS user's CSV row.
+
+    A stored-card token belongs to exactly ONE customer, so a run driving several
+    accounts needs one token per account, not one for the whole run. Writing
+
+        {"card_id": "{{payment_token}}", "cc_cid": "{{card_cvv}}", "save": false}
+
+    lets every VU pick up the token from its own row. Any entry whose placeholder
+    has no value in this row is DROPPED rather than sent empty -- an empty token
+    is rejected by the gateway anyway, and dropping it lets the run fall back to
+    the offline method and say so, instead of failing at payment.
+
+    Without placeholders this returns the dict unchanged, so a single shared
+    token keeps working exactly as before.
+    """
+    if not _PAYMENT_ADDL:
+        return {}
+    out = {}
+    for k, v in _PAYMENT_ADDL.items():
+        if not isinstance(v, str) or "{{" not in v:
+            out[k] = v
+            continue
+        missing = []
+
+        def _sub(m):
+            col = m.group(1)
+            val = (row or {}).get(col)
+            val = "" if val is None else str(val).strip()
+            if not val:
+                missing.append(col)
+            return val
+
+        resolved = _ADDL_PLACEHOLDER.sub(_sub, v)
+        if missing:
+            _clog_annotate("payment additional_data: dropped %r -- CSV column(s) %s "
+                           "are empty for this user" % (k, ", ".join(sorted(set(missing)))))
+            continue
+        out[k] = resolved
+    return out
+
+
+def _inject_payment(body, row=None):
     """Force the payment method + merge test-mode additional_data into a payment
     or place-order body (dict or JSON string). Returns the same type it received."""
     is_str = isinstance(body, str)
@@ -1186,11 +1232,13 @@ def _inject_payment(body):
     if _FORCED_PAYMENT:
         pm["method"] = _FORCED_PAYMENT
     if _PAYMENT_ADDL:
-        ad = pm.get("additional_data")
-        if not isinstance(ad, dict):
-            ad = {}
-        ad.update(_PAYMENT_ADDL)
-        pm["additional_data"] = ad
+        _resolved = _row_addl(row)
+        if _resolved:
+            ad = pm.get("additional_data")
+            if not isinstance(ad, dict):
+                ad = {}
+            ad.update(_resolved)
+            pm["additional_data"] = ad
     return json.dumps(data) if is_str else data
 # Common CAPTCHA response field names across platforms.
 _CAPTCHA_FIELDS = ("g-recaptcha-response", "g_recaptcha_response", "h-captcha-response",
@@ -2503,8 +2551,9 @@ __BROWSE_TASKS__
                            "account's own saved address; the CSV address applies only when "
                            "the account is freshly registered from the CSV."
                            % (_acct_country, self._address_id, _csv_country))
-        if _PAYMENT_ADDL:
-            pm["additional_data"] = dict(_PAYMENT_ADDL)
+        _addl = _row_addl(self._row)
+        if _addl:
+            pm["additional_data"] = _addl
         # API-replay: thread the freshly minted sandbox token into the REST payment
         # payload (paymentMethod.additional_data[<correlated field>]) so the order is
         # placed with a real per-VU token instead of an offline method. Inert unless
@@ -2706,8 +2755,9 @@ __BROWSE_TASKS__
                 pass
             r.success() if r.status_code < 400 else r.failure("pay-methods %s" % r.status_code)
         pm = {"method": _FORCED_PAYMENT or method or ""}
-        if _PAYMENT_ADDL:
-            pm["additional_data"] = dict(_PAYMENT_ADDL)   # test-mode / stored-card params
+        _addl = _row_addl(self._row)
+        if _addl:
+            pm["additional_data"] = _addl   # test-mode / stored-card params, per user
         # API-replay: inject the minted sandbox token into additional_data (inert
         # unless _PAY_API is configured and a token was minted for this user).
         if _PAY_API and getattr(self, "_payment_token", None) and _PAY_API.get("inject_field"):
@@ -2742,7 +2792,7 @@ __BROWSE_TASKS__
                 if self._form_key and "form_key" in body:
                     body["form_key"] = self._form_key
             if _FORCED_PAYMENT or _PAYMENT_ADDL:
-                body = _inject_payment(body)      # test-mode / stored-card params
+                body = _inject_payment(body, self._row)   # per-user stored-card params
             if _PARAM_MAP and self._row:
                 body = _apply_row(body, self._row)   # card/shipping/etc. from CSV
             _rpath = s["path"]
@@ -2871,7 +2921,7 @@ __BROWSE_TASKS__
         if (_FORCED_PAYMENT or _PAYMENT_ADDL) and any(
                 k in (path or "").lower()
                 for k in ("payment-information", "set-payment", "placeorder", "place-order")):
-            body = _inject_payment(body)
+            body = _inject_payment(body, self._row)
         # generic parameterization: card / shipping / billing / contact / etc.
         if _PARAM_MAP and self._row:
             body = _apply_row(body, self._row)
