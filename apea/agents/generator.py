@@ -820,7 +820,25 @@ def _assemble_flow_script(discovery: dict, plan_cfg: dict, flow_steps: list,
     _login_action = (discovery.get("login_form") or {}).get("action")
     if _login_action:
         login_urls.append(_login_action)
-    for _g in ("/customer/account/loginPost", "/customer/ajax/login"):
+    # Multi-store Magento serves each store view under a path prefix (Radwell's
+    # UK store is /uk/...). The fallback login endpoints must carry that prefix,
+    # or the storefront session is authenticated on the DEFAULT store while every
+    # storefront call in the journey runs on /uk as a GUEST. The visible symptom
+    # is silent: /uk/checkout/cart/add succeeds (200) but adds to a guest quote,
+    # so the customer's REST quote stays empty and the line lands at price 0.
+    # Same root cause the rest_prefix derivation below already guards against.
+    _store_pfx = ""
+    for _s in flow_steps:
+        if _s.get("rest"):
+            _rp = _derive_rest_prefix(_s.get("path", "")) or ""
+            _cut = _rp.find("/rest/")
+            if _cut > 0:
+                _store_pfx = _rp[:_cut]
+                break
+    _fallbacks = ["/customer/account/loginPost", "/customer/ajax/login"]
+    if _store_pfx:
+        _fallbacks = [_store_pfx + _g for _g in _fallbacks] + _fallbacks
+    for _g in _fallbacks:
         if _g not in login_urls:
             login_urls.append(_g)
     # REST store prefix derived from the actual /rest/<store>/V<n> the site uses

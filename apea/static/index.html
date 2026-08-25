@@ -233,6 +233,7 @@
         <span class="muted" id="callCount"></span>
       </div>
       <div class="callList" id="anCalls"></div>
+      <div id="callCritWarn" style="margin-top:8px;color:#ffb4b4;font-size:13px;line-height:1.5"></div>
       <div id="anDropped"></div>
       <label style="margin-top:12px">Recorded browser actions
         <span class="muted">— every click/type/wait captured from Selenium, for reference</span></label>
@@ -892,6 +893,12 @@ async function toggleAi(enable){
 }
 
 // ---- call selector (which recorded calls go into the generated script) ----
+// A storefront cart-add runs the store's OWN pricing (custom modules, contract
+// price). The REST /carts/mine/items endpoint bypasses it and can add the line
+// at 0, producing orders worth shipping+tax only. So this call is business
+// critical, not "extra page load": bulk REST-only selection must keep it.
+const PRICING_CRITICAL_RE = /\/(?:checkout\/cart\/add|cart\/add)(?:\/|$|\?)|\/customer\/(?:account\/loginPost|ajax\/login)/i;
+function isPricingCritical(path){ return PRICING_CRITICAL_RE.test(String(path||'')); }
 function renderCallSelector(calls, dropped){
   calls = calls || []; dropped = dropped || [];
   const box = $('#anCalls');
@@ -902,11 +909,13 @@ function renderCallSelector(calls, dropped){
     box.innerHTML = calls.map(c=>{
       const k = String(c.kind||'GET').toUpperCase();
       const grp = c.group ? `<span class="muted">${_escHtml(c.group)}</span>` : '';
+      const crit = isPricingCritical(c.path);
+      const flag = crit ? '<span class="kind REST" style="background:#3d1b1b;color:#ff9a9a" title="Business critical. Dropping this call makes the run report 200s while the orders it creates are wrong (price 0, or a guest session).">KEEP</span>' : '';
       return `<label class="callItem">
-        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" ${c.selected!==false?'checked':''}>
+        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${crit?'1':'0'}" ${c.selected!==false?'checked':''}>
         <span class="m">${_escHtml(c.method)}</span>
         <span class="kind ${k}">${_escHtml(k)}</span>
-        <span class="p">${_escHtml(c.path)}</span>${grp}
+        <span class="p">${_escHtml(c.path)}</span>${grp}${flag}
       </label>`;
     }).join('');
   }
@@ -924,7 +933,11 @@ function renderCallSelector(calls, dropped){
   if(bAll) bAll.onclick=()=>setAllCalls(true);
   if(bNone) bNone.onclick=()=>setAllCalls(false);
   if(bApi) bApi.onclick=()=>{ document.querySelectorAll('#anCalls .callChk').forEach(el=>{
-      const k=el.dataset.kind; el.checked=(k==='REST'||k==='API'); }); updateCallCount(); };
+      const k=el.dataset.kind;
+      // Keep pricing-critical storefront calls: unticking them silently
+      // produces 0-value orders that still report as a pass.
+      el.checked=(k==='REST'||k==='API'||el.dataset.critical==='1'); });
+    updateCallCount(); };
   updateCallCount();
 }
 function setAllCalls(v){ document.querySelectorAll('#anCalls .callChk').forEach(el=>el.checked=v); updateCallCount(); }
@@ -932,6 +945,15 @@ function updateCallCount(){
   const all=document.querySelectorAll('#anCalls .callChk').length;
   const on=document.querySelectorAll('#anCalls .callChk:checked').length;
   const el=$('#callCount'); if(el) el.textContent = all ? `${on} of ${all} selected` : '';
+  const missed=Array.from(document.querySelectorAll('#anCalls .callChk'))
+    .filter(x=>x.dataset.critical==='1' && !x.checked);
+  const w=$('#callCritWarn');
+  if(w) w.innerHTML = missed.length
+    ? '⚠️ <b>The call that prices the cart is unticked.</b> Without '
+      + '<code>' + _escHtml(missed[0].closest('.callItem').querySelector('.p').textContent) + '</code> '
+      + 'the item is added over the REST API, which can price it at 0 — every order '
+      + 'would be worth shipping and tax only. Tick it unless the catalogue is genuinely free.'
+    : '';
 }
 function selectedCallSigs(){
   return Array.from(document.querySelectorAll('#anCalls .callChk:checked')).map(el=>el.dataset.sig);
@@ -959,31 +981,46 @@ function populateGateways(detected){
     : `No hosted card gateway detected in this recording — the browser track will just navigate. (Set Browser VUs to 0 to skip it.)`;
 }
 
-// Hosted card gateways tokenise the card inside the gateway's own iframe, so no
-// HTTP-level tool can complete the payment. APEA quietly falls back to an offline
-// method; this states that up front and offers the three real options, so the
-// choice is made deliberately instead of discovered on the order page.
+// What an HTTP-level tool can do with a hosted card gateway depends on WHICH
+// card journey is being replayed, and the difference is not obvious:
+//   first-time entry  the PAN goes straight into the gateway iframe. No HTTP
+//                     tool can supply it. A real browser is the only option.
+//   saved card        the store refers to the card by a token it already holds.
+//                     That token is an ordinary correlated value and replays fine.
+// Validated 2026-08-25 against CyberSource (ParadoxLabs) on a live Magento store:
+// one saved card_id placed 5 card orders over plain HTTP, no browser involved,
+// confirmed as "Credit / Debit Card - Visa" on the order in the storefront.
+// Stating this up front stops the saved-card path being written off as impossible.
 function renderPaymentStrategy(detected){
   const el = $('#paymentStrategy'); if(!el) return;
   if(!detected){ el.innerHTML = ''; return; }
   const name = GATEWAY_LABELS[detected] || detected;
   el.innerHTML =
     '<div style="border-left:4px solid #e6a700;background:#161618;border-radius:8px;padding:12px 14px">'
-    + '<b>💳 Card payment cannot be replayed over HTTP — choose how to test it</b>'
+    + '<b>&#128179; Card payment at load &mdash; pick the approach that fits</b>'
     + '<div class="muted" style="margin-top:6px;font-size:13px">'
-    + 'This recording pays with <b>' + name + '</b>. The card is entered inside the '
-    + "gateway's own iframe, so no HTTP-level tool (APEA, JMeter, k6, Gatling) can "
-    + 'complete it. Pick one:'
+    + 'This recording pays with <b>' + name + '</b>, a hosted card gateway. What is '
+    + 'possible depends on whether the card is being <b>entered for the first time</b> '
+    + 'or <b>reused from the account</b>:'
     + '<ol style="margin:8px 0 0 18px">'
-    + '<li><b>Offline method for volume</b> <i>(default — nothing to do)</i>. APEA uses an '
-    + 'offline method such as net terms or bank transfer. Everything except the gateway '
-    + 'hop is tested, and the report states which method it actually used.</li>'
-    + '<li><b>Measure the real card journey</b> — set <b>Browser VUs</b> to 2–5 in '
-    + 'Advanced options. A few real browsers drive the card form alongside the HTTP load. '
-    + 'This is how LoadRunner and NeoLoad do it; browsers are too heavy to run in bulk.</li>'
-    + '<li><b>Virtualise the gateway</b> — point the test environment at a mock that returns '
-    + 'a token with realistic delay. Give it the delay the real gateway has, or the test '
-    + 'proves only that you are fast when your dependencies are instant.</li>'
+    + '<li><b>Reuse a saved card &mdash; works over plain HTTP.</b> Once a card is saved '
+    + 'to the account, the store refers to it by a token, and a token replays like any '
+    + 'other value. Put the payment method and token in Advanced options below. '
+    + 'To get the token, pay once by hand and read it from DevTools &rarr; Network &rarr; '
+    + 'the <code>payment-information</code> call &rarr; <code>additional_data</code>. '
+    + '<i>Verified against CyberSource: one token placed repeated card orders with no '
+    + 'browser in the loop.</i></li>'
+    + '<li><b>Offline method for volume</b> <i>(default when no token is supplied)</i>. '
+    + 'APEA uses an offline method such as net terms or bank transfer. Everything except '
+    + 'the gateway hop is tested, and the report states which method it actually used.</li>'
+    + '<li><b>First-time card entry needs a real browser.</b> Typing a card number is the '
+    + 'one step no HTTP tool can perform &mdash; the number goes directly into the gateway '
+    + 'iframe, never through the store. Set <b>Browser VUs</b> to 2&ndash;5 so a few real '
+    + 'browsers drive the card form alongside the HTTP load. This is how LoadRunner and '
+    + 'NeoLoad do it; browsers are too heavy to run in bulk.</li>'
+    + '<li><b>Virtualise the gateway</b> &mdash; point the test environment at a mock that '
+    + 'returns a token with realistic delay. Give it the delay the real gateway has, or the '
+    + 'test proves only that you are fast when your dependencies are instant.</li>'
     + '</ol></div></div>';
 }
 

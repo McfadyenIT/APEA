@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import shutil
 import threading
 import traceback
@@ -51,6 +52,23 @@ async def _unhandled(request: Request, exc: Exception):
 
 # in-memory discovery cache: normalized url -> discovery dict
 _DISCOVERY: dict[str, dict] = {}
+
+
+_PRICING_CRITICAL_RE = re.compile(
+    r"/(?:checkout/cart/add|cart/add)(?:/|$|\?)"
+    r"|/customer/(?:account/loginPost|ajax/login)",
+    re.I)
+"""Recorded calls that must never be dropped silently.
+
+Two kinds, both business critical and both `rest=False`, so a bulk
+"REST only" selection drops them and the run still reports 200s:
+
+  cart/add   runs the pricing the store itself applies; without it the
+             REST add lands the line at 0 (shipping+tax orders).
+  loginPost  authenticates the STOREFRONT session. Dropping it makes the
+             generator fall back to unprefixed login endpoints, so on a
+             multi-store Magento the storefront calls run as a guest.
+"""
 
 
 def _call_sig(step: dict) -> str:
@@ -889,6 +907,25 @@ def run(req: RunReq):
                     status_code=400,
                     detail="No recorded calls were selected for the script. Select at "
                            "least the REST/API calls that make up the journey.")
+            # A storefront cart-add runs the store's OWN pricing (custom modules,
+            # contract price). The REST /carts/mine/items endpoint bypasses it and
+            # can add the line at 0, so dropping this call silently yields orders
+            # worth shipping+tax only -- which still reports as a pass. Warn loudly
+            # rather than block: on a store where REST prices correctly, excluding
+            # it is a legitimate choice.
+            _kept_sigs = {_call_sig(s) for s in _kept}
+            _dropped_pricing = [_call_sig(s) for s in _flow
+                                if _call_sig(s) not in _kept_sigs
+                                and _PRICING_CRITICAL_RE.search(str(s.get("path") or ""))]
+            if _dropped_pricing:
+                _warn = ("A business-critical call was excluded from the script: "
+                         + ", ".join(_dropped_pricing[:3])
+                         + ". The item will be added over the REST API instead, which on "
+                           "a store that prices in the storefront lands the line at 0 -- "
+                           "every order would be worth shipping and tax only. Re-select "
+                           "that call unless the catalogue is genuinely free.")
+                disc.setdefault("selection_warnings", []).append(_warn)
+                print("[apea] selection warning: " + _warn)
             disc["flow"] = _kept
 
         overrides = {}

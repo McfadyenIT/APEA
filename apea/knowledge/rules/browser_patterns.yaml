@@ -199,6 +199,53 @@ replay_profiles:
     reasons:
       - "Card is tokenized client-side into a re-mintable token; sandbox tokens are creatable with the publishable key, so each VU can mint its own."
 
+  # --- CHECK THIS FIRST for ANY hosted card gateway ------------------------
+  # A hosted gateway blocks HTTP replay of the card NUMBER. It does not block
+  # replay of a card the account ALREADY holds. Once a card is vaulted, the
+  # store refers to it by an opaque token and the checkout call carries only
+  # that token — ordinary parameterisation, no browser, no gateway hop, no
+  # per-VU minting. Most "cards cannot be load tested" conclusions are really
+  # "first-time card entry cannot be load tested", which is a much narrower
+  # claim. Establish whether a vault exists BEFORE designing anything harder.
+  vaulted_card_token:
+    replayable: true
+    mechanism: stored_token_reuse
+    applies_to: [paradoxlabs_cybersource, stripe, braintree, adyen, any_vaulting_gateway]
+    mint:
+      description: >-
+        Nothing to mint at run time. Pay once by hand per test account, then read
+        the token the store sends on the order call and parameterise it like any
+        other test-data value. One token serves every iteration for that account.
+      needs: [test_account_with_saved_card, captured_order_call]
+      capture_hint: >-
+        DevTools -> Network -> the place-order / payment-information request ->
+        paymentMethod.additional_data. The token key is gateway specific:
+        card_id or public_hash (ParadoxLabs/Magento vault), payment_method
+        (Stripe), paymentMethodNonce or token (Braintree),
+        storedPaymentMethodId (Adyen).
+    blockers:
+      - "The token is bound to ONE customer. A token captured on account A is rejected for account B, so multi-user runs need one token per account in the data file."
+      - "Step-up authentication (3-D Secure / payer auth) may be enforced per transaction. If it is, the run fails at payment with a payer-auth error and only the browser track can proceed."
+      - "A vault may hold the card only for the checkout that created it. Save the card explicitly when capturing, rather than relying on a transient token."
+    validated:
+      date: 2026-08-25
+      gateway: paradoxlabs_cybersource
+      platform: magento
+      result: PASS
+      evidence: >-
+        One card_id captured from a single manual checkout placed 5 consecutive
+        orders in one load run over plain HTTP, 0 failures, with no browser in
+        the loop. The orders render as "Credit / Debit Card - Visa ending NNNN"
+        in the storefront, not as the offline fallback method. The captured
+        token carried save:false and the payer_auth session id was deliberately
+        omitted, and payment still succeeded — so on that configuration neither
+        a permanent vault entry nor a per-transaction 3-D Secure session was
+        required. Both are configuration dependent: re-establish per environment
+        rather than assuming.
+    reasons:
+      - "The card number never enters the replay. The token is already server-side data, so the gateway hop the iframe protects has already happened."
+      - "Cheapest option by far: no per-VU minting, no service virtualisation, no browser fleet."
+
   paradoxlabs_cybersource:
     replayable: conditional
     mechanism: server_signed_single_use
@@ -215,6 +262,7 @@ replay_profiles:
       - "CyberSource's hosted endpoint may enforce Origin / device-fingerprint checks that reject a raw server-side POST."
     reasons:
       - "Replayable ONLY IF the merchant getParams endpoint is callable per VU AND the CyberSource POST is accepted in sandbox — decide from the captured sequence, not by assumption."
+      - "This entry covers FIRST-TIME card entry. If the test account can save a card, use `vaulted_card_token` instead: it is validated, needs no minting, and was proven on this exact module on 2026-08-25."
 
   # --- CyberSource: THREE DISTINCT integrations, not one -------------------
   # "paradoxlabs_cybersource" above is the Magento MODULE. WHICH CyberSource
