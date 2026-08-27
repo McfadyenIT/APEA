@@ -404,6 +404,8 @@
       </div>
 
       <div id="planPreview" class="hidden" style="margin-top:14px"></div>
+      <!-- What APEA resolved, so nobody has to hunt for what is missing. -->
+      <div id="readiness" style="margin-top:14px"></div>
       <div class="btns">
         <button class="btn" id="btnRun">▶ Generate &amp; Run Test</button>
       </div>
@@ -981,6 +983,72 @@ function selectedCallSigs(){
   return Array.from(document.querySelectorAll('#anCalls .callChk:checked')).map(el=>el.dataset.sig);
 }
 
+// ---- readiness panel -----------------------------------------------------
+// Shows what APEA RESOLVED, rather than making someone hunt for what is
+// missing. Deliberately shows warnings without blocking: only a genuinely
+// unusable data file blocks the run (syncRunGate owns that). Everything here is
+// "this is what will happen" -- the point is that nothing surprises you at the
+// end of a three-minute run.
+let ACCOUNTS = null;      // set by validateData() from /api/validate-data
+function renderReadiness(){
+  const el = $('#readiness'); if(!el) return;
+  if(!ACCOUNTS){ el.innerHTML = ''; return; }
+  const a = ACCOUNTS;
+  const asked = +($('#ovUsers') && $('#ovUsers').value) || 0;
+  const method = (($('#ovPayMethod') && $('#ovPayMethod').value) || '').trim();
+  const wantsCard = !!(PAY_TEMPLATES && PAY_TEMPLATES[method]);
+  const rows = [];
+  const line = (ok, text) =>
+    rows.push(`<div style="margin:3px 0">${ok === true ? '<span style="color:#2ecc71">✓</span>'
+                        : ok === false ? '<span style="color:#e11627">✗</span>'
+                        : '<span style="color:#e6a700">⚠</span>'} ${text}</div>`);
+
+  // --- accounts ---
+  if(asked && asked > a.unique_logins){
+    line(false, `<b>${asked} users but only ${a.unique_logins} `
+      + `account${a.unique_logins === 1 ? '' : 's'}.</b> Users sharing an account `
+      + `share one basket and fight over it — the store rejects the second `
+      + `with "the quote can't be created". Set Users to ${a.unique_logins}, or add more logins.`);
+  } else {
+    line(true, `${a.unique_logins} account${a.unique_logins === 1 ? '' : 's'}`
+      + (asked ? ` for ${asked} user${asked === 1 ? '' : 's'}` : '')
+      + ` — no sharing` + (a.rows > a.unique_logins
+          ? ` (${a.rows} rows, ${a.products} product${a.products === 1 ? '' : 's'})` : ''));
+  }
+
+  // --- payment ---
+  if(wantsCard){
+    if(a.with_token.length) line(true,
+      `card resolved for ${a.with_token.length} of ${a.unique_logins}: `
+      + a.with_token.map(_escHtml).join(', '));
+    if(a.without_token.length) line(false,
+      `<b>no card for ${a.without_token.map(_escHtml).join(', ')}.</b> `
+      + `You asked for <code>${_escHtml(method)}</code>, so the run will FAIL for `
+      + `${a.without_token.length === 1 ? 'that account' : 'those accounts'} rather than `
+      + `quietly billing on account. Add a <code>payment_token</code>, or use an offline method.`);
+  } else if(method){
+    line(true, `paying by <code>${_escHtml(method)}</code> — no card needed`);
+  } else {
+    line(null, 'no payment method chosen — the recorded one will be used');
+  }
+
+  // --- the calls that decide whether an order is real ---
+  const crit = Array.from(document.querySelectorAll('#anCalls .callChk'))
+                 .filter(x => x.dataset.critical);
+  if(crit.length){
+    const off = crit.filter(x => !x.checked);
+    if(off.length) line(false,
+      `<b>${off.length} business-critical call${off.length === 1 ? '' : 's'} unticked.</b> `
+      + `See the warning under the call list.`);
+    else line(true, `${crit.length} business-critical call${crit.length === 1 ? '' : 's'} kept`);
+  }
+
+  const bad = rows.filter(r => r.indexOf('#e11627') > -1).length;
+  el.innerHTML = `<div class="rec" style="border-left-color:${bad ? '#e6a700' : '#2ecc71'}">`
+    + `<b>${bad ? 'Before you run' : 'Ready to run'}</b>`
+    + `<div class="d" style="margin-top:6px">${rows.join('')}</div></div>`;
+}
+
 // ---- payment method picker + additional_data template --------------------
 // The methods come from the recording and the token key from the knowledge
 // base, so nobody has to remember that CyberSource wants `card_id` while
@@ -1004,6 +1072,7 @@ function renderPaymentMethods(pay){
     `<option value="${_escAttr(m.code)}">${_escHtml(m.title || m.code)}`
     + `${m.kind === 'hosted' ? ' — card' : ''}</option>`).join('');
   applyPayTemplate();
+  renderReadiness();
 }
 function applyPayTemplate(){
   const codeEl = $('#ovPayMethod'), addlEl = $('#ovPayAddl');
@@ -1042,6 +1111,7 @@ function applyPayTemplate(){
       note.textContent = '';
     }
   }
+  renderReadiness();
 }
 
 // ---- dynamic payment-gateway picker (driven by Claude's detection) ----
@@ -1224,6 +1294,16 @@ $('#btnSampleCsv').onclick=()=>{
 
 let dataValid = true;   // gates test generation when a data CSV fails validation
 
+(function wireUsers(){
+  const u = $('#ovUsers');
+  if(u && !u.dataset.wired){
+    u.dataset.wired = '1';
+    u.addEventListener('input', ()=>{
+      if(u.value !== u.dataset.suggested) u.dataset.userSet = '1';
+      renderReadiness();
+    });
+  }
+})();
 function syncRunGate(){
   const btn=$('#btnRun'); if(!btn) return;
   const blocked = !!(uploads.data_csv && !dataValid);
@@ -1243,9 +1323,19 @@ async function validateData(){
   try{
     const r=await api('/api/validate-data',{data_csv:uploads.data_csv, recording:uploads.recording||null});
     dataValid = !!r.ok;
+    ACCOUNTS = r.accounts || null;
+    // Suggest the safe user count: distinct logins, because two users on one
+    // account share a basket. Only when the field is untouched -- an explicit
+    // choice is never overwritten, it is warned about in the readiness panel.
+    const uEl = $('#ovUsers');
+    if(ACCOUNTS && uEl && !uEl.value && !uEl.dataset.userSet && ACCOUNTS.unique_logins){
+      uEl.value = ACCOUNTS.unique_logins;
+      uEl.dataset.suggested = String(ACCOUNTS.unique_logins);
+    }
     out.innerHTML=`<div class="rec" style="border-left-color:${r.ok?'#2ecc71':'#e11627'}">`
       +`<b>Validation:</b> <span class="badge ${r.ok?'b-ok':'b-bad'}">${r.ok?'PASS':'BLOCKED'}</span>`
       +`<div class="d">${(r.messages||[]).join('<br>')}</div></div>`;
+    renderReadiness();
   }catch(e){ dataValid=false; if(out) out.innerHTML='<p class="muted">'+e.message+'</p>'; }
   syncRunGate();
 }

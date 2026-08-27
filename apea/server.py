@@ -328,6 +328,43 @@ def _read_csv_rows(path: str):
     return headers, rows
 
 
+def _account_summary(headers, rows) -> dict:
+    """What the data file can actually support, as opposed to how many rows it has.
+
+    A platform cart belongs to the CUSTOMER, so two virtual users signed in as
+    the same account contend for one basket. On Magento that surfaces as
+    "The quote can't be created." -- a functional failure that pollutes the
+    measurement rather than an interesting result. So the safe number of
+    concurrent users is the number of DISTINCT logins, not the row count.
+
+    Also reports which accounts can pay by card, because a token belongs to one
+    customer and a blank one is a run that cannot honour what it declared.
+    """
+    logins, per_login_token = [], {}
+    for r in rows:
+        u = (r.get("username") or r.get("email") or "").strip().lower()
+        if not u:
+            continue
+        if u not in per_login_token:
+            logins.append(u)
+            per_login_token[u] = False
+        if (r.get("payment_token") or "").strip():
+            per_login_token[u] = True
+    products = sorted({(r.get("product_id") or "").strip()
+                       for r in rows if (r.get("product_id") or "").strip()})
+    without = [u for u in logins if not per_login_token[u]]
+    return {
+        "rows": len(rows),
+        "logins": logins,
+        "unique_logins": len(logins),
+        "safe_concurrent_users": len(logins),
+        "products": len(products),
+        "has_token_column": "payment_token" in (headers or []),
+        "with_token": [u for u in logins if per_login_token[u]],
+        "without_token": without,
+    }
+
+
 def _pick(row: dict, keys) -> str:
     for k in keys:
         if row.get(k):
@@ -855,8 +892,15 @@ def validate_data(req: ValidateReq):
         required = parameterization.analyze(
             rec.get("flow") or [], rec.get("selenium_inputs"),
             rec.get("ui_steps")).get("columns", [])
-    rows = _read_csv_rows(req.data_csv)[1]
-    return parameterization.validate(required, rows)
+    headers, rows = _read_csv_rows(req.data_csv)
+    result = parameterization.validate(required, rows)
+    # What the file can actually SUPPORT, for the readiness panel: distinct
+    # logins bound safe concurrency, and a card needs a token per account.
+    try:
+        result["accounts"] = _account_summary(headers, rows)
+    except Exception:
+        pass
+    return result
 
 
 class PaymentMethodsReq(BaseModel):
