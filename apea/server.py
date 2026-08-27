@@ -54,21 +54,46 @@ async def _unhandled(request: Request, exc: Exception):
 _DISCOVERY: dict[str, dict] = {}
 
 
-_PRICING_CRITICAL_RE = re.compile(
-    r"/(?:checkout/cart/add|cart/add)(?:/|$|\?)"
-    r"|/customer/(?:account/loginPost|ajax/login)",
-    re.I)
-"""Recorded calls that must never be dropped silently.
+def _critical_paths(platform: str = "") -> dict:
+    """Business-critical call fragments for a platform, from the KB.
 
-Two kinds, both business critical and both `rest=False`, so a bulk
-"REST only" selection drops them and the run still reports 200s:
+    Two kinds of recorded call are not optional load: the storefront cart-add
+    (which runs the store's OWN pricing -- skip it and an API add can land the
+    line at 0, so the order captures shipping and tax only) and the storefront
+    login (skip it and every storefront call runs as a guest). Both are usually
+    plain form POSTs, so any bulk "API only" selection drops them, and the run
+    still reports 200 everywhere.
 
-  cart/add   runs the pricing the store itself applies; without it the
-             REST add lands the line at 0 (shipping+tax orders).
-  loginPost  authenticates the STOREFRONT session. Dropping it makes the
-             generator fall back to unprefixed login endpoints, so on a
-             multi-store Magento the storefront calls run as a guest.
-"""
+    The fragments live in knowledge/rules/platform_rules.yaml, so onboarding
+    another storefront is a KB edit, not a code change. The generic block is
+    merged in as a floor: a false positive costs one extra call in the script, a
+    false negative costs a whole run of zero-value orders that reports success.
+    """
+    from .knowledge import KB
+    out = {"cart_add": [], "login": []}
+    for src in ("generic", platform):
+        if not src:
+            continue
+        blk = (KB.platform_rules(src) or {}).get("business_critical_paths") or {}
+        for kind in out:
+            out[kind].extend(str(x).lower() for x in (blk.get(kind) or []))
+    return {k: sorted(set(v)) for k, v in out.items()}
+
+
+def _critical_kind(path: str, platform: str = "") -> str:
+    """'cart_add', 'login' or '' — why this call must not be dropped."""
+    low = str(path or "").lower()
+    # A framework static mount can contain the same words: Magento's Knockout
+    # templates include .../template/cart/add.html. That is a file served by
+    # nginx, not the cart controller. The noise filter already drops these, but
+    # matching on substrings is broad by design, so exclude them here too.
+    from .agents import filter as _flt
+    if _flt.is_static_mount_file(low):
+        return ""
+    for kind, frags in _critical_paths(platform).items():
+        if any(f in low for f in frags):
+            return kind
+    return ""
 
 
 def _call_sig(step: dict) -> str:
@@ -89,7 +114,16 @@ def _detect_gateway_safe(flow: list) -> Optional[str]:
         return None
 
 
-def _build_calls(rec: dict) -> list:
+def _platform_of(rec: dict, flow) -> str:
+    """Best-matching commerce platform for this recording, or 'generic'."""
+    try:
+        from .platforms import detect as _d
+        return _d(rec if isinstance(rec, dict) else {}, "", flow) or "generic"
+    except Exception:
+        return "generic"
+
+
+def _build_calls(rec: dict, platform: str = "") -> list:
     """Classified, de-duplicated list of the REAL calls kept from a recording, for
     the UI's call selector. Every call is `selected: True` by default (APEA has
     already dropped static/noise — these are the actual API/REST/app calls)."""
@@ -109,6 +143,10 @@ def _build_calls(rec: dict) -> list:
             "label": s.get("label") or s.get("name") or path,
             "kind": _flt.classify_call(method, path, s.get("xhr", False),
                                        s.get("json", False)),
+            # Why this call must not be dropped ('' = ordinary load). Computed
+            # HERE, from the KB, so the browser does not carry a second copy of
+            # the rule that can drift out of step with the server's.
+            "critical": _critical_kind(path, platform),
             "selected": True,
         })
     return out
@@ -661,7 +699,7 @@ def analyze_recording(req: AnalyzeReq):
         "static_dropped": rec.get("static_dropped", 0),
         # the real calls kept for the script (selectable in the UI) + the noise
         # APEA filtered out (shown read-only so the filtering is transparent).
-        "calls": _build_calls(rec),
+        "calls": _build_calls(rec, _platform_of(rec, flow)),
         "dropped": rec.get("dropped", []),
         "detected_gateway": _detect_gateway_safe(flow),
         "sample_csv": an["sample_csv"], "notes": an["notes"],
@@ -756,7 +794,7 @@ def crawl_record(req: CrawlRecordReq):
         "static_dropped": rec.get("static_dropped", 0),
         # calls come from the MERGED flow (recording + anything Playwright added);
         # dropped noise is from the recording parse.
-        "calls": _build_calls({"flow": flow}),
+        "calls": _build_calls({"flow": flow}, _platform_of(rec, flow)),
         "dropped": rec.get("dropped", []),
         "detected_gateway": _detect_gateway_safe(flow),
         "sample_csv": an["sample_csv"], "notes": combined_notes,
@@ -907,23 +945,32 @@ def run(req: RunReq):
                     status_code=400,
                     detail="No recorded calls were selected for the script. Select at "
                            "least the REST/API calls that make up the journey.")
-            # A storefront cart-add runs the store's OWN pricing (custom modules,
-            # contract price). The REST /carts/mine/items endpoint bypasses it and
-            # can add the line at 0, so dropping this call silently yields orders
-            # worth shipping+tax only -- which still reports as a pass. Warn loudly
-            # rather than block: on a store where REST prices correctly, excluding
-            # it is a legitimate choice.
+            # Warn loudly rather than block: on a store where the API prices
+            # correctly, excluding these is a legitimate choice. What is NOT
+            # acceptable is dropping them silently, because every metric still
+            # reads as a pass while the orders are wrong.
+            from .platforms import detect as _detect_platform
+            _platform = _detect_platform(disc, req.url or "", _flow)
             _kept_sigs = {_call_sig(s) for s in _kept}
-            _dropped_pricing = [_call_sig(s) for s in _flow
-                                if _call_sig(s) not in _kept_sigs
-                                and _PRICING_CRITICAL_RE.search(str(s.get("path") or ""))]
-            if _dropped_pricing:
-                _warn = ("A business-critical call was excluded from the script: "
-                         + ", ".join(_dropped_pricing[:3])
-                         + ". The item will be added over the REST API instead, which on "
-                           "a store that prices in the storefront lands the line at 0 -- "
-                           "every order would be worth shipping and tax only. Re-select "
-                           "that call unless the catalogue is genuinely free.")
+            _dropped_critical = [(_call_sig(s), _critical_kind(s.get("path") or "", _platform))
+                                 for s in _flow
+                                 if _call_sig(s) not in _kept_sigs
+                                 and _critical_kind(s.get("path") or "", _platform)]
+            if _dropped_critical:
+                _why = {
+                    "cart_add": "the item would be added over the API instead, which on a "
+                                "store that prices in its own cart controller lands the line "
+                                "at 0 -- every order worth shipping and tax only",
+                    "login": "the storefront session would never be authenticated, so those "
+                             "calls run as a guest and land in a guest cart",
+                }
+                _warn = ("Business-critical call(s) excluded from the script (%s): %s. "
+                         % (_platform,
+                            ", ".join("%s [%s]" % (sig, kind)
+                                      for sig, kind in _dropped_critical[:3]))
+                         + "; ".join(sorted({_why[k] for _s, k in _dropped_critical}))
+                         + ". Re-select unless this is deliberate.")
+                _dropped_pricing = [sig for sig, _k in _dropped_critical]
                 disc.setdefault("selection_warnings", []).append(_warn)
                 print("[apea] selection warning: " + _warn)
             disc["flow"] = _kept

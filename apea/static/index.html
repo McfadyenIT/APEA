@@ -893,12 +893,16 @@ async function toggleAi(enable){
 }
 
 // ---- call selector (which recorded calls go into the generated script) ----
-// A storefront cart-add runs the store's OWN pricing (custom modules, contract
-// price). The REST /carts/mine/items endpoint bypasses it and can add the line
-// at 0, producing orders worth shipping+tax only. So this call is business
-// critical, not "extra page load": bulk REST-only selection must keep it.
-const PRICING_CRITICAL_RE = /\/(?:checkout\/cart\/add|cart\/add)(?:\/|$|\?)|\/customer\/(?:account\/loginPost|ajax\/login)/i;
-function isPricingCritical(path){ return PRICING_CRITICAL_RE.test(String(path||'')); }
+// Which calls must not be dropped is decided by the SERVER, from
+// knowledge/rules/platform_rules.yaml, and arrives on each call as `critical`
+// ('cart_add' | 'login' | ''). The browser deliberately keeps no copy of that
+// rule: two copies drift apart, and this failure mode is silent — the run still
+// reports 200 everywhere while the orders it creates are wrong.
+const CRITICAL_WHY = {
+  cart_add: 'Runs the pricing the store itself applies. Without it the order can be created at price 0 — shipping and tax only.',
+  login: 'Authenticates the storefront session. Without it these calls run as a guest and land in a guest cart.'
+};
+function isPricingCritical(c){ return !!(c && c.critical); }
 function renderCallSelector(calls, dropped){
   calls = calls || []; dropped = dropped || [];
   const box = $('#anCalls');
@@ -909,10 +913,11 @@ function renderCallSelector(calls, dropped){
     box.innerHTML = calls.map(c=>{
       const k = String(c.kind||'GET').toUpperCase();
       const grp = c.group ? `<span class="muted">${_escHtml(c.group)}</span>` : '';
-      const crit = isPricingCritical(c.path);
-      const flag = crit ? '<span class="kind REST" style="background:#3d1b1b;color:#ff9a9a" title="Business critical. Dropping this call makes the run report 200s while the orders it creates are wrong (price 0, or a guest session).">KEEP</span>' : '';
+      const crit = isPricingCritical(c);
+      const why = crit ? (CRITICAL_WHY[c.critical] || 'Business critical.') : '';
+      const flag = crit ? `<span class="kind REST" style="background:#3d1b1b;color:#ff9a9a" title="${_escAttr(why)}">KEEP</span>` : '';
       return `<label class="callItem">
-        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${crit?'1':'0'}" ${c.selected!==false?'checked':''}>
+        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${_escAttr(c.critical||'')}" ${c.selected!==false?'checked':''}>
         <span class="m">${_escHtml(c.method)}</span>
         <span class="kind ${k}">${_escHtml(k)}</span>
         <span class="p">${_escHtml(c.path)}</span>${grp}${flag}
@@ -936,7 +941,7 @@ function renderCallSelector(calls, dropped){
       const k=el.dataset.kind;
       // Keep pricing-critical storefront calls: unticking them silently
       // produces 0-value orders that still report as a pass.
-      el.checked=(k==='REST'||k==='API'||el.dataset.critical==='1'); });
+      el.checked=(k==='REST'||k==='API'||!!el.dataset.critical); });
     updateCallCount(); };
   updateCallCount();
 }
@@ -946,13 +951,18 @@ function updateCallCount(){
   const on=document.querySelectorAll('#anCalls .callChk:checked').length;
   const el=$('#callCount'); if(el) el.textContent = all ? `${on} of ${all} selected` : '';
   const missed=Array.from(document.querySelectorAll('#anCalls .callChk'))
-    .filter(x=>x.dataset.critical==='1' && !x.checked);
+    .filter(x=>x.dataset.critical && !x.checked);
   const w=$('#callCritWarn');
   if(w) w.innerHTML = missed.length
-    ? '⚠️ <b>The call that prices the cart is unticked.</b> Without '
-      + '<code>' + _escHtml(missed[0].closest('.callItem').querySelector('.p').textContent) + '</code> '
-      + 'the item is added over the REST API, which can price it at 0 — every order '
-      + 'would be worth shipping and tax only. Tick it unless the catalogue is genuinely free.'
+    ? missed.map(x=>{
+        const kind = x.dataset.critical;
+        const path = x.closest('.callItem').querySelector('.p').textContent;
+        const label = kind === 'login' ? 'The storefront sign-in is unticked.'
+                                       : 'The call that prices the cart is unticked.';
+        return '⚠️ <b>' + label + '</b> <code>' + _escHtml(path) + '</code> — '
+             + (CRITICAL_WHY[kind] || '')
+             + ' The run would still report 200 everywhere.';
+      }).join('<br>')
     : '';
 }
 function selectedCallSigs(){

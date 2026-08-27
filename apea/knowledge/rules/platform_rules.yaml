@@ -1,8 +1,39 @@
 # Platform rules consulted by the Generator, Decision Engine and Repair agents.
 # Human-editable. Add a new top-level key to onboard another commerce platform.
 
+# BUSINESS-CRITICAL CALLS ----------------------------------------------------
+# Some recorded calls are not "extra page load" -- dropping them makes the run
+# report 200 OK while the orders it creates are wrong. Two kinds, on every
+# platform we have seen:
+#
+#   cart_add   the storefront controller that applies the store's OWN pricing
+#              (custom modules, contract/tier price). Skipping it and adding via
+#              an API can land the line at price 0, so the order captures
+#              shipping and tax only -- and every metric still reads as a pass.
+#   login      authenticates the STOREFRONT session. Without it, storefront calls
+#              run as a guest: they still return 200, but into a guest cart.
+#
+# These are usually plain form POSTs rather than API calls, so any bulk
+# "API calls only" selection drops them. APEA keeps them regardless and warns if
+# a human unticks one. Path fragments are matched case-insensitively as
+# substrings; add to the platform block to teach APEA a new storefront.
+generic:
+  display_name: "Unknown / generic storefront"
+  # Fallback used when no platform block matched. Deliberately broad: a false
+  # positive costs one extra call in the script, a false negative costs a run of
+  # zero-value orders that reports success.
+  business_critical_paths:
+    cart_add: ["cart/add", "cart/additem", "addtocart", "add-to-cart", "add_to_cart",
+               "cart.php?action=add", "addproduct"]
+    login: ["loginpost", "account/login", "/login", "signin", "sign-in",
+            "j_spring_security_check", "customer/ajax/login"]
+
+
 magento:
   display_name: "Magento / Adobe Commerce"
+  business_critical_paths:
+    cart_add: ["checkout/cart/add"]
+    login: ["customer/account/loginpost", "customer/ajax/login"]
   checkout: rest                # full REST checkout validator implemented
   # --- detection ---------------------------------------------------------
   detect_any_in_path: ["/rest/", "/v1/", "customer/section/load", "checkout/cart/add", "mage-", "/pub/static/", "magento"]
@@ -85,6 +116,9 @@ magento:
 # ---------------------------------------------------------------------------
 shopify:
   display_name: "Shopify"
+  business_critical_paths:
+    cart_add: ["/cart/add"]
+    login: ["/account/login"]
   checkout: recorded-replay
   detect_any_in_path: ["cdn.shopify.com", "myshopify.com", "/cart/add.js", "/wpm@", "shopify", "x-shopify"]
 
@@ -95,11 +129,17 @@ salesforce_commerce:
 
 sap_commerce:
   display_name: "SAP Commerce Cloud (Hybris)"
+  business_critical_paths:
+    cart_add: ["/cart/add", "/entries"]
+    login: ["j_spring_security_check", "/login"]
   checkout: recorded-replay
   detect_any_in_path: ["/occ/v2/", "hybris", "/rest/v2/", "cxserver"]
 
 bigcommerce:
   display_name: "BigCommerce"
+  business_critical_paths:
+    cart_add: ["cart.php?action=add", "/api/storefront/carts"]
+    login: ["login.php", "/login"]
   checkout: recorded-replay
   detect_any_in_path: ["/api/storefront/", "bigcommerce.com", "/remote/v1/"]
 
