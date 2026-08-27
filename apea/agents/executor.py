@@ -625,13 +625,36 @@ def _finalize(run_id, run_dir, plan_cfg, project_id, discovery) -> dict | None:
     # track's card payment did not clear, the run FAILS — the SLA is failed and no
     # other payment method was substituted. This is what stops a run from being
     # reported "completed" when the card never actually went through.
-    payment_failed = bool(st.get("browser_payment_required")) and not bool(st.get("browser_payment_ok"))
+    # Both tracks publish the SAME fail-closed contract, so a declared card
+    # payment that did not happen fails the run whichever track was driving it.
+    # The HTTP track raises this when the test data declares a card gateway but a
+    # user's row cannot supply the token: falling back to an offline method there
+    # would report a pass for a card journey that never ran.
+    # _read_flow_stats() filters to the live counters, so read the raw flow file
+    # for the payment keys the generated script publishes.
+    try:
+        import json as _json
+        _fp = Path(run_dir) / "results" / "apea_flow.json"
+        _http_pay = _json.loads(_fp.read_text(encoding="utf-8")) if _fp.exists() else {}
+    except Exception:
+        _http_pay = {}
+    _http_req = bool((_http_pay or {}).get("payment_required"))
+    _http_ok = bool((_http_pay or {}).get("payment_ok"))
+    payment_failed = (
+        (bool(st.get("browser_payment_required")) and not bool(st.get("browser_payment_ok")))
+        or (_http_req and not _http_ok))
     sla_pass = bool(analysis["sla"]["pass"])
     if payment_failed:
-        reason = ("Selected card payment (%s) did not clear in the browser track: %s. "
-                  "Run marked FAILED — no fallback payment method was substituted."
-                  % (st.get("browser_payment_gateway") or "hosted gateway",
-                     st.get("browser_payment_err") or "card form not reachable"))
+        if _http_req and not _http_ok:
+            reason = ("Declared card payment (%s) could not be presented: %s "
+                      "Run marked FAILED — no fallback payment method was substituted."
+                      % ((_http_pay or {}).get("gateway") or "card gateway",
+                         (_http_pay or {}).get("payment_err") or "no card token for this user."))
+        else:
+            reason = ("Selected card payment (%s) did not clear in the browser track: %s. "
+                      "Run marked FAILED — no fallback payment method was substituted."
+                      % (st.get("browser_payment_gateway") or "hosted gateway",
+                         st.get("browser_payment_err") or "card form not reachable"))
         analysis["payment_gate"] = {"required": True, "ok": False, "reason": reason}
         analysis["sla"]["pass"] = False
         sla_pass = False

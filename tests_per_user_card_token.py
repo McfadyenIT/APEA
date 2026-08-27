@@ -73,13 +73,15 @@ check("the storefront replay passes the row too",
       "_inject_payment(body, self._row)" in script, True)
 
 print("\nThe resolver behaves correctly, user by user")
-fn = re.search(r"(_ADDL_PLACEHOLDER = .*?\n\ndef _row_addl\(row\):.*?\n    return out\n)",
+fn = re.search(r"(_ADDL_PLACEHOLDER = .*?\ndef _row_addl\(row\):.*?\n    return out\n)",
                script, re.S)
 if not fn:
     check("resolver extractable for testing", False, True)
 else:
     notes = []
-    ns = {"re": re, "_clog_annotate": lambda m: notes.append(m)}
+    ns = {"re": re, "_clog_annotate": lambda m: notes.append(m),
+          "_CARD_INTENT": False, "_FORCED_PAYMENT": "", "_FLOW": {},
+          "_flush": lambda: None}
 
     def run(addl, row):
         ns["_PAYMENT_ADDL"] = addl
@@ -114,7 +116,40 @@ else:
 
     check("no payment config yields nothing", run({}, {"payment_token": "T"}), {})
 
-    check("dropping a token is reported, not silent", len(notes) >= 3, True)
+    print("\nA DECLARED card payment fails the run instead of paying by invoice")
+
+    # With intent declared, an unresolvable token must raise the fail-closed
+    # flags rather than quietly leaving the key out.
+    ns["_CARD_INTENT"] = True
+    ns["_FORCED_PAYMENT"] = "paradoxlabs_cybersource"
+    flow = {}
+    ns["_FLOW"] = flow
+    ns["_flush"] = lambda: None
+    run({"card_id": "{{payment_token}}", "save": False}, {"payment_token": ""})
+    check("payment_required is raised", flow.get("payment_required"), True)
+    check("payment_ok is false", flow.get("payment_ok"), False)
+    check("the reason names the missing column",
+          "payment_token" in str(flow.get("payment_err", "")), True)
+    check("the reason states there is no fallback",
+          "NOT fall back" in str(flow.get("payment_err", "")), True)
+
+    # Without declared intent (no forced gateway) nothing is failed.
+    ns["_CARD_INTENT"] = False
+    flow2 = {}
+    ns["_FLOW"] = flow2
+    run({"card_id": "{{payment_token}}", "save": False}, {"payment_token": ""})
+    check("an undeclared run is left alone", flow2.get("payment_required"), None)
+
+print("\nThe two tracks share one fail-closed gate")
+check("the generator declares a card-intent flag", "_CARD_INTENT" in script, True)
+check("intent is DECLARED, never inferred from a blank cell",
+      "bool(_FORCED_PAYMENT) and any(" in script, True)
+
+exe = (ROOT / "apea" / "agents" / "executor.py").read_text(encoding="utf-8")
+check("the executor fails the run on an unmet HTTP-track intent",
+      "_http_req and not _http_ok" in exe, True)
+check("the browser track's gate is still honoured",
+      "browser_payment_required" in exe, True)
 
 print()
 print("FAILURES:", len(fails))

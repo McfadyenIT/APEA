@@ -1053,6 +1053,12 @@ _FORCED_PAYMENT = __FORCED_PAYMENT__   # payment method code to force at place-o
 # payment/place-order call so a real (test) card order completes under load —
 # without a fresh single-use iframe token.
 _PAYMENT_ADDL = __PAYMENT_ADDL__       # dict merged into paymentMethod.additional_data
+# DECLARED payment intent. True when the test data asks for a card gateway AND the
+# additional_data references per-user values ({{csv_column}}). When true, a user
+# whose row cannot supply those values FAILS the run rather than silently paying by
+# an offline method -- see _payment_intent_unmet.
+_CARD_INTENT = bool(_FORCED_PAYMENT) and any(
+    isinstance(v, str) and "{{" in v for v in (_PAYMENT_ADDL or {}).values())
 _PARAM_MAP = __PARAM_MAP__             # {recorded field name: CSV column} generic parameterization
 _CORRELATIONS = __CORRELATIONS__       # JMeter-style extractor rules (capture from response, inject into request)
 # API-call GROUPS (recorded Taurus transactions) + per-group Percent Executions.
@@ -1168,6 +1174,27 @@ def _apply_row(body, row):
 _ADDL_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
 
 
+def _payment_intent_unmet(reason):
+    """Record that a run DECLARED a card payment and could not honour it.
+
+    Mirrors the browser track's fail-closed contract (browser_runner_gen._pay):
+    a card that was asked for and did not happen fails the run. It is never
+    quietly replaced with an offline method.
+
+    The reason this matters is not tidiness. A run that was meant to exercise the
+    card path, silently exercises the invoice path, and reports a pass is the
+    same class of defect as an order that completes at price 0 and reports a
+    pass: the HTTP calls all succeeded, and the thing under test never ran.
+    Intent is DECLARED in the test data; it is never inferred from a blank cell.
+    """
+    _FLOW["payment_required"] = True
+    _FLOW["payment_ok"] = False
+    if not _FLOW.get("payment_err"):
+        _FLOW["payment_err"] = reason
+    _FLOW["gateway"] = _FORCED_PAYMENT or _FLOW.get("gateway") or ""
+    _flush()
+
+
 def _row_addl(row):
     """Resolve {{csv_column}} placeholders in the payment additional_data against
     THIS user's CSV row.
@@ -1188,6 +1215,7 @@ def _row_addl(row):
     if not _PAYMENT_ADDL:
         return {}
     out = {}
+    _unresolved = []
     for k, v in _PAYMENT_ADDL.items():
         if not isinstance(v, str) or "{{" not in v:
             out[k] = v
@@ -1204,10 +1232,18 @@ def _row_addl(row):
 
         resolved = _ADDL_PLACEHOLDER.sub(_sub, v)
         if missing:
-            _clog_annotate("payment additional_data: dropped %r -- CSV column(s) %s "
-                           "are empty for this user" % (k, ", ".join(sorted(set(missing)))))
+            _unresolved.append((k, sorted(set(missing))))
             continue
         out[k] = resolved
+    if _unresolved and _CARD_INTENT:
+        cols = sorted({c for _k, cs in _unresolved for c in cs})
+        _payment_intent_unmet(
+            "test data declares a card payment (payment_method=%s) but this user's "
+            "row has no value for %s, so no card could be presented. The run does "
+            "NOT fall back to an offline method: that would report a pass for a "
+            "card journey that never ran. Fill %s for this account, or declare the "
+            "account as an offline payer."
+            % (_FORCED_PAYMENT or "card gateway", ", ".join(cols), ", ".join(cols)))
     return out
 
 
