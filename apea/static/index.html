@@ -304,7 +304,13 @@
         <div class="row3">
           <div><label>Workers</label><input id="ovWorkers" type="number" min="1" placeholder="1"></div>
           <div><label>Cart quantity</label><input id="ovCartQty" type="number" min="1" placeholder="1"></div>
-          <div><label>Payment method</label><input id="ovPayMethod" type="text" placeholder="recorded"></div>
+          <div><label>Payment method</label>
+            <!-- A combo box, not a plain select: the list is what the recording
+                 actually used, but a store may accept a method the recording
+                 never exercised, so typing must still work. -->
+            <input id="ovPayMethod" type="text" list="payMethodList" placeholder="recorded" autocomplete="off">
+            <datalist id="payMethodList"></datalist>
+          </div>
           <div><label>Data sharing (threads)</label>
             <select id="ovDataSharing">
               <option value="all_threads">All threads (shared pool, recycle)</option>
@@ -329,10 +335,16 @@
           with the recorded headers/token — no parameterization, correlation, or auto-heal.
           Behaves like JMeter running the raw recording (good for a quick first pass; brittle
           across many iterations). Leave off for the robust AI-correlated run.</p>
-        <details style="margin-top:8px">
-          <summary>Payment token &amp; CAPTCHA (rarely needed)</summary>
-          <label>Payment additional_data — JSON for a stored-card / test token</label>
-          <input id="ovPayAddl" type="text" placeholder='e.g. {"payment_token":"..."}'>
+        <details id="ovPayDetails" style="margin-top:8px">
+          <summary id="ovPaySummary">Payment token &amp; CAPTCHA (rarely needed)</summary>
+          <label>Payment additional_data — JSON sent with the order</label>
+          <!-- The placeholder shows the shape, NOT a key name: the key differs
+               per gateway (card_id, paymentMethodNonce, payment_method,
+               storedPaymentMethodId). Picking a card gateway above fills this
+               in with the right one. -->
+          <input id="ovPayAddl" type="text"
+                 placeholder='filled in when you pick a card payment method'>
+          <div id="ovPayAddlNote" class="muted" style="font-size:12px;margin-top:4px"></div>
           <label>CAPTCHA bypass / test-key token</label>
           <input id="ovCaptchaToken" type="text" placeholder="blank if CAPTCHA is disabled on the test env">
           <input id="ovCaptchaField" type="text" placeholder="token field name (optional)">
@@ -969,6 +981,69 @@ function selectedCallSigs(){
   return Array.from(document.querySelectorAll('#anCalls .callChk:checked')).map(el=>el.dataset.sig);
 }
 
+// ---- payment method picker + additional_data template --------------------
+// The methods come from the recording and the token key from the knowledge
+// base, so nobody has to remember that CyberSource wants `card_id` while
+// Braintree wants `paymentMethodNonce`. The field is FILLED IN, never locked:
+// a store may need an extra value (a 3-D Secure session id, an agreement id)
+// and locking it would make that case impossible.
+let PAY_TEMPLATES = {};
+function renderPaymentMethods(pay){
+  PAY_TEMPLATES = (pay && pay.templates) || {};
+  const methods = (pay && pay.methods) || [];
+  // Wire HERE, not in the analyse path: the picker can be populated more than
+  // once, and the listeners must exist as soon as it does.
+  const pmEl = $('#ovPayMethod'), paEl = $('#ovPayAddl');
+  if(pmEl && !pmEl.dataset.wired){ pmEl.dataset.wired = '1';
+    pmEl.addEventListener('change', applyPayTemplate);
+    pmEl.addEventListener('input', applyPayTemplate); }
+  if(paEl && !paEl.dataset.wired){ paEl.dataset.wired = '1';
+    paEl.addEventListener('input', applyPayTemplate); }
+  const dl = $('#payMethodList');
+  if(dl) dl.innerHTML = methods.map(m =>
+    `<option value="${_escAttr(m.code)}">${_escHtml(m.title || m.code)}`
+    + `${m.kind === 'hosted' ? ' — card' : ''}</option>`).join('');
+  applyPayTemplate();
+}
+function applyPayTemplate(){
+  const codeEl = $('#ovPayMethod'), addlEl = $('#ovPayAddl');
+  if(!codeEl || !addlEl) return;
+  const code = (codeEl.value || '').trim();
+  const tpl = PAY_TEMPLATES[code];
+  const note = $('#ovPayAddlNote');
+  const cur = (addlEl.value || '').trim();
+  // Overwrite only what WE put there. A hand-typed value is never clobbered.
+  const ours = !cur || cur === addlEl.dataset.filled;
+  if(tpl && ours){
+    addlEl.value = tpl;
+    addlEl.dataset.filled = tpl;
+    const d = $('#ovPayDetails'); if(d) d.open = true;
+    const s = $('#ovPaySummary');
+    if(s) s.textContent = 'Payment token & CAPTCHA — needed for this card method';
+  } else if(!tpl && ours){
+    addlEl.value = '';
+    delete addlEl.dataset.filled;
+    const s = $('#ovPaySummary');
+    if(s) s.textContent = 'Payment token & CAPTCHA (rarely needed)';
+  }
+  if(note){
+    if(tpl && addlEl.value === tpl){
+      note.innerHTML = 'Filled in for <b>' + _escHtml(code) + '</b>. '
+        + '<code>{{payment_token}}</code> and <code>{{card_cvv}}</code> are read '
+        + 'from the matching column in each row of your data CSV. '
+        + 'Edit if your store needs more.';
+    } else if(tpl){
+      note.innerHTML = 'You have edited this. '
+        + '<a href="#" id="ovPayAddlReset">Reset to the default for ' + _escHtml(code) + '</a>';
+      const r = $('#ovPayAddlReset');
+      if(r) r.onclick = (e)=>{ e.preventDefault(); addlEl.value = tpl;
+                               addlEl.dataset.filled = tpl; applyPayTemplate(); };
+    } else {
+      note.textContent = '';
+    }
+  }
+}
+
 // ---- dynamic payment-gateway picker (driven by Claude's detection) ----
 const GATEWAY_LABELS = {
   stripe: "Stripe",
@@ -1076,6 +1151,7 @@ function renderAnalysis(a){
   if(a.error) $('#discJourneys').innerHTML += `<p class="muted" style="color:#e11627">Parse note: ${a.error}</p>`;
   renderCallSelector(a.calls, a.dropped);
   populateGateways(a.detected_gateway);
+  renderPaymentMethods(a.payment);
   renderPaymentStrategy(a.detected_gateway);
   $('#anUiSteps').innerHTML = renderUiSteps(a.ui_steps);
   $('#anCorr').innerHTML = (a.correlations||[]).length
@@ -1378,6 +1454,7 @@ function startPolling(){
   if($('#liveCalls')) $('#liveCalls').innerHTML='<div class="muted" style="padding:8px">waiting for first request…</div>';
   if($('#callsCount')) $('#callsCount').textContent='0';
   const eo=$('#callsErrOnly'); if(eo) eo.onchange=renderCalls;
+
   const b=$('#btnStop'); b.disabled=false; b.textContent='⏹ Stop run'; b.style.display='';
   poll=setInterval(pollRun, 2000); pollRun();
 }

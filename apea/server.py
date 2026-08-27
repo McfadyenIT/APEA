@@ -114,6 +114,44 @@ def _detect_gateway_safe(flow: list) -> Optional[str]:
         return None
 
 
+def _payment_hints(flow) -> dict:
+    """Payment methods this recording actually used, plus the additional_data
+    template for each card gateway.
+
+    Both come from data, not from code: the methods from the recording (no
+    credentials, no network), the token key from
+    knowledge/rules/browser_patterns.yaml. The UI fills the template in when a
+    card gateway is picked, so nobody has to remember that CyberSource wants
+    `card_id` while Braintree wants `paymentMethodNonce`.
+    """
+    from .knowledge import KB
+    out = {"methods": [], "templates": {}}
+    try:
+        from .agents import payment as _pay
+        out["methods"] = _pay.methods_from_recording(flow or []) or []
+    except Exception:
+        pass
+    try:
+        prof = ((KB._section("browser_patterns") or {})
+                .get("replay_profiles") or {}).get("vaulted_card_token") or {}
+        by_method = prof.get("token_field_by_method") or {}
+        extras = prof.get("template_extras") or {}
+    except Exception:
+        by_method, extras = {}, {}
+    default = by_method.get("_default", "public_hash")
+    # Longest match first so a store-specific code resolves to the right gateway.
+    keys = sorted((k for k in by_method if k != "_default"), key=len, reverse=True)
+    for m in out["methods"]:
+        code = str(m.get("code") or "").lower()
+        if m.get("kind") != "hosted" or not code:
+            continue
+        field = next((by_method[k] for k in keys if k in code), default)
+        tpl = {field: "{{payment_token}}"}
+        tpl.update(extras)
+        out["templates"][m["code"]] = json.dumps(tpl)
+    return out
+
+
 def _platform_of(rec: dict, flow) -> str:
     """Best-matching commerce platform for this recording, or 'generic'."""
     try:
@@ -700,6 +738,7 @@ def analyze_recording(req: AnalyzeReq):
         # the real calls kept for the script (selectable in the UI) + the noise
         # APEA filtered out (shown read-only so the filtering is transparent).
         "calls": _build_calls(rec, _platform_of(rec, flow)),
+        "payment": _payment_hints(flow),
         "dropped": rec.get("dropped", []),
         "detected_gateway": _detect_gateway_safe(flow),
         "sample_csv": an["sample_csv"], "notes": an["notes"],
@@ -795,6 +834,7 @@ def crawl_record(req: CrawlRecordReq):
         # calls come from the MERGED flow (recording + anything Playwright added);
         # dropped noise is from the recording parse.
         "calls": _build_calls({"flow": flow}, _platform_of(rec, flow)),
+        "payment": _payment_hints(flow),
         "dropped": rec.get("dropped", []),
         "detected_gateway": _detect_gateway_safe(flow),
         "sample_csv": an["sample_csv"], "notes": combined_notes,

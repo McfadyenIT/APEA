@@ -159,6 +159,10 @@ def probe_payment_methods(base_url: str, username: str, password: str,
 # --------------------------------------------------------------------------- #
 # Recording fallback — methods observed in an uploaded recording.
 # --------------------------------------------------------------------------- #
+_HTTP_VERBS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD",
+               "OPTIONS", "TRACE", "CONNECT"}
+
+
 def methods_from_recording(flow: list | None) -> list[dict]:
     """Payment methods observed in a recording's flow: a captured
     payment-methods response, or the `"method":"X"` in a place-order body.
@@ -183,14 +187,22 @@ def methods_from_recording(flow: list | None) -> list[dict]:
                     _add((m or {}).get("code"), (m or {}).get("title"))
             except Exception:
                 pass
-    # explicit `"method":"X"` in any recorded body (the place-order payload)
-    try:
-        text = " ".join(json.dumps(s) if isinstance(s, dict) else str(s)
-                        for s in (flow or []))
-        for m in re.findall(r'"method"\s*:\s*"([A-Za-z0-9_]+)"', text):
-            _add(m)
-    except Exception:
-        pass
+    # explicit `"method":"X"` in a recorded BODY (the place-order payload).
+    # Scoped to bodies on purpose: every flow step carries its own "method" key
+    # holding the HTTP verb, so searching the serialised step reports POST and
+    # GET as payment methods.
+    for s in (flow or []):
+        if not isinstance(s, dict):
+            continue
+        for part in (s.get("req"), s.get("body"), s.get("resp"),
+                     s.get("response"), s.get("post_data")):
+            if not part:
+                continue
+            text = part if isinstance(part, str) else json.dumps(part)
+            for m in re.findall(r'"method"\s*:\s*"([A-Za-z0-9_]+)"', text):
+                if m.upper() in _HTTP_VERBS:
+                    continue          # an HTTP verb, not a payment method
+                _add(m)
     return out
 
 

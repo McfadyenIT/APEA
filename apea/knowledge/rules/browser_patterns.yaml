@@ -371,10 +371,28 @@ replay_profiles:
       needs: [test_account_with_saved_card, captured_order_call]
       capture_hint: >-
         DevTools -> Network -> the place-order / payment-information request ->
-        paymentMethod.additional_data. The token key is gateway specific:
-        card_id or public_hash (ParadoxLabs/Magento vault), payment_method
-        (Stripe), paymentMethodNonce or token (Braintree),
-        storedPaymentMethodId (Adyen).
+        paymentMethod.additional_data. The token key is gateway specific; see
+        token_field_by_method below.
+    # Which key inside additional_data carries the stored-card token, per payment
+    # method code. Drives the template APEA fills in when a card gateway is
+    # picked, so teaching it a new gateway is a KB edit, not a code change.
+    # Matched as a SUBSTRING of the method code, longest match first, so a
+    # store-specific code like "paradoxlabs_cybersource_vault" still resolves.
+    token_field_by_method:
+      paradoxlabs_cybersource: card_id
+      cybersource: card_id
+      braintree: paymentMethodNonce
+      stripe: payment_method
+      adyen: storedPaymentMethodId
+      authorizenet: card_id
+      vault: public_hash
+      _default: public_hash
+    # Carried alongside the token in the template. The CVV is never stored by the
+    # gateway so it can only be supplied; save:false stops a load run adding a new
+    # stored card on every single order.
+    template_extras:
+      cc_cid: "{{card_cvv}}"
+      save: false
     blockers:
       - "The token is bound to ONE customer. A token captured on account A is rejected for account B, so multi-user runs need one token per account in the data file."
       - "Step-up authentication (3-D Secure / payer auth) may be enforced per transaction. If it is, the run fails at payment with a payer-auth error and only the browser track can proceed."
