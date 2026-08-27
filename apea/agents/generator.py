@@ -1427,12 +1427,36 @@ def _mask(obj):
     return s[:400]
 
 
+# Stored-card tokens and card secrets must not persist into run artifacts. A
+# vault token is not PAN data, but it is an operational identifier that can be
+# used to charge someone's saved card on that store -- there is no reason to
+# spread it through logs once the runtime binding has succeeded. The browser
+# track has always redacted (browser_runner_gen._redact); this brings the HTTP
+# track in line. Deliberately NARROW: sku, price, quote and order ids must
+# survive, because the price-healing and business-data analysis read this log.
+_SECRET_FIELD_RE = re.compile(
+    r'("(?:card_id|public_hash|payment_token|paymentMethodNonce|'
+    r'storedPaymentMethodId|cc_cid|cc_number|cvv|cvn|password)"\s*:\s*")[^"]*',
+    re.I)
+_LOG_PAN_RE = re.compile(r"(?:\d[ -]?){13,19}")
+
+
+def _redact_secrets(s):
+    """Strip card tokens, CVVs and PAN-shaped runs from anything written to disk."""
+    if not s:
+        return s
+    s = _SECRET_FIELD_RE.sub(r"[REDACTED]", str(s))
+    return _LOG_PAN_RE.sub("[REDACTED_PAN]", s)
+
+
 def _clog(step, method, url, status, ms, body, ok, extra="", req=None):
     """Record one checkout step (url, request payload, status, elapsed ms,
     truncated response body) and surface the timeline live via apea_flow.json."""
-    entry = {"step": step, "method": method, "url": str(url), "status": status,
+    entry = {"step": step, "method": method, "url": _redact_secrets(str(url)),
+             "status": status,
              "ms": round(float(ms), 1), "ok": bool(ok),
-             "req": req or "", "body": (body or "")[:300], "extra": extra}
+             "req": _redact_secrets(req or ""),
+             "body": _redact_secrets((body or "")[:300]), "extra": extra}
     with _LOCK:
         _CHECKOUT_LOG.append(entry)
         _FLOW["timeline"] = list(_CHECKOUT_LOG)

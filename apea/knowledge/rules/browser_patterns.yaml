@@ -199,6 +199,129 @@ replay_profiles:
     reasons:
       - "Card is tokenized client-side into a re-mintable token; sandbox tokens are creatable with the publishable key, so each VU can mint its own."
 
+  # === PAYMENT READINESS: the settled architecture ==========================
+  # Reviewed with an external performance-engineering architect, 2026-08-27.
+  # Applies to any gateway, any platform. Ordered by what to try first.
+  payment_readiness_contract:
+    resolution_order:
+      - id: discover_existing
+        what: "Log in as the account and ask the store for its saved cards."
+        why: >-
+          No browser, no minting, no human. Independent of HOW the card was
+          enrolled, so it survives a gateway migrating its enrolment UI (e.g.
+          CyberSource replacing Secure Acceptance with Unified Checkout). That
+          longer shelf life is the main reason to build this before enrolment.
+        magento_paradoxlabs: "GET /V1/tokenbase/mine/search with the customer bearer token"
+      - id: browser_enrolment
+        what: "Provision a missing card once, in pre-flight, through the real UI."
+        why: >-
+          Uses the same path a customer traverses, so the stored card behaves the
+          way production's does. Browser cost is irrelevant outside measurement.
+        caution: "Its selectors come from the recording, so a gateway UI change breaks it."
+      - id: fail
+        what: "If a declared card cannot be resolved or provisioned, FAIL pre-flight."
+    not_planned:
+      - id: direct_tms_api_provisioning
+        why: >-
+          Creating the instrument through an API path the application never uses
+          risks a card that behaves subtly differently under the checkout being
+          measured, with no signal that it does. Fidelity beats convenience here.
+
+    # The invariant that makes a result trustworthy.
+    declared_intent:
+      rule: "Intent is DECLARED in the test data and NEVER inferred from a blank value."
+      matrix:
+        - "CREDIT_CARD + card resolved      -> run"
+        - "CREDIT_CARD + card provisioned   -> run"
+        - "CREDIT_CARD + unresolved         -> FAIL, never substitute"
+        - "NET_TERMS   + available          -> run"
+        - "NET_TERMS   + unavailable        -> FAIL"
+      why: >-
+        A run that was meant to exercise the card path, silently exercises the
+        invoice path, and reports a pass is the same defect as an order that
+        completes at price 0 and reports a pass: every HTTP call succeeded and
+        the thing under test never ran.
+
+    # Provisioning and measurement must not overlap.
+    preflight_freeze_boundary:
+      preflight_may: [discover, provision, repair, drive_a_browser, retry]
+      measured_run_may_not: [provision, repair, drive_a_browser, mutate_test_state]
+      on_unexpected_loss_mid_run: "FAIL — a disappearing card is an observed result, not permission to mutate the environment."
+      why: >-
+        Mid-run repair injects an unbounded browser launch into the measured
+        window. The response time that iteration reports is then meaningless.
+      output: "Freeze a resolved run manifest; the load engine consumes that, not the intent data."
+
+    # Unique accounts are necessary but NOT sufficient.
+    account_allocation:
+      default_strategy: exclusive
+      size_against: "peak concurrent checkout users, not total iterations"
+      identity: "customer + store context, not the email string"
+      why: >-
+        Platform carts are keyed to the customer. Several concurrent journeys on
+        one account contend for the same quote and produce functional failures
+        that pollute the measurement (Magento: "The quote can't be created.").
+      cart_hygiene: >-
+        A leased account must also start CLEAN. A previous failed run can leave an
+        active cart with items and a shipping method already chosen, which
+        contaminates the next run silently.
+      separate_scenario: >-
+        Same-account concurrency is worth testing deliberately -- quote locking,
+        duplicate-order protection, error quality -- but as its own scenario with
+        its own pass criteria, never mixed into the throughput baseline.
+
+    # What must be true before APEA may print READY.
+    ready_definition:
+      - "requested VUs have independently allocated accounts"
+      - "no concurrent account collision possible"
+      - "starting cart state validated clean"
+      - "payment intent explicitly declared per account"
+      - "requested gateway available on the store"
+      - "stored card resolved where a card is declared"
+      - "resolved card active and not expired"
+      - "no silent payment fallback reachable"
+      - "address and shipping prerequisites satisfied"
+      - "target responding within its own baseline before load is applied"
+      - "resolved workload frozen"
+
+    # Do not accidentally measure someone else's sandbox.
+    external_dependency_lanes:
+      lanes:
+      - lane: application_capacity
+        concurrency: high
+        payment: "virtualised or stubbed at the integration boundary"
+        measures: "the application under test"
+      - lane: payment_integration
+        concurrency: low_to_medium
+        payment: "the real gateway sandbox"
+        measures: "genuine integration behaviour"
+      - lane: end_to_end_journey
+        concurrency: "a few browsers"
+        payment: "real UI, including any challenge flow"
+        measures: "correctness and experience"
+      why: >-
+        A gateway sandbox may rate-limit, may not match production capacity, and
+        may prohibit sustained load by agreement. Pointing a full-capacity run at
+        one turns an application performance test into a test of someone else's
+        test environment.
+
+    secrets:
+      rule: "A vault token is not PAN data, but it can be used to charge a saved card. Redact it from logs, timelines and reports once runtime binding has succeeded."
+
+    # How to PROVE discovery works, without pinning a rotating value.
+    discovery_verification:
+      wrong: >-
+        Asserting that the discovered token equals a value captured on some
+        earlier date. Tokens rotate and test cards get replaced, so a legitimate
+        change makes the check fail and the failure means nothing.
+      right:
+        - "the discovery endpoint returns the account's cards"
+        - "the discovered token equals the card_id sent by a CONTEMPORANEOUS checkout"
+        - "one order placed with the discovered token reports the expected card type and last four"
+      note: >-
+        A one-off equality check against a known capture is fine as a first
+        manual proof. It must not become the permanent automated assertion.
+
   # --- CHECK THIS FIRST for ANY hosted card gateway ------------------------
   # A hosted gateway blocks HTTP replay of the card NUMBER. It does not block
   # replay of a card the account ALREADY holds. Once a card is vaulted, the

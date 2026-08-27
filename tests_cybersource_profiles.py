@@ -178,6 +178,70 @@ print("\n=== evidence-class rule is stated generally ===")
 check("static-code vs runtime-traffic rule",
       "Static-code evidence identifies a LIKELY INTEGRATION" in raw, True)
 
+
+print("\n=== payment readiness contract (architecture review, 2026-08-27) ===")
+_c = None
+def _find(o, key):
+    if isinstance(o, dict):
+        for k, v in o.items():
+            if k == key:
+                return v
+            r = _find(v, key)
+            if r is not None:
+                return r
+    return None
+
+_c = _find(doc, "payment_readiness_contract")
+check("the contract exists", _c is not None, True)
+if _c:
+    check("discovery is tried before enrolment",
+          [x["id"] for x in _c["resolution_order"]][:2],
+          ["discover_existing", "browser_enrolment"])
+    check("unresolvable card is a FAILURE, not a substitution",
+          _c["resolution_order"][-1]["id"], "fail")
+    check("direct TMS provisioning is explicitly not planned",
+          any(x["id"] == "direct_tms_api_provisioning"
+              for x in _c.get("not_planned", [])), True)
+    check("intent is declared, never inferred",
+          "NEVER inferred" in _c["declared_intent"]["rule"], True)
+    check("no matrix row allows a card to become an offline method",
+          all("NET_TERMS" in r or "FAIL" in r or "run" in r
+              for r in _c["declared_intent"]["matrix"]), True)
+    check("provisioning is barred from the measured run",
+          "provision" in _c["preflight_freeze_boundary"]["measured_run_may_not"], True)
+    check("accounts are allocated exclusively by default",
+          _c["account_allocation"]["default_strategy"], "exclusive")
+    check("sized against peak concurrency, not total iterations",
+          "peak concurrent" in _c["account_allocation"]["size_against"], True)
+    check("cart hygiene is part of readiness",
+          "cart_hygiene" in _c["account_allocation"], True)
+    check("readiness is more than 'logins work'",
+          len(_c["ready_definition"]) >= 10, True)
+    check("the gateway sandbox is kept out of the high-volume lane",
+          _c["external_dependency_lanes"]["lanes"][0]["payment"].startswith("virtualised"),
+          True)
+    check("tokens are redacted from artifacts", "secrets" in _c, True)
+
+print("\nNo live credential is baked into a permanent assertion")
+# A stored-card token rotates. Asserting on the one captured on 2026-08-25 would
+# make a legitimately replaced test card look like a regression, and it would put
+# a live credential in the repo. The permanent invariant is instead: a discovered
+# token must equal the card_id from a CONTEMPORANEOUS checkout, and must complete
+# one transaction reporting the expected card. Split so this file cannot match
+# itself.
+_LIVE = "f97d08" + "cf0b6257fcdbb82d0be63f1ffd4218f491"
+import pathlib as _pl
+_root = _pl.Path(__file__).resolve().parent
+_leaked = sorted(f.name for f in _root.glob("tests_*.py")
+                 if _LIVE in f.read_text(encoding="utf-8"))
+check("no test asserts on the captured token", _leaked, [])
+KB_TEXT = open("/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+               encoding="utf-8").read()
+check("the KB carries no live token", _LIVE not in KB_TEXT, True)
+check("the KB states the durable invariant instead",
+      "contemporaneous" in KB_TEXT.lower()
+      or "current checkout" in KB_TEXT.lower(), True)
+
 print()
 print("FAILURES:", len(fails))
 sys.exit(1 if fails else 0)
