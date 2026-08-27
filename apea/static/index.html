@@ -1017,7 +1017,12 @@ function renderReadiness(){
   }
 
   // --- payment ---
-  if(wantsCard){
+  // A card method is only actually DECLARED when the additional_data carries
+  // the token reference. Method-without-details and method-with-details fail
+  // differently, and saying the wrong one sends someone down the wrong path.
+  const addl = (($('#ovPayAddl') && $('#ovPayAddl').value) || '');
+  const cardDeclared = wantsCard && addl.indexOf('{{') > -1;
+  if(cardDeclared){
     if(a.with_token.length) line(true,
       `card resolved for ${a.with_token.length} of ${a.unique_logins}: `
       + a.with_token.map(_escHtml).join(', '));
@@ -1026,6 +1031,11 @@ function renderReadiness(){
       + `You asked for <code>${_escHtml(method)}</code>, so the run will FAIL for `
       + `${a.without_token.length === 1 ? 'that account' : 'those accounts'} rather than `
       + `quietly billing on account. Add a <code>payment_token</code>, or use an offline method.`);
+  } else if(wantsCard){
+    line(null, `<code>${_escHtml(method)}</code> is a card method but no card `
+      + `details are set, and no account in your CSV has a `
+      + `<code>payment_token</code>. The store will reject a card order with no `
+      + `card. Add tokens, or choose an offline method such as net terms.`);
   } else if(method){
     line(true, `paying by <code>${_escHtml(method)}</code> — no card needed`);
   } else {
@@ -1043,9 +1053,12 @@ function renderReadiness(){
     else line(true, `${crit.length} business-critical call${crit.length === 1 ? '' : 's'} kept`);
   }
 
-  const bad = rows.filter(r => r.indexOf('#e11627') > -1).length;
-  el.innerHTML = `<div class="rec" style="border-left-color:${bad ? '#e6a700' : '#2ecc71'}">`
-    + `<b>${bad ? 'Before you run' : 'Ready to run'}</b>`
+  // A warning is still something to read before running, so it must not sit
+  // under a heading that says everything is fine.
+  const bad  = rows.filter(r => r.indexOf('#e11627') > -1).length;
+  const warn = rows.filter(r => r.indexOf('#e6a700') > -1).length;
+  el.innerHTML = `<div class="rec" style="border-left-color:${bad ? '#e11627' : warn ? '#e6a700' : '#2ecc71'}">`
+    + `<b>${(bad || warn) ? 'Before you run' : 'Ready to run'}</b>`
     + `<div class="d" style="margin-top:6px">${rows.join('')}</div></div>`;
 }
 
@@ -1067,6 +1080,19 @@ function renderPaymentMethods(pay){
     pmEl.addEventListener('input', applyPayTemplate); }
   if(paEl && !paEl.dataset.wired){ paEl.dataset.wired = '1';
     paEl.addEventListener('input', applyPayTemplate); }
+  // Preselect the method the recording actually used, when there is only one.
+  // Blank used to mean "whatever the recording did", which is the same thing --
+  // but stating it makes the intent explicit, which is what lets a declared card
+  // payment fail loudly instead of silently becoming an invoice.
+  if(pmEl && !pmEl.value && !pmEl.dataset.userSet && methods.length === 1){
+    pmEl.value = methods[0].code;
+    pmEl.dataset.suggested = methods[0].code;
+  }
+  if(pmEl && !pmEl.dataset.userSet){
+    pmEl.addEventListener('input', ()=>{
+      if(pmEl.value !== pmEl.dataset.suggested) pmEl.dataset.userSet = '1';
+    }, {once:false});
+  }
   const dl = $('#payMethodList');
   if(dl) dl.innerHTML = methods.map(m =>
     `<option value="${_escAttr(m.code)}">${_escHtml(m.title || m.code)}`
@@ -1083,6 +1109,20 @@ function applyPayTemplate(){
   const cur = (addlEl.value || '').trim();
   // Overwrite only what WE put there. A hand-typed value is never clobbered.
   const ours = !cur || cur === addlEl.dataset.filled;
+  // Only offer the card template when the data file can actually honour it.
+  // Filling it in when NO account has a token would declare a card payment that
+  // must then fail for every user -- helpful-looking, and a guaranteed failure.
+  const dataHasToken = !ACCOUNTS || (ACCOUNTS.with_token || []).length > 0;
+  if(tpl && ours && !dataHasToken){
+    addlEl.value = '';
+    delete addlEl.dataset.filled;
+    if(note) note.innerHTML = 'Not filled in: no account in your data CSV has a '
+      + '<code>payment_token</code>, so a card payment would fail for every user. '
+      + 'Add tokens (see <code>extract_card_tokens.py</code>), or leave this blank '
+      + 'to pay by an offline method.';
+    renderReadiness();
+    return;
+  }
   if(tpl && ours){
     addlEl.value = tpl;
     addlEl.dataset.filled = tpl;
@@ -1335,6 +1375,7 @@ async function validateData(){
     out.innerHTML=`<div class="rec" style="border-left-color:${r.ok?'#2ecc71':'#e11627'}">`
       +`<b>Validation:</b> <span class="badge ${r.ok?'b-ok':'b-bad'}">${r.ok?'PASS':'BLOCKED'}</span>`
       +`<div class="d">${(r.messages||[]).join('<br>')}</div></div>`;
+    applyPayTemplate();
     renderReadiness();
   }catch(e){ dataValid=false; if(out) out.innerHTML='<p class="muted">'+e.message+'</p>'; }
   syncRunGate();

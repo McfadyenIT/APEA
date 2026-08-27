@@ -110,6 +110,25 @@ check("and typing marks the field as explicitly set",
 check("the panel refreshes when the count changes",
       "u.addEventListener('input'" in html, True)
 
+print("\nThe method the recording used is preselected")
+check("preselected only when the recording used exactly one",
+      "methods.length === 1" in html, True)
+check("and never over an explicit choice",
+      "!pmEl.dataset.userSet" in html, True)
+
+print("\nThe card template is only offered when the data can honour it")
+check("it checks the CSV for a token first", "dataHasToken" in html, True)
+check("and explains why it stayed blank",
+      "would fail for every user" in html, True)
+
+print("\nThe panel distinguishes method-selected from card-declared")
+check("a card is DECLARED only when the token reference is present",
+      "cardDeclared" in html and "addl.indexOf('{{')" in html, True)
+check("method without details gets its own message",
+      "card method but no card" in html, True)
+check("a warning does not sit under a Ready heading",
+      "(bad || warn) ? 'Before you run'" in html, True)
+
 print()
 print("FAILURES:", len(fails))
 sys.exit(1 if fails else 0)
