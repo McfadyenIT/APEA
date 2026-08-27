@@ -138,6 +138,14 @@ def _payment_hints(flow) -> dict:
         extras = prof.get("template_extras") or {}
     except Exception:
         by_method, extras = {}, {}
+    # Ranked alternatives to a card, so a suggestion is never "free" (which only
+    # applies to zero-total orders) when a real one exists.
+    try:
+        out["offline_preference"] = [
+            str(x).lower() for x in
+            ((KB.platform_rules("magento") or {}).get("offline_payments_realistic") or [])]
+    except Exception:
+        out["offline_preference"] = []
     default = by_method.get("_default", "public_hash")
     # Longest match first so a store-specific code resolves to the right gateway.
     keys = sorted((k for k in by_method if k != "_default"), key=len, reverse=True)

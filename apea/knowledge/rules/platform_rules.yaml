@@ -95,6 +95,12 @@ magento:
   # Add a site's real offline code here to make it a first-class test method
   # instead of relying on the "first non-hosted code" fallback in the generator.
   offline_payments: ["purchaseorder", "checkmo", "netterms", "paymentonaccount", "payment_on_account", "companycredit", "banktransfer", "wirepayment", "wiretransfer", "wire", "cashondelivery", "cashon", "moneyorder", "payorder", "free", "zeropayment", "nopayment", "offlinepayment", "offline", "check"]
+  # Offline methods that settle a REAL amount, best first. Used when APEA has to
+  # SUGGEST an alternative to a card. "free"/"zeropayment"/"nopayment" are also
+  # offline, but they only apply to zero-total orders -- recommending one to
+  # somebody load-testing checkout would hand them back the very problem this
+  # tool exists to catch: orders that complete and are worth nothing.
+  offline_payments_realistic: ["netterms", "paymentonaccount", "payment_on_account", "companycredit", "purchaseorder", "banktransfer", "wirepayment", "wiretransfer", "checkmo", "cashondelivery", "moneyorder"]
   hosted_gateways: ["cybersource", "paradoxlabs", "adyen", "stripe", "braintree", "authorizenet", "authorize_net", "payflow", "worldpay", "sagepay", "klarna", "paypal", "amazon", "checkout_com", "checkoutcom", "mollie", "square"]
   # Order-completion ASSERTION signals (the load script asserts an order placed by
   # matching one of these). Defaults cover standard B2C/B2B; extend per store —

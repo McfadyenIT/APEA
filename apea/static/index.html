@@ -1030,12 +1030,13 @@ function renderReadiness(){
       `<b>no card for ${a.without_token.map(_escHtml).join(', ')}.</b> `
       + `You asked for <code>${_escHtml(method)}</code>, so the run will FAIL for `
       + `${a.without_token.length === 1 ? 'that account' : 'those accounts'} rather than `
-      + `quietly billing on account. Add a <code>payment_token</code>, or use an offline method.`);
+      + `quietly billing on account. Either add a <code>payment_token</code> for `
+      + `${a.without_token.length === 1 ? 'it' : 'them'}, or ` + offlineHint() + `.`);
   } else if(wantsCard){
     line(null, `<code>${_escHtml(method)}</code> is a card method but no card `
       + `details are set, and no account in your CSV has a `
       + `<code>payment_token</code>. The store will reject a card order with no `
-      + `card. Add tokens, or choose an offline method such as net terms.`);
+      + `card. Either add tokens, or ` + offlineHint() + `.`);
   } else if(method){
     line(true, `paying by <code>${_escHtml(method)}</code> — no card needed`);
   } else {
@@ -1069,9 +1070,32 @@ function renderReadiness(){
 // a store may need an extra value (a 3-D Secure session id, an agreement id)
 // and locking it would make that case impossible.
 let PAY_TEMPLATES = {};
+let PAY_METHODS = [];      // every method the recording used
+// Methods that need no card gateway -- the store settles them itself
+// (invoice, bank transfer, purchase order). Naming the real ones beats
+// telling somebody to 'use an offline method' and leaving them to guess.
+let PAY_OFFLINE_PREF = [];   // ranked by the KB: real-money methods first
+function offlineMethodNames(){
+  const cand = PAY_METHODS.filter(m => m.kind !== 'hosted');
+  const rank = (m) => {
+    const c = String(m.code || '').toLowerCase();
+    const i = PAY_OFFLINE_PREF.findIndex(p => c.indexOf(p) > -1);
+    return i === -1 ? 999 : i;      // unranked (e.g. "free") goes last
+  };
+  return cand.sort((a,b) => rank(a) - rank(b)).map(m => (m.title || m.code));
+}
+function offlineHint(){
+  const n = offlineMethodNames().slice(0, 2);
+  if(!n.length) return 'switch to a payment method that does not use a card';
+  const list = n.length === 1 ? _escHtml(n[0])
+             : _escHtml(n[0]) + ' or ' + _escHtml(n[1]);
+  return 'set Payment method to ' + list;
+}
 function renderPaymentMethods(pay){
   PAY_TEMPLATES = (pay && pay.templates) || {};
   const methods = (pay && pay.methods) || [];
+  PAY_METHODS = methods;
+  PAY_OFFLINE_PREF = (pay && pay.offline_preference) || [];
   // Wire HERE, not in the analyse path: the picker can be populated more than
   // once, and the listeners must exist as soon as it does.
   const pmEl = $('#ovPayMethod'), paEl = $('#ovPayAddl');
@@ -1118,8 +1142,7 @@ function applyPayTemplate(){
     delete addlEl.dataset.filled;
     if(note) note.innerHTML = 'Not filled in: no account in your data CSV has a '
       + '<code>payment_token</code>, so a card payment would fail for every user. '
-      + 'Add tokens (see <code>extract_card_tokens.py</code>), or leave this blank '
-      + 'to pay by an offline method.';
+      + 'Add tokens (see <code>extract_card_tokens.py</code>), or ' + offlineHint() + '.';
     renderReadiness();
     return;
   }

@@ -111,6 +111,29 @@ check("the method field offers the recorded methods",
 check("while still allowing a method the recording never used",
       'id="ovPayMethod" type="text"' in html, True)
 
+print("\nAlternatives to a card are named, and ranked by the KB")
+from apea.knowledge import KB   # noqa: E402
+pref = (KB.platform_rules("magento") or {}).get("offline_payments_realistic") or []
+check("the KB ranks real-money methods", "netterms" in pref, True)
+check("bank transfer is offered", "wirepayment" in pref, True)
+check("zero-total methods are NOT in the ranked list",
+      any(x in pref for x in ("free", "zeropayment", "nopayment")), False)
+check("but they are still recognised as non-card",
+      P.classify_payment("free"), "offline")
+check("PayPal is correctly a hosted gateway, not an alternative to a card",
+      P.classify_payment("paypal_express"), "hosted")
+
+check("the server sends the ranking to the UI",
+      "offline_preference" in (ROOT / "apea" / "server.py").read_text(encoding="utf-8"),
+      True)
+check("the UI ranks with it rather than hardcoding",
+      "PAY_OFFLINE_PREF" in html, True)
+check("unranked methods sort last", "i === -1 ? 999" in html, True)
+check("the message names methods instead of saying 'offline method'",
+      "set Payment method to" in html, True)
+check("and no longer uses that phrase in the panel",
+      "use an offline method." in html, False)
+
 print()
 print("FAILURES:", len(fails))
 sys.exit(1 if fails else 0)
