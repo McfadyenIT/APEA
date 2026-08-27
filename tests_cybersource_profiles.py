@@ -194,11 +194,22 @@ def _find(o, key):
 _c = _find(doc, "payment_readiness_contract")
 check("the contract exists", _c is not None, True)
 if _c:
-    check("discovery is tried before enrolment",
-          [x["id"] for x in _c["resolution_order"]][:2],
-          ["discover_existing", "browser_enrolment"])
-    check("unresolvable card is a FAILURE, not a substitution",
-          _c["resolution_order"][-1]["id"], "fail")
+    # Assert ORDER, not adjacency: steps get inserted between these as the
+    # design settles, and the invariant is which comes first, not what abuts.
+    _order = [x["id"] for x in _c["resolution_order"]]
+    check("discovery is tried first", _order[0], "discover_existing")
+    check("a supplied token is tried before enrolling a new card",
+          _order.index("supplied_token") < _order.index("browser_enrolment"), True)
+    check("enrolment is the last resort before failing",
+          _order.index("browser_enrolment") < _order.index("fail"), True)
+    check("unresolvable card is a FAILURE, not a substitution", _order[-1], "fail")
+    check("discovery being switched OFF is recognised as its own case",
+          "not enabled" in str(
+              [x for x in _c["resolution_order"]
+               if x["id"] == "supplied_token"][0].get("detect", "")), True)
+    check("the discovered field is named, not guessed",
+          _c["resolution_order"][0]["field_mapping"]["magento_paradoxlabs"]
+          ["discovered_as"], "hash")
     check("direct TMS provisioning is explicitly not planned",
           any(x["id"] == "direct_tms_api_provisioning"
               for x in _c.get("not_planned", [])), True)

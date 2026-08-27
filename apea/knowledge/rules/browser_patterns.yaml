@@ -211,7 +211,36 @@ replay_profiles:
           enrolled, so it survives a gateway migrating its enrolment UI (e.g.
           CyberSource replacing Secure Acceptance with Unified Checkout). That
           longer shelf life is the main reason to build this before enrolment.
-        magento_paradoxlabs: "GET /V1/tokenbase/mine/search with the customer bearer token"
+        magento_paradoxlabs: >-
+          REST GET /V1/tokenbase/mine/search, or GraphQL { tokenBaseCards { hash
+          payment_id profile_id active expires label method } }. Both require the
+          module's public API to be enabled in store configuration.
+        field_mapping:
+          magento_paradoxlabs:
+            checkout_sends: card_id
+            discovered_as: hash
+            also_present: [payment_id, profile_id]
+            note: >-
+              payment_id and profile_id identify the instrument at the GATEWAY.
+              Checkout wants the LOCAL hash. Field names confirmed against the
+              store's own GraphQL schema on 2026-08-27; that the hash EQUALS the
+              card_id checkout sends is still to be proven at runtime.
+      - id: supplied_token
+        what: "Fall back to a token supplied per account in the test data."
+        why: >-
+          Discovery can be switched OFF by store configuration. Observed on a
+          live Magento store 2026-08-27: both the REST and GraphQL vault routes
+          EXIST and answer, but return "The public TokenBase API is not enabled."
+          (REST, 401) and "The TokenbaseCard API is not enabled." (GraphQL,
+          category graphql-authorization). That is neither a missing route (404)
+          nor an ACL denial for this customer -- it is a module feature flag.
+          Discovery therefore cannot be the ONLY mechanism, and the per-account
+          token column must stay supported rather than be retired.
+        detect: >-
+          Treat a 4xx or a GraphQL error whose message contains "not enabled" as
+          CAPABILITY DISABLED, distinct from NOT SUPPORTED (404 / unknown field)
+          and from DENIED (valid ACL refusal). Only the first is worth asking a
+          store administrator to change.
       - id: browser_enrolment
         what: "Provision a missing card once, in pre-flight, through the real UI."
         why: >-
@@ -219,7 +248,7 @@ replay_profiles:
           way production's does. Browser cost is irrelevant outside measurement.
         caution: "Its selectors come from the recording, so a gateway UI change breaks it."
       - id: fail
-        what: "If a declared card cannot be resolved or provisioned, FAIL pre-flight."
+        what: "If a declared card cannot be resolved, supplied or provisioned, FAIL pre-flight."
     not_planned:
       - id: direct_tms_api_provisioning
         why: >-
