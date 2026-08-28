@@ -30,7 +30,7 @@ class LocustEngine(ExecutionEngine):
         return [b] if b else [sys.executable, "-m", "locust"]
 
     def _common_args(self, plan_cfg: dict, target_url: str) -> list[str]:
-        return [
+        args = [
             "-f", "scripts/locustfile.py",
             "--host", target_url,
             "--headless",
@@ -43,6 +43,20 @@ class LocustEngine(ExecutionEngine):
             "--only-summary",
             "--loglevel", "INFO",
         ]
+        # STEADY STATE. Without this, the statistics cover the whole run from the
+        # first spawned user, so a quoted p95 blends the ramp with the steady
+        # state. On a short smoke test that is noise; on a long ramp the early,
+        # uncontended samples dominate and the reported percentile is not the
+        # percentile of anything anyone cares about. --reset-stats discards
+        # everything measured before the last user spawned; the requests are
+        # still sent, they just stop skewing the numbers.
+        #
+        # On by default. Set measure_ramp_up: true in the plan to keep the ramp
+        # in the figures -- occasionally wanted when the ramp itself is the
+        # thing under test.
+        if not plan_cfg.get("measure_ramp_up"):
+            args.append("--reset-stats")
+        return args
 
     def single_cmd(self, plan_cfg: dict, target_url: str) -> list[str]:
         return [*self._launcher(), *self._common_args(plan_cfg, target_url)]

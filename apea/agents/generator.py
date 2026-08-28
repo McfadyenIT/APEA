@@ -477,7 +477,7 @@ import csv
 import os
 import random
 
-from locust import HttpUser, task, between, events
+from locust import HttpUser, task, between, constant_pacing, constant_throughput, events
 
 _DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                      "data", "testdata.csv")
@@ -803,6 +803,38 @@ def _detect_payment_method_from_recording(flow_steps: list) -> dict:
     return detected
 
 
+def _wait_time_expr(plan_cfg: dict, tmin, tmax) -> str:
+    """The Locust wait strategy to emit, from the requested pacing.
+
+    Think time alone makes throughput an OUTPUT of the run: when the system
+    slows, each user completes fewer iterations, so offered load falls exactly
+    when the system is under stress. That is backwards for capacity work, where
+    the question is "hold this rate and tell me what breaks".
+
+    target_tps   iterations per SECOND across all users -> constant_throughput,
+                 divided per user because Locust applies it per user.
+    pacing_s     each iteration takes at least this many seconds in total
+                 (request time included) -> constant_pacing.
+    neither      unchanged: think time between iterations.
+
+    A target the application cannot sustain is not enforced upward -- Locust
+    cannot make a slow response faster -- so the achieved rate in the report is
+    still the truth. That IS the finding when it happens.
+    """
+    users = max(1, int(plan_cfg.get("users") or 1))
+    tps = plan_cfg.get("target_tps")
+    pacing = plan_cfg.get("pacing_s")
+    try:
+        if tps and float(tps) > 0:
+            per_user = float(tps) / users
+            return "constant_throughput(%.6g)" % per_user
+        if pacing and float(pacing) > 0:
+            return "constant_pacing(%.6g)" % float(pacing)
+    except (TypeError, ValueError):
+        pass
+    return "between(%s, %s)" % (tmin, tmax)
+
+
 def _assemble_flow_script(discovery: dict, plan_cfg: dict, flow_steps: list,
                           tmin, tmax, cart_qty: int = 1,
                           captcha_token: str = "", captcha_field: str = "",
@@ -959,7 +991,7 @@ import re
 import threading
 import time
 
-from locust import HttpUser, task, between, events
+from locust import HttpUser, task, between, constant_pacing, constant_throughput, events
 
 _RUN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DATA = os.path.join(_RUN_DIR, "data", "testdata.csv")
@@ -1766,13 +1798,63 @@ _STOREFRONT_CART_ADD = any("checkout/cart/add" in str(s.get("path") or "").lower
 # The recorded storefront cart-add step(s). The REST checkout validator replays
 # these ITSELF, after the customer quote exists, so the priced line cannot land
 # in a different quote than the one the order is placed from.
+# The recorded group that contains the order placement, so the end-to-end
+# transaction carries the name the recording used rather than a generic label.
+_CHECKOUT_TXN = next(
+    (str(s.get("group")) for s in reversed(FLOW_STEPS) if s.get("group")), "Checkout")
 _SF_CART_ADD_STEPS = [s for s in FLOW_STEPS
                       if "checkout/cart/add" in str(s.get("path") or "").lower()]
 
 
 class WebsiteUser(HttpUser):
     """Replays the recorded checkout flow as one correlated, asserted session."""
-    wait_time = between(__TMIN__, __TMAX__)
+
+    # ---- business-transaction timing ------------------------------------
+    # Every other timing here is ONE request. "How long does checkout take?"
+    # spans eight of them, and until now could not be answered from the report.
+    # The recording already groups its steps into journey stages (Home page,
+    # Login, Search, PDP, Add to cart, Checkout) and carries that grouping into
+    # this script as step["group"], so the boundaries are known -- nothing was
+    # timing them.
+    #
+    # Each group is reported as its own sample named "TXN: <group>", alongside
+    # the individual requests. Locust aggregates it like any other entry, so it
+    # lands in the CSV, the percentile table and the SLA check for free.
+    #
+    # State is per user instance: several greenlets run this class at once, and
+    # module-level state would interleave their timers.
+    def _txn_begin(self, name):
+        """Start timing a business transaction, closing any already open."""
+        self._txn_end()
+        if name:
+            self._txn_name = str(name)
+            self._txn_t0 = time.time()
+
+    def _txn_end(self, failed_reason=None):
+        """Close the open transaction and report it. Safe to call when none is
+        open, so it can sit in a finally: and cover every early return."""
+        name = getattr(self, "_txn_name", None)
+        t0 = getattr(self, "_txn_t0", None)
+        self._txn_name, self._txn_t0 = None, None
+        if not name or t0 is None:
+            return
+        try:
+            events.request.fire(
+                request_type="TXN", name="TXN: %s" % name,
+                response_time=(time.time() - t0) * 1000.0,
+                response_length=0, context={},
+                exception=Exception(failed_reason) if failed_reason else None)
+        except Exception as _exc:      # never let reporting break a run
+            _clog_annotate("transaction timing for %r not recorded: %s" % (name, _exc))
+    # PACING. Think time alone makes throughput an OUTPUT of the run: as the
+    # system slows, each user completes fewer iterations, so offered load falls
+    # exactly when the system is under stress -- backwards for capacity work.
+    #   between(a, b)          think time only; throughput drifts with latency
+    #   constant_pacing(t)     each iteration takes at least t seconds in total,
+    #                          so the rate holds until the app is slower than t
+    #   constant_throughput(r) r iterations per second PER USER
+    # __WAIT_TIME__ is chosen by the planner from the requested pacing.
+    wait_time = __WAIT_TIME__
 
     def on_start(self):
         self.credentials, self.search_keywords, self.product_ids = _load_testdata()
@@ -1912,6 +1994,7 @@ __BROWSE_TASKS__
     @task(__CHECKOUT_W__)
     def checkout(self):
         self._order_placed = False
+        self._txn_name, self._txn_t0 = None, None
         # Decide, once per iteration, which business groups run this time
         # (JMeter Throughput-Controller "Percent Executions"). None => no gating.
         active_groups = _roll_groups()
@@ -1947,11 +2030,32 @@ __BROWSE_TASKS__
                 continue
             if not _grp_active(step, active_groups):
                 continue
+            # A change of recorded group is a transaction boundary.
+            _g = step.get("group") or ""
+            if _g and _g != getattr(self, "_txn_name", None):
+                self._txn_begin(_g)
             self._run_step(step)
+        # The checkout group is a single business step even though it is served
+        # by two mechanisms: the recorded steps replayed in the loop above, and
+        # the API-driven validator below. Ending the transaction here and
+        # reopening it would report one step as two samples -- and a live run
+        # showed exactly that, the second lasting a fraction of a millisecond.
+        # So the transaction is only closed when the validator is NOT about to
+        # continue the same work.
+        _continues = rest_order and getattr(self, "_txn_name", None) == _CHECKOUT_TXN
+        if not _continues:
+            self._txn_end()
         if rest_order:
-            self._rest_checkout()           # robust, API-driven order
+            if not _continues:
+                self._txn_begin(_CHECKOUT_TXN)
+            try:
+                self._rest_checkout()       # robust, API-driven order
+            finally:
+                self._txn_end(None if self._order_placed else "order not placed")
         elif not self._order_placed:
-            self._place_order()             # non-Magento: replay recorded order step
+            # The recorded order step belongs to a group that the loop already
+            # timed. Wrapping it again would double-count that group.
+            self._place_order()
 
     def _run_raw(self, step):
         """Verbatim replay of one recorded step (JMeter-style): recorded body +
@@ -3290,6 +3394,7 @@ def _log_summary(environment, **kwargs):
         "__NSTEPS__": str(len(flow_steps)),
         "__TMIN__": str(tmin),
         "__TMAX__": str(tmax),
+        "__WAIT_TIME__": _wait_time_expr(plan_cfg, tmin, tmax),
         "__HAS_REST__": "True" if any(s.get("rest") for s in flow_steps) else "False",
         "__HAS_LOGIN_STEP__": "True" if any(s.get("login") for s in flow_steps) else "False",
         "__LOGIN_URLS__": repr(login_urls),
