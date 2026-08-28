@@ -225,6 +225,32 @@ replay_profiles:
               Checkout wants the LOCAL hash. Field names confirmed against the
               store's own GraphQL schema on 2026-08-27; that the hash EQUALS the
               card_id checkout sends is still to be proven at runtime.
+      - id: discover_from_checkout
+        what: >-
+          Sign in, put anything in the basket, load the checkout, and read the
+          saved cards out of the page's own payment configuration.
+        why: >-
+          It needs no API to be enabled, no order to be placed, and no human. The
+          checkout has to know the customer's saved cards in order to offer them,
+          so it renders them whether or not the vendor's public API is switched
+          on. Confirmed on a live Magento / ParadoxLabs store 2026-08-28: the
+          checkout config carries storedCards, requireCcv and hasVerification,
+          while the REST and GraphQL vault routes are disabled.
+        requires_a_basket: true
+        note: >-
+          The payment step is only rendered once the cart HAS ITEMS. On an empty
+          cart the page is a generic shell and every field below is absent -- a
+          probe against an empty cart reports "no saved cards" for a customer who
+          has several. Add a line first, then read, then clear.
+        read:
+          stored_cards: "checkoutConfig ... storedCards[]"
+          cvv_required: "requireCcv, or hasVerification[<method code>]"
+        magento_native_vault: >-
+          GraphQL { customerPaymentTokens { items { public_hash } } } answers
+          cleanly on the same store but returns nothing, because ParadoxLabs
+          keeps its cards in its own table rather than Magento's vault. A store
+          using the NATIVE vault is discoverable through that query today, with
+          no configuration change at all.
       - id: supplied_token
         what: "Fall back to a token supplied per account in the test data."
         why: >-
@@ -394,6 +420,7 @@ replay_profiles:
       cc_cid: "{{card_cvv}}"
       save: false
     blockers:
+      - "A card taken with save:false is NOT in the wallet. It keeps working for repeat orders because the token persists, but the checkout lists no stored card and discovery finds nothing. Tick save when capturing, or discovery has nothing to find."
       - "The token is bound to ONE customer. A token captured on account A is rejected for account B, so multi-user runs need one token per account in the data file."
       - "Step-up authentication (3-D Secure / payer auth) may be enforced per transaction. If it is, the run fails at payment with a payer-auth error and only the browser track can proceed."
       - "A vault may hold the card only for the checkout that created it. Save the card explicitly when capturing, rather than relying on a transient token."
