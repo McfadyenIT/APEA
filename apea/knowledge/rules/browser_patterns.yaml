@@ -245,6 +245,23 @@ replay_profiles:
         read:
           stored_cards: "checkoutConfig ... storedCards[]"
           cvv_required: "requireCcv, or hasVerification[<method code>]"
+        not_always_available: >-
+          Probed exhaustively on one Magento / ParadoxLabs store 2026-08-28 and
+          NOT available there. Across an 18.8MB capture of a complete checkout,
+          a card identifier appeared only in the REQUEST the browser sends and in
+          no response anywhere; storedCards was empty; every customer-data
+          section was empty; and the REST and GraphQL vault routes were disabled.
+          The saved-card dropdown was visibly populated the whole time, so the
+          page had the data -- it was simply never re-transmitted in a form that
+          could be read without driving the UI.
+        why_the_wallet_was_empty: >-
+          That store's checkout offers NO "save this card" control, and every
+          browser order sent save:false, minting a FRESH card_id each time
+          (two orders, two different 40-hex ids, both reusable afterwards). So
+          tokens persist and are reusable, but nothing is ever added to the
+          wallet -- which is why storedCards stays empty and discovery has
+          nothing to find. On such a store the supplied-token path is not a
+          fallback, it is the only mechanism until the vendor API is enabled.
         magento_native_vault: >-
           GraphQL { customerPaymentTokens { items { public_hash } } } answers
           cleanly on the same store but returns nothing, because ParadoxLabs
