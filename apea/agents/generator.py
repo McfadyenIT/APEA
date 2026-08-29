@@ -1089,7 +1089,10 @@ _PAYMENT_ADDL = __PAYMENT_ADDL__       # dict merged into paymentMethod.addition
 # additional_data references per-user values ({{csv_column}}). When true, a user
 # whose row cannot supply those values FAILS the run rather than silently paying by
 # an offline method -- see _payment_intent_unmet.
-_CARD_INTENT = bool(_FORCED_PAYMENT) and any(
+# True when the additional_data references per-user values. Whether a given ROW
+# actually intends a card is decided per row, because _FORCED_PAYMENT may name a
+# column -- see _row_payment_method.
+_ADDL_IS_PER_USER = any(
     isinstance(v, str) and "{{" in v for v in (_PAYMENT_ADDL or {}).values())
 _PARAM_MAP = __PARAM_MAP__             # {recorded field name: CSV column} generic parameterization
 _CORRELATIONS = __CORRELATIONS__       # JMeter-style extractor rules (capture from response, inject into request)
@@ -1207,7 +1210,51 @@ _ADDL_PLACEHOLDER = re.compile(
     r"\{\{\s*([A-Za-z0-9_]+)\s*(?:\|([^{}]*?))?\s*\}\}")
 
 
-def _payment_intent_unmet(reason):
+def _row_payment_method(row):
+    """The payment method THIS row pays with.
+
+    _FORCED_PAYMENT is normally a literal code and every user pays that way. It
+    may instead name a CSV column -- {{payment_method}} -- so one pool can mix
+    card payers with net-terms payers. That is not a convenience: on a B2B store
+    most real orders are placed on account, so a pool where every user pays by
+    card measures a population the site does not have.
+
+    Returns "" when the row has no value and no default, which leaves the script
+    in its normal dynamic-selection mode. That is not a silent card-to-offline
+    swap -- a row with a blank method never declared a card in the first place --
+    but it IS a data gap, so it is recorded in the call log.
+    """
+    tmpl = _FORCED_PAYMENT or ""
+    if "{{" not in tmpl:
+        return tmpl
+    missing = []
+
+    def _sub(m):
+        col, fallback = m.group(1), m.group(2)
+        val = (row or {}).get(col)
+        val = "" if val is None else str(val).strip()
+        if not val and fallback is not None:
+            val = fallback.strip()
+        if not val:
+            missing.append(col)
+        return val
+
+    out = _ADDL_PLACEHOLDER.sub(_sub, tmpl).strip()
+    if missing:
+        _clog_annotate("payment method not set for this row (%s empty) - falling "
+                       "back to dynamic selection" % ", ".join(sorted(set(missing))))
+        return ""
+    return out
+
+
+def _method_is_card(method):
+    """Does this method code mean a card gateway? Substring match against the
+    KB's hosted-gateway list, the same test the rest of the script uses."""
+    m = (method or "").strip().lower()
+    return bool(m) and any(g in m for g in _HOSTED_GATEWAYS)
+
+
+def _payment_intent_unmet(reason, method=None):
     """Record that a run DECLARED a card payment and could not honour it.
 
     Mirrors the browser track's fail-closed contract (browser_runner_gen._pay):
@@ -1224,7 +1271,7 @@ def _payment_intent_unmet(reason):
     _FLOW["payment_ok"] = False
     if not _FLOW.get("payment_err"):
         _FLOW["payment_err"] = reason
-    _FLOW["gateway"] = _FORCED_PAYMENT or _FLOW.get("gateway") or ""
+    _FLOW["gateway"] = method or _FLOW.get("gateway") or ""
     _flush()
 
 
@@ -1254,6 +1301,13 @@ def _row_addl(row):
     """
     if not _PAYMENT_ADDL:
         return {}
+    _method = _row_payment_method(row)
+    if _ADDL_IS_PER_USER and not _method_is_card(_method):
+        # This row pays by an offline method. The additional_data block was
+        # authored for the card gateway, so none of it applies -- sending
+        # fragments of it (a CVV with no card) would be meaningless. Offline
+        # rows need no token, so this is NOT a dropped card payment.
+        return {}
     out = {}
     _unresolved = []
     for k, v in _PAYMENT_ADDL.items():
@@ -1279,7 +1333,7 @@ def _row_addl(row):
             _unresolved.append((k, sorted(set(missing))))
             continue
         out[k] = resolved
-    if _unresolved and _CARD_INTENT:
+    if _unresolved and _ADDL_IS_PER_USER and _method_is_card(_method):
         cols = sorted({c for _k, cs in _unresolved for c in cs})
         _payment_intent_unmet(
             "test data declares a card payment (payment_method=%s) but this user's "
@@ -1287,7 +1341,8 @@ def _row_addl(row):
             "NOT fall back to an offline method: that would report a pass for a "
             "card journey that never ran. Fill %s for this account, or declare the "
             "account as an offline payer."
-            % (_FORCED_PAYMENT or "card gateway", ", ".join(cols), ", ".join(cols)))
+            % (_method or "card gateway", ", ".join(cols), ", ".join(cols)),
+            method=_method)
     return out
 
 
@@ -1309,8 +1364,9 @@ def _inject_payment(body, row=None):
     if not isinstance(pm, dict):
         pm = {}
         data["paymentMethod"] = pm
-    if _FORCED_PAYMENT:
-        pm["method"] = _FORCED_PAYMENT
+    _method = _row_payment_method(row)
+    if _method:
+        pm["method"] = _method
     if _PAYMENT_ADDL:
         _resolved = _row_addl(row)
         if _resolved:

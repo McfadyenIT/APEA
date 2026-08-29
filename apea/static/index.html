@@ -1029,7 +1029,26 @@ function renderReadiness(){
   // differently, and saying the wrong one sends someone down the wrong path.
   const addl = (($('#ovPayAddl') && $('#ovPayAddl').value) || '');
   const cardDeclared = wantsCard && addl.indexOf('{{') > -1;
-  if(cardDeclared){
+  // A per-row method names a COLUMN, so the pool pays several ways at once.
+  // Without this branch the panel fell through to "no card needed", which is
+  // false for the card rows and exactly the kind of quiet wrong answer that
+  // sends someone into a run that half-fails.
+  const perRow = method.indexOf('{{') > -1;
+  if(perRow){
+    line(true, `payment method is read per row from `
+      + `<code>${_escHtml(method)}</code> — this pool pays several ways, which is `
+      + `what a real B2B population looks like`);
+    if(a.with_token.length) line(true,
+      `${a.with_token.length} account${a.with_token.length === 1 ? '' : 's'} `
+      + `carr${a.with_token.length === 1 ? 'ies' : 'y'} a card token: `
+      + a.with_token.map(_escHtml).join(', '));
+    if(a.without_token.length) line(null,
+      `${a.without_token.map(_escHtml).join(', ')} `
+      + `${a.without_token.length === 1 ? 'has' : 'have'} no card token. That is `
+      + `fine for a row paying by an offline method, and a FAILURE for a row `
+      + `naming a card gateway — check the payment_method column for `
+      + `${a.without_token.length === 1 ? 'that account' : 'those accounts'}.`);
+  } else if(cardDeclared){
     if(a.with_token.length) line(true,
       `card resolved for ${a.with_token.length} of ${a.unique_logins}: `
       + a.with_token.map(_escHtml).join(', '));

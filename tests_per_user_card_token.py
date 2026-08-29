@@ -80,7 +80,11 @@ if not fn:
 else:
     notes = []
     ns = {"re": re, "_clog_annotate": lambda m: notes.append(m),
-          "_CARD_INTENT": False, "_FORCED_PAYMENT": "", "_FLOW": {},
+          # Card intent used to be one flag for the whole run. It is now decided
+          # per ROW, because a pool can mix card payers with net-terms payers,
+          # so the namespace needs the gateway list that the row test consults.
+          "_ADDL_IS_PER_USER": False, "_FORCED_PAYMENT": "", "_FLOW": {},
+          "_HOSTED_GATEWAYS": ["cybersource", "paradoxlabs", "stripe"],
           "_flush": lambda: None}
 
     def run(addl, row):
@@ -120,7 +124,7 @@ else:
 
     # With intent declared, an unresolvable token must raise the fail-closed
     # flags rather than quietly leaving the key out.
-    ns["_CARD_INTENT"] = True
+    ns["_ADDL_IS_PER_USER"] = True
     ns["_FORCED_PAYMENT"] = "paradoxlabs_cybersource"
     flow = {}
     ns["_FLOW"] = flow
@@ -134,16 +138,18 @@ else:
           "NOT fall back" in str(flow.get("payment_err", "")), True)
 
     # Without declared intent (no forced gateway) nothing is failed.
-    ns["_CARD_INTENT"] = False
+    ns["_ADDL_IS_PER_USER"] = False
     flow2 = {}
     ns["_FLOW"] = flow2
     run({"card_id": "{{payment_token}}", "save": False}, {"payment_token": ""})
     check("an undeclared run is left alone", flow2.get("payment_required"), None)
 
 print("\nThe two tracks share one fail-closed gate")
-check("the generator declares a card-intent flag", "_CARD_INTENT" in script, True)
+check("the generator declares a card-intent gate", "_ADDL_IS_PER_USER" in script, True)
 check("intent is DECLARED, never inferred from a blank cell",
-      "bool(_FORCED_PAYMENT) and any(" in script, True)
+      "_unresolved and _ADDL_IS_PER_USER and _method_is_card(_method)" in script, True)
+check("intent is decided per ROW, not once for the whole run",
+      "_method = _row_payment_method(row)" in script, True)
 
 exe = (ROOT / "apea" / "agents" / "executor.py").read_text(encoding="utf-8")
 check("the executor fails the run on an unmet HTTP-track intent",
