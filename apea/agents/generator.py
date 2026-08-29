@@ -1203,7 +1203,8 @@ def _apply_row(body, row):
     return _set_fields(body, fieldmap)
 
 
-_ADDL_PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\s*\}\}")
+_ADDL_PLACEHOLDER = re.compile(
+    r"\{\{\s*([A-Za-z0-9_]+)\s*(?:\|([^{}]*?))?\s*\}\}")
 
 
 def _payment_intent_unmet(reason):
@@ -1241,6 +1242,13 @@ def _row_addl(row):
     is rejected by the gateway anyway, and dropping it lets the run fall back to
     the offline method and say so, instead of failing at payment.
 
+    A placeholder may carry a default after a pipe -- {{card_cvv|123}} -- used
+    only when the column is absent or blank for this row. That is for values
+    that are genuinely constant across the whole pool (a sandbox CVV is the
+    usual one) and saves repeating them on every row. It deliberately does NOT
+    weaken the fail-closed contract: a placeholder with no default and no value
+    still stops the run rather than paying by some other means.
+
     Without placeholders this returns the dict unchanged, so a single shared
     token keeps working exactly as before.
     """
@@ -1255,9 +1263,13 @@ def _row_addl(row):
         missing = []
 
         def _sub(m):
-            col = m.group(1)
+            col, fallback = m.group(1), m.group(2)
             val = (row or {}).get(col)
             val = "" if val is None else str(val).strip()
+            if not val and fallback is not None:
+                # {{col|literal}} -- the column wins when it has a value, so a
+                # per-account override still beats the default.
+                val = fallback.strip()
             if not val:
                 missing.append(col)
             return val

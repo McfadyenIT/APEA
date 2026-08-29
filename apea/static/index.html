@@ -338,6 +338,13 @@
         <details id="ovPayDetails" style="margin-top:8px">
           <summary id="ovPaySummary">Payment token &amp; CAPTCHA (rarely needed)</summary>
           <label>Payment additional_data — JSON sent with the order</label>
+          <div class="muted" style="font-size:12px;margin:-2px 0 4px">
+            <code>{{column}}</code> reads that column from each user&rsquo;s own row.
+            Add a default after a pipe — <code>{{card_cvv|123}}</code> — for a value
+            that is the same for the whole pool, and you can drop the column entirely.
+            A placeholder with no default and no value stops the run rather than
+            paying by some other method.
+          </div>
           <!-- The placeholder shows the shape, NOT a key name: the key differs
                per gateway (card_id, paymentMethodNonce, payment_method,
                storedPaymentMethodId). Picking a card gateway above fills this
