@@ -190,6 +190,89 @@ async def _fill_first(scope, selector: str, value: str, timeout: int = 8000) -> 
     return False
 
 
+async def _settle(page, timeout: int = 20000) -> None:
+    """Wait for the page to be USABLE, not for the network to go quiet.
+
+    "networkidle" is the obvious choice and it is wrong here. The store runs
+    tag manager, session recording, A/B testing, bot detection and device
+    fingerprinting, all polling -- the network never goes quiet, so the wait
+    always burns its full timeout and then fails. Radwell's login timed out at
+    45s this way while the page had in fact loaded in two.
+    """
+    try:
+        await page.wait_for_load_state("domcontentloaded", timeout=timeout)
+    except Exception:
+        pass
+    await page.wait_for_timeout(1200)
+
+
+# What a card field looks like, in the order the browser's own autofill would
+# decide. autocomplete first because it is a standard the gateway is meant to
+# set; then name/id; then what the user would read.
+_FIELD_HINTS = {
+    "number": (("cc-number", "cardnumber"),
+               ("card_number", "cardnumber", "card-number", "accountnumber", "pan"),
+               ("card number", "kartennummer")),
+    "expiry": (("cc-exp",),
+               ("card_expiry", "expiry", "exp_date", "expirationdate", "expdate"),
+               ("expiry", "expiration", "mm / yy", "mm/yy")),
+    "cvc":    (("cc-csc",),
+               ("card_cvn", "cvn", "cvv", "cvc", "securitycode", "security_code", "csc"),
+               ("security code", "cvv", "cvc", "cvn")),
+    "postal": (("postal-code",),
+               ("postal_code", "postcode", "zip"),
+               ("postal", "zip")),
+}
+
+
+async def _discover_card_fields(frame) -> dict:
+    """Read the real card form instead of trusting documented selectors.
+
+    The knowledge base carries CyberSource's PUBLISHED field names and says in
+    its own comment that they must be checked against the live site. They did
+    not match Radwell: input[name='card_number'] found nothing. The form is
+    rendered by the gateway's own JavaScript, so it is not in a capture either
+    and cannot be read ahead of time.
+
+    So classify what is actually on the page. This is also the general answer --
+    it works for a gateway whose selectors nobody has written down yet.
+    """
+    try:
+        found = await frame.eval_on_selector_all(
+            "input, select",
+            """els => els.map(e => ({
+                 tag: e.tagName.toLowerCase(),
+                 name: e.getAttribute('name') || '',
+                 id: e.id || '',
+                 type: (e.getAttribute('type') || '').toLowerCase(),
+                 auto: (e.getAttribute('autocomplete') || '').toLowerCase(),
+                 ph: (e.getAttribute('placeholder') || ''),
+                 aria: (e.getAttribute('aria-label') || ''),
+                 hidden: e.type === 'hidden' || e.offsetParent === null,
+               }))""")
+    except Exception:
+        return {}
+
+    live = [f for f in found if not f["hidden"] and f["type"] != "hidden"]
+    out, used = {}, set()
+    for field, (autos, names, texts) in _FIELD_HINTS.items():
+        for f in live:
+            key = (f["name"], f["id"])
+            if key in used:
+                continue
+            hay_name = (f["name"] + " " + f["id"]).lower().replace("-", "_")
+            hay_text = (f["ph"] + " " + f["aria"]).lower()
+            if (any(a in f["auto"] for a in autos)
+                    or any(n in hay_name for n in names)
+                    or any(t in hay_text for t in texts)):
+                sel = ("[name=\"%s\"]" % f["name"]) if f["name"] else ("#%s" % f["id"])
+                out[field] = sel
+                used.add(key)
+                break
+    out["_seen"] = live
+    return out
+
+
 async def _card_frame(page, patterns: list, timeout: float = 20.0):
     """The card fields live in the gateway's own cross-origin iframe. Wait for a
     frame whose URL matches the KB's patterns rather than guessing an index."""
@@ -202,6 +285,48 @@ async def _card_frame(page, patterns: list, timeout: float = 20.0):
                 return fr
         await asyncio.sleep(0.4)
     return None
+
+
+async def _add_product(page, row: dict, cfg: dict) -> str:
+    """Put the row's product in the basket, using the columns the data file
+    already carries.
+
+    The file names the product three ways and different stores key on different
+    ones, so try each in turn: search_keyword (what a person would type), then
+    sku, then product_id. Searching is preferred over building a product URL
+    because URL shape is store-specific -- this store uses
+    /buy/<slug>/<id>.html, which cannot be derived from the CSV -- while a
+    search box exists on every storefront and uses the column as-is.
+    """
+    tried = []
+    for key in ("search_keyword", "sku", "product_id"):
+        term = str(row.get(key) or "").strip()
+        if not term or term in tried:
+            continue
+        tried.append(term)
+        try:
+            await page.goto(cfg["search_url"](term), wait_until="domcontentloaded",
+                            timeout=45000)
+            await _settle(page)
+            link = page.locator(cfg["sel"]["result_link"]).first
+            if await link.count():
+                await link.click(timeout=15000)
+                await _settle(page)
+            # Either the search landed straight on the product, or we just
+            # clicked into it. Either way the add button is the proof.
+            btn = page.locator(cfg["sel"]["add_to_cart"]).first
+            if not await btn.count():
+                continue
+            qty = str(row.get("qty") or 1)
+            if qty and qty != "1":
+                await _fill_first(page, cfg["sel"]["qty"], qty, timeout=3000)
+            await btn.click(timeout=20000)
+            await page.wait_for_timeout(3000)
+            return ""
+        except Exception as exc:
+            continue
+    return ("add to cart: none of %s found a product with an add button "
+            "(columns tried: search_keyword, sku, product_id)" % tried)
 
 
 async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
@@ -242,28 +367,25 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
         if not await _fill_first(page, cfg["sel"]["login_pass"], row.get("password") or ""):
             return None, "login: could not find the password field"
         await page.locator(cfg["sel"]["login_submit"]).first.click()
-        await page.wait_for_load_state("networkidle", timeout=45000)
+        try:
+            await page.wait_for_url(lambda u: "login" not in str(u).lower(), timeout=30000)
+        except Exception:
+            pass
+        await _settle(page)
         if "login" in (page.url or "").lower():
-            return None, "login: still on the sign-in page -- wrong credentials?"
+            return None, ("login: still on the sign-in page after 30s -- wrong "
+                          "credentials, or a bot check is holding the form")
 
         # --- basket ------------------------------------------------------
         step = "add to cart"
-        for url in cfg["product_urls"](row):
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=45000)
-                if await _fill_first(page, cfg["sel"]["qty"], str(row.get("qty") or 1),
-                                     timeout=3000):
-                    pass
-                await page.locator(cfg["sel"]["add_to_cart"]).first.click(timeout=15000)
-                await page.wait_for_timeout(2500)
-                break
-            except Exception:
-                continue
+        err = await _add_product(page, row, cfg)
+        if err:
+            return None, err
 
         # --- checkout ----------------------------------------------------
         step = "checkout"
         await page.goto(cfg["checkout_url"], wait_until="domcontentloaded", timeout=60000)
-        await page.wait_for_timeout(cfg["settle_ms"])
+        await page.wait_for_timeout(cfg["settle_ms"])   # checkout is a slow SPA
 
         step = "card form"
         frame = await _card_frame(page, cfg["frame_patterns"])
@@ -275,7 +397,18 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
                           "may have stalled earlier in checkout (address or delivery "
                           "step) -- run with --headed to watch it.")
 
-        sels, card = cfg["card_sel"], cfg["card"]
+        card = cfg["card"]
+        # Documented selectors first, then whatever the real form actually has.
+        # The published ones did not match this store, so discovery is not a
+        # fallback -- it is what makes the script work on a form nobody has
+        # written selectors for.
+        discovered = await _discover_card_fields(frame)
+        sels = dict(cfg["card_sel"])
+        for k, v in discovered.items():
+            if k != "_seen":
+                sels.setdefault(k, v)
+                sels[k] = "%s, %s" % (sels[k], v) if sels.get(k) != v else v
+
         for field, value in (("number", card.get("number")),
                              ("expiry", card.get("exp")),
                              ("cvc", card.get("cvc")),
@@ -284,7 +417,13 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
             if not sel or value is None:
                 continue
             if not await _fill_first(frame, sel, value) and field in ("number", "cvc"):
-                return None, "card form: no %s field matched %s" % (field, sel)
+                # Report what IS on the form, so the next attempt is informed
+                # rather than another guess.
+                seen = discovered.get("_seen") or []
+                names = ", ".join(
+                    (f.get("name") or f.get("id") or "?") for f in seen[:12]) or "nothing"
+                return None, ("card form: no %s field found. The form at %s has: %s"
+                              % (field, (frame.url or "?").split("?")[0], names))
 
         step = "place order"
         await page.locator(cfg["sel"]["place_order"]).first.click(timeout=20000)
@@ -342,16 +481,16 @@ async def run(args) -> int:
         "card_sel": _card_selectors(prof),
         "card": card,
         "guards": guards,
-        "product_urls": lambda r: [
-            u for u in (base + "/catalog/product/view/id/%s" % (r.get("product_id") or ""),
-                        base + "/catalogsearch/result/?q=%s" % (r.get("sku") or ""))
-            if (r.get("product_id") or r.get("sku"))],
+        "search_url": lambda term: base + "/catalogsearch/result/?q=%s" % term,
         "sel": {
             "login_user": "input[name='login[username]'], input#email, input[name=email]",
             "login_pass": "input[name='login[password]'], input#pass, input[name=password]",
             "login_submit": "button#send2, button[type=submit]",
             "qty": "input#qty, input[name=qty]",
-            "add_to_cart": "button#product-addtocart-button, button[title*='Add to Cart' i]",
+            "add_to_cart": "button#product-addtocart-button, button[title*='Add to Cart' i], "
+                           "button[title*='Add to Basket' i], button.tocart",
+            "result_link": "a.product-item-link, .product-item-info a.product, "
+                           "li.product-item a.product-item-photo",
             "place_order": "button[title*='Place Order' i], button.checkout, "
                            "button[data-role='review-save']",
         },

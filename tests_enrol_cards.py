@@ -170,6 +170,55 @@ src2 = io.open("enrol_cards.py", encoding="utf-8").read()
 check("there is no way to pass a raw card number on the command line",
       "--card-number" not in src2 and "card_number=" not in src2)
 
+# --- appended: what the first live run against a real store taught us --------
+print()
+print("field discovery classifies a real card form")
+_HINTS = E._FIELD_HINTS
+def _classify(f):
+    """Mirror of _discover_card_fields' matching, on one field description."""
+    for field, (autos, names, texts) in _HINTS.items():
+        hay_name = (f.get("name", "") + " " + f.get("id", "")).lower().replace("-", "_")
+        hay_text = (f.get("ph", "") + " " + f.get("aria", "")).lower()
+        if (any(a in f.get("auto", "") for a in autos)
+                or any(n in hay_name for n in names)
+                or any(t in hay_text for t in texts)):
+            return field
+    return None
+
+check("autocomplete=cc-number is the card number",
+      _classify({"auto": "cc-number", "name": "x", "id": "", "ph": "", "aria": ""})
+      == "number")
+check("a differently NAMED number field is still found by autocomplete",
+      _classify({"auto": "cc-number", "name": "accountNumber", "id": "",
+                 "ph": "", "aria": ""}) == "number")
+check("the documented CyberSource name still matches",
+      _classify({"auto": "", "name": "card_number", "id": "", "ph": "", "aria": ""})
+      == "number")
+check("a placeholder alone is enough",
+      _classify({"auto": "", "name": "f1", "id": "", "ph": "Card Number", "aria": ""})
+      == "number")
+check("security code is not mistaken for the card number",
+      _classify({"auto": "cc-csc", "name": "cvn", "id": "", "ph": "", "aria": ""})
+      == "cvc")
+check("an unrelated field classifies as nothing",
+      _classify({"auto": "", "name": "coupon", "id": "", "ph": "Promo code",
+                 "aria": ""}) is None)
+
+print()
+print("the page-settle helper never waits for the network to go quiet")
+src3 = io.open("enrol_cards.py", encoding="utf-8").read()
+body = src3.split("async def _settle")[1].split("async def")[0]
+check("_settle does not use networkidle", "networkidle" not in body)
+check("login does not use networkidle either",
+      "networkidle" not in src3.split("step = \"login\"")[1][:900])
+
+print()
+print("the product comes from the data file")
+check("search_keyword is tried first",
+      'for key in ("search_keyword", "sku", "product_id")' in src3)
+check("no product URL is built from a store-specific shape",
+      "/catalog/product/view/id/" not in src3)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
