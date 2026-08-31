@@ -453,6 +453,23 @@ check("and any unexpected exception captures too",
       "note = await _capture(page, user, step)" in src14)
 check("the path is reported back to the operator", "[captured %s" in src14)
 
+# --- appended: the checkout that asks for the same person twice --------------
+print()
+print("both of the checkout's contact naming schemes are filled")
+src15 = io.open("enrol_cards.py", encoding="utf-8").read()
+_amap = dict(E._ADDRESS_MAP)
+for col, guest in (("firstname", "guestfirstname"),
+                   ("lastname", "guestlastname"),
+                   ("company", "guestcompanyname"),
+                   ("vat_id", "guestvat")):
+    sel = _amap.get(col, "")
+    check("%s covers the plain name" % col, "name='%s'" % col in sel)
+    check("%s covers the guest name" % col, "name='%s'" % guest in sel)
+check("_fill_all is what fills them, so BOTH get a value",
+      "n = await _fill_all(page, sel, val)" in src15)
+check("the reason is recorded next to the map",
+      "collects the same person TWICE" in src15)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

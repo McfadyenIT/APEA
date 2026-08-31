@@ -380,12 +380,17 @@ async def _card_frame(page, patterns: list, timeout: float = 45.0):
 _ADDRESS_MAP = (
     ("username",   "input[name='username'], input#customer-email, "
                    "input[name='email']"),
-    ("firstname",  "input[name='firstname']"),
-    ("lastname",   "input[name='lastname']"),
+    # This checkout collects the same person TWICE, under two naming schemes:
+    # "Contact Details" uses guest* names, "Shipping Address" uses the plain
+    # ones. Filling only the plain set left Contact Details empty and red, and
+    # the page then refused to advance with no error text and no clue -- the
+    # capture is what finally showed both sets side by side.
+    ("firstname",  "input[name='firstname'], input[name='guestfirstname']"),
+    ("lastname",   "input[name='lastname'], input[name='guestlastname']"),
     # Required on this store, and marked with a red asterisk. There is no
     # column for it in older data files, so --company supplies a default.
-    ("company",    "input[name='company']"),
-    ("vat_id",     "input[name='vat_id']"),
+    ("company",    "input[name='company'], input[name='guestcompanyname']"),
+    ("vat_id",     "input[name='vat_id'], input[name='guestvat']"),
     ("street",     "input[name='street[0]'], input[name='street'], "
                    "input#street_1"),
     ("city",       "input[name='city']"),
