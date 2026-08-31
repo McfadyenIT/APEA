@@ -362,6 +362,18 @@ def _account_summary(headers, rows) -> dict:
     products = sorted({(r.get("product_id") or "").strip()
                        for r in rows if (r.get("product_id") or "").strip()})
     without = [u for u in logins if not per_login_token[u]]
+    # Which logins DECLARED a card. "No token" is only a problem for these --
+    # an invoice payer has no token and needs none, and counting it as missing
+    # turns a correct file into an alarming one.
+    _card = ("cybersource", "paradoxlabs", "stripe", "braintree", "adyen",
+             "authorizenet", "authorize_net", "payflow", "worldpay", "sagepay")
+    per_login_card = {}
+    for r in rows:
+        u = (r.get("username") or r.get("email") or "").strip().lower()
+        m = (r.get("payment_method") or "").strip().lower()
+        if u and (any(g in m for g in _card) or "{{" in m):
+            per_login_card[u] = True
+    card_logins = [u for u in logins if per_login_card.get(u)]
     return {
         "rows": len(rows),
         "logins": logins,
@@ -371,6 +383,8 @@ def _account_summary(headers, rows) -> dict:
         "has_token_column": "payment_token" in (headers or []),
         "with_token": [u for u in logins if per_login_token[u]],
         "without_token": without,
+        "card_logins": card_logins,
+        "card_without_token": [u for u in card_logins if not per_login_token[u]],
     }
 
 

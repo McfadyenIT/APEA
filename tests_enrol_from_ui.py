@@ -97,6 +97,20 @@ check("it says the original file on disk is untouched",
 check("a missing target URL is caught before starting",
       "Set the target URL first" in wire)
 
+# --- appended: an invoice payer is not a missing card ------------------------
+print()
+print("the panel counts card payers, not every empty token cell")
+check("the summary separates card logins",
+      '"card_logins": card_logins' in SRV)
+check("and card logins that lack a token",
+      '"card_without_token"' in SRV)
+check("a per-row method counts as declaring a card", '"{{" in m' in SRV)
+check("the panel prefers that count",
+      "ACCOUNTS.card_without_token" in UI)
+check("the reason is written down where it was wrong",
+      "pay by invoice and need nothing" in SRV
+      or "8 pay by invoice" in UI)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

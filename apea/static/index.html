@@ -1392,7 +1392,10 @@ $('#btnSampleCsv').onclick=()=>{
 // makes a card run fail for every user.
 function enrolPanel(){
   if(!ACCOUNTS) return '';
-  const need = (ACCOUNTS.without_token || []);
+  // Only accounts that DECLARED a card. Counting every empty token cell said
+  // "10 accounts still need a card token" for a pool where 8 pay by invoice
+  // and need nothing -- alarming, and wrong.
+  const need = (ACCOUNTS.card_without_token || ACCOUNTS.without_token || []);
   const have = (ACCOUNTS.with_token || []);
   const method = (($('#ovPayMethod') && $('#ovPayMethod').value) || '').trim();
   // Only meaningful when a card gateway is actually in play.
