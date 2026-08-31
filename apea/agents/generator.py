@@ -2569,6 +2569,22 @@ __BROWSE_TASKS__
                     _fsku = str(_fc.get("sku") or "")
                     if not _fc.get("in_stock") or not _fsku or _fsku in _tried:
                         continue
+                    # ...and PRICED. The comment above this block already said
+                    # "in-stock, priced"; only in_stock was ever checked. A
+                    # substitute with no price sails in here, the cart-value gate
+                    # then stops the run, and the report blames checkout for what
+                    # is really a bad substitution. Seen live: the pinned sku was
+                    # out of stock, this picked a 0-priced product, and the run
+                    # died three steps later with no hint of why.
+                    try:
+                        _fprice = float(_fc.get("price") or _fc.get("final_price") or 0)
+                    except (TypeError, ValueError):
+                        _fprice = 0.0
+                    if _fprice <= 0:
+                        _clog_annotate("fallback candidate sku=%s skipped: in stock but "
+                                       "priced %s — a 0-priced substitute makes the run "
+                                       "meaningless" % (_fsku, _fprice))
+                        continue
                     _tried.add(_fsku)
                     _fitem = {"sku": _fsku, "qty": _CART_QTY}
                     if _fc.get("item_options"):
@@ -2630,14 +2646,20 @@ __BROWSE_TASKS__
         # storefront cart-add (i.e. the store is known to price that way), so
         # genuinely 0-priced catalogues are unaffected.
         if _SF_CART_ADD_STEPS:
+            _orig_sku = str((self._row or {}).get("sku") or "").strip()
             _line_prices = ([_line_price(i) for i in items]
                             if isinstance(items, list) else [])
             if not any(p > 0 for p in _line_prices):
                 return self._stop("Cart contains items", st,
-                    "cart line price is 0 (sku='%s', quote=%s) — the storefront "
-                    "pricing module did not apply. Placing this order would create "
-                    "a 0-value order that captures shipping/tax only. STOP before "
-                    "shipping/payment." % (sku, cart_id or "?"))
+                    "cart line price is 0 (sku='%s', quote=%s). %sPlacing this order "
+                    "would create a 0-value order that captures shipping/tax only. "
+                    "STOP before shipping/payment."
+                    % (sku, cart_id or "?",
+                       ("This is NOT the sku your data asked for -- the pinned product "
+                        "was out of stock and this one was substituted. Pick an in-stock "
+                        "product, or run in strict mode to fail on the real one. "
+                        if sku != _orig_sku else
+                        "The storefront pricing module did not apply. ")))
             _clog_annotate("cart value OK: %d item(s), line price(s)=%s"
                            % (n_items, [p for p in _line_prices]))
         # 4) Shipping methods available

@@ -140,5 +140,34 @@ check("and prepends it to the login fallbacks",
 check("keeping the unprefixed ones as a fallback", "+ _fallbacks" in gen, True)
 
 print()
+
+# --- appended: the substitute must be PRICED, not merely in stock -------------
+print()
+print("the out-of-stock fallback will not pick a 0-priced product")
+import io as _io2
+_src = _io2.open("apea/agents/generator.py", encoding="utf-8").read()
+_blk = _src.split("LAST-RESORT in-stock fallback")[1][:2600]
+for label, needle in (
+        ("a price is read from the candidate", 'float(_fc.get("price")'),
+        ("final_price is accepted too", '_fc.get("final_price")'),
+        ("a non-positive price is skipped", "if _fprice <= 0:"),
+        ("and the skip is logged, not silent", "skipped: in stock but"),
+):
+    ok = needle in _blk
+    print("   %-52s %s" % (label, "OK" if ok else "FAIL"))
+    if not ok:
+        fails.append(label)
+
+print()
+print("a 0-price stop says whether the sku was SUBSTITUTED")
+for label, needle in (
+        ("the data's own sku is remembered", "_orig_sku = str((self._row or {})"),
+        ("the message compares them", "sku != _orig_sku"),
+        ("and names what to do", "run in strict mode to fail on the real one"),
+):
+    ok = needle in _src
+    print("   %-52s %s" % (label, "OK" if ok else "FAIL"))
+    if not ok:
+        fails.append(label)
 print("FAILURES:", len(fails))
 sys.exit(1 if fails else 0)
