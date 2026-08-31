@@ -54,7 +54,7 @@ sys.path.insert(0, str(ROOT))
 # The token as it travels: the store's own field name, inside additional_data.
 _TOKEN_RE = re.compile(r'"card_id"\s*:\s*"([0-9A-Za-z_-]{8,})"')
 # Anything that looks like a card number, so it can be kept OUT of every message.
-_PAN_RE = re.compile(r"\b(?:\d[ -]?){13,19}\b")
+_PAN_RE = re.compile(r"\b\d(?:[ -]?\d){12,18}\b")
 
 
 def _redact(text: str) -> str:

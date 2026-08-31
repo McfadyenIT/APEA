@@ -1385,6 +1385,92 @@ $('#btnSampleCsv').onclick=()=>{
   a.download='apea_sample_data.csv'; a.click(); URL.revokeObjectURL(a.href);
 };
 
+// ---- card enrolment, from this page ---------------------------------------
+// The tokens this offers to fetch are the same values the panel above is
+// validating. Sending someone to a terminal to produce them, then back here to
+// re-upload, is the step most likely to be skipped -- and skipping it is what
+// makes a card run fail for every user.
+function enrolPanel(){
+  if(!ACCOUNTS) return '';
+  const need = (ACCOUNTS.without_token || []);
+  const have = (ACCOUNTS.with_token || []);
+  const method = (($('#ovPayMethod') && $('#ovPayMethod').value) || '').trim();
+  // Only meaningful when a card gateway is actually in play.
+  const wantsCard = /cybersource|paradoxlabs|stripe|braintree|adyen|authorizenet/i
+                      .test(method) || /\{\{/.test(method);
+  if(!need.length || !wantsCard) return '';
+  return '<div class="rec" id="enrolBox" style="border-left-color:#e6a700">'
+    + '<b>&#128179; ' + need.length + ' account'
+    + (need.length === 1 ? '' : 's') + ' still need a card token</b>'
+    + '<div class="d" style="margin-top:6px">'
+    + 'APEA can fetch them: it signs in as each one, checks out with the sandbox '
+    + 'test card, and writes the token straight into this file. A browser opens so '
+    + 'you can watch. One real order is placed per account.'
+    + (have.length ? ' Accounts that already have a token are skipped.' : '')
+    + '</div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px">'
+    + '<button id="btnEnrol" class="btn">&#9654; Fetch card tokens</button>'
+    + '<input id="enrolCompany" type="text" placeholder="company name" '
+    +   'value="APEA Load Test" style="width:170px">'
+    + '<label style="font-size:12px;display:flex;align-items:center;gap:5px">'
+    +   '<input id="enrolHeaded" type="checkbox" checked> show the browser</label>'
+    + '</div>'
+    + '<pre id="enrolLog" style="display:none;margin-top:10px;max-height:220px;'
+    +   'overflow:auto;font-size:12px;background:#0b1220;padding:10px;'
+    +   'border-radius:6px;white-space:pre-wrap"></pre>'
+    + '</div>';
+}
+
+function wireEnrol(){
+  const btn = $('#btnEnrol'); if(!btn) return;
+  btn.onclick = async () => {
+    const base = ($('#url') && $('#url').value || '').trim();
+    if(!base){ alert('Set the target URL first — enrolment needs to know the store.'); return; }
+    const log = $('#enrolLog');
+    log.style.display = 'block';
+    log.textContent = 'starting…\n';
+    btn.disabled = true;
+    btn.textContent = 'Fetching…';
+    try{
+      const r = await api('/api/enrol-cards', {
+        data_csv: uploads.data_csv,
+        base_url: base,
+        company: ($('#enrolCompany') && $('#enrolCompany').value) || 'APEA Load Test',
+        headed: !!($('#enrolHeaded') && $('#enrolHeaded').checked)
+      });
+      if(r.error){ log.textContent = r.error; btn.disabled = false;
+                   btn.textContent = '\u25B6 Fetch card tokens'; return; }
+      log.textContent = '';
+      let since = 0;
+      // Poll rather than stream: this runs for minutes and a dropped
+      // EventSource mid-run would lose the only record of what happened.
+      const tick = async () => {
+        const st = await fetch('/api/enrol-cards/status?job=' + r.job + '&since=' + since)
+                           .then(x => x.json());
+        (st.lines || []).forEach(l => { log.textContent += l + '\n'; });
+        log.scrollTop = log.scrollHeight;
+        since = st.next != null ? st.next : since;
+        if(!st.done){ setTimeout(tick, 1500); return; }
+        btn.disabled = false;
+        btn.textContent = '\u25B6 Fetch card tokens';
+        // Worth stating: APEA enrolled its OWN copy of the file, the one it
+        // will run with. The file still sitting in Downloads is untouched, and
+        // someone who re-uploads that later would wonder where the tokens went.
+        log.textContent += '\n— tokens written into APEA\u2019s copy of the data file; '
+          + 'the original on disk is unchanged —\n';
+        // The script edited the CSV in place, so re-validating the file we
+        // already have is enough; nothing needs re-uploading.
+        await validateData();
+      };
+      tick();
+    }catch(e){
+      log.textContent = String(e.message || e);
+      btn.disabled = false;
+      btn.textContent = '\u25B6 Fetch card tokens';
+    }
+  };
+}
+
 let dataValid = true;   // gates test generation when a data CSV fails validation
 
 (function wireUsers(){
@@ -1427,7 +1513,9 @@ async function validateData(){
     }
     out.innerHTML=`<div class="rec" style="border-left-color:${r.ok?'#2ecc71':'#e11627'}">`
       +`<b>Validation:</b> <span class="badge ${r.ok?'b-ok':'b-bad'}">${r.ok?'PASS':'BLOCKED'}</span>`
-      +`<div class="d">${(r.messages||[]).join('<br>')}</div></div>`;
+      +`<div class="d">${(r.messages||[]).join('<br>')}</div></div>`
+      + enrolPanel();
+    wireEnrol();
     applyPayTemplate();
     renderReadiness();
   }catch(e){ dataValid=false; if(out) out.innerHTML='<p class="muted">'+e.message+'</p>'; }

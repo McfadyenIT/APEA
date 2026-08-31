@@ -15,6 +15,7 @@ import re
 import shutil
 import threading
 import traceback
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -909,6 +910,95 @@ def validate_data(req: ValidateReq):
     except Exception:
         pass
     return result
+
+
+# --- card enrolment, run from the UI ---------------------------------------
+# Capturing a card token used to mean leaving APEA, running a script in a
+# terminal, and coming back. The values it produces are the ones THIS page is
+# already validating, so the round trip was pure friction -- and the step most
+# likely to be skipped is the one that makes a card run possible at all.
+_ENROL_JOBS: dict = {}
+
+
+class EnrolReq(BaseModel):
+    """Fetch a card token for every account in the uploaded CSV that needs one."""
+    data_csv: str                              # server path from /api/upload
+    base_url: str                              # store root, including any store path
+    company: Optional[str] = "APEA Load Test"
+    card: Optional[str] = "success"
+    cvv: Optional[str] = None
+    headed: bool = True                        # watching it is the point, on a first run
+
+
+@app.post("/api/enrol-cards")
+def enrol_cards(req: EnrolReq):
+    """Start enrolment in the background and return a job id to poll.
+
+    It runs as a subprocess rather than in-process on purpose: it drives a real
+    browser for minutes at a time, and the API must stay responsive. The script
+    edits the CSV in place, so when the job finishes the page just re-validates
+    the file it already has.
+    """
+    import subprocess
+    import threading
+
+    csv_path = Path(req.data_csv)
+    if not csv_path.exists():
+        return {"error": "data CSV not found -- upload it first"}
+    script = Path(__file__).resolve().parent.parent / "enrol_cards.py"
+    if not script.exists():
+        return {"error": "enrol_cards.py is not present in this checkout"}
+
+    cmd = [sys.executable, str(script),
+           "--csv", str(csv_path),
+           "--base-url", req.base_url.rstrip("/"),
+           "--card", req.card or "success"]
+    if req.company:
+        cmd += ["--company", req.company]
+    if req.cvv:
+        cmd += ["--cvv", req.cvv]
+    if req.headed:
+        cmd += ["--headed"]
+
+    job = uuid.uuid4().hex[:8]
+    _ENROL_JOBS[job] = {"lines": [], "done": False, "rc": None,
+                        "csv": str(csv_path)}
+
+    def _run():
+        rec = _ENROL_JOBS[job]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True,
+                                    bufsize=1, cwd=str(script.parent))
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                if line:
+                    # Belt and braces: this output reaches a browser, and a card
+                    # number must not ride along even if the script changes.
+                    rec["lines"].append(re.sub(r"\b\d(?:[ -]?\d){12,18}\b",
+                                               "[card redacted]", line))
+                    del rec["lines"][:-400]
+            proc.wait()
+            rec["rc"] = proc.returncode
+        except Exception as exc:
+            rec["lines"].append("enrolment could not start: %s" % exc)
+            rec["rc"] = -1
+        finally:
+            rec["done"] = True
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"job": job, "command": " ".join(cmd[1:])}
+
+
+@app.get("/api/enrol-cards/status")
+def enrol_cards_status(job: str, since: int = 0):
+    """Poll a running enrolment. Returns only the lines the caller has not seen."""
+    rec = _ENROL_JOBS.get(job)
+    if rec is None:
+        return {"error": "unknown job"}
+    lines = rec["lines"]
+    return {"lines": lines[since:], "next": len(lines),
+            "done": rec["done"], "rc": rec["rc"]}
 
 
 class PaymentMethodsReq(BaseModel):
