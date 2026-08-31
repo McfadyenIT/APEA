@@ -35,10 +35,20 @@ import io
 import re
 
 # The columns the run's generator/parameterization understands.
-_COLUMNS = ["username", "password", "firstname", "lastname", "product_id", "sku",
-            "qty", "search_keyword", "payment_method", "card_number", "card_cvv",
+# card_number is deliberately NOT here. The store never receives a card number --
+# it goes from the browser straight to the gateway, which hands back a token, and
+# the token is what the run replays. A column called card_number is therefore dead
+# weight AND a hazard: it is exactly where a real card ends up in a spreadsheet
+# that then gets mailed and committed. payment_token replaces it.
+_COLUMNS = ["username", "password", "firstname", "lastname", "company",
+            "product_id", "sku", "qty", "search_keyword",
+            "payment_method", "payment_token", "card_cvv",
             "country_id", "region", "region_code", "region_id", "street", "city",
             "postcode", "telephone", "po_number", "vat_id"]
+
+# Some checkouts make Company mandatory (Radwell's does). A neutral default keeps
+# a generated file usable out of the box; a real test plan should overwrite it.
+_DEFAULT_COMPANY = "APEA Load Test"
 
 # PUBLIC sandbox test cards (never real PANs).
 _TEST_CARDS = {
@@ -96,7 +106,8 @@ def _payment_intent(app_knowledge, existing_rows, business_flow):
     avail = [m.lower() for m in avail_raw]
     hay = " ".join([
         " ".join(str(r.get("payment_method") or "") for r in _rows_from(existing_rows)),
-        " ".join(str(r.get("card_number") or "") and "card" for r in _rows_from(existing_rows)),
+        " ".join(str(r.get("payment_token") or "") and "card"
+                 for r in _rows_from(existing_rows)),
         " ".join(avail),
         " ".join((business_flow or {}).get("steps") or []),
     ]).lower()
@@ -189,9 +200,13 @@ def _validate(rows, is_card, live=False):
     error surfaced here rather than silently downgraded."""
     status = "validated" if live else "unvalidated (no live store reachable)"
     errors = []
-    if is_card and not any(str(r.get("card_number") or "").strip() for r in rows):
+    if is_card and not any(str(r.get("payment_token") or "").strip() for r in rows):
+        # A card NUMBER in the data proves nothing -- the store never accepts one.
+        # The token is what the run actually presents, so its absence is the real
+        # failure, and it has a known remedy worth naming here.
         errors.append("Card payment is required (recorded flow used a card) but no "
-                      "test card is present in the generated data.")
+                      "payment_token is present. Run enrol_cards.py to capture one "
+                      "per account, or set those rows to an offline payment method.")
     checks = ["customer_exists", "product_exists", "product_saleable",
               "inventory_available", "address_valid", "payment_available"]
     return {"status": status, "live": live,
@@ -256,8 +271,11 @@ def generate(app_knowledge: dict | None, test_plan: dict | None = None,
             row["qty"] = str(avg_cart)
             row["search_keyword"] = terms[i % len(terms)]
             row["payment_method"] = method
+            row["company"] = _DEFAULT_COMPANY
             if is_card:
-                row["card_number"] = card["number"]     # PUBLIC sandbox test card only
+                # No card number is written. payment_token is left EMPTY on
+                # purpose: it is per-account and cannot be invented here, and a
+                # blank one makes the run fail closed rather than pay another way.
                 row["card_cvv"] = card["cvv"]
             rows.append(row)
 
