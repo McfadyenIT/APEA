@@ -292,6 +292,25 @@ check("the row reaches the address step",
 check("what was filled is reported back",
       "address filled" in src6)
 
+# --- appended: the two-column address form and the Place Order button --------
+print()
+print("a form that asks the same thing twice gets both filled")
+src7 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("_fill_all exists and iterates every match",
+      "async def _fill_all" in src7 and "loc.nth(i)" in src7)
+check("the address step uses it, not the first-match helper",
+      "n = await _fill_all(page, sel, val)" in src7)
+check("company is in the address map", "company" in [c for c, _ in E._ADDRESS_MAP])
+check("a company default exists for files with no such column",
+      '"--company"' in src7)
+
+print()
+print("buttons are found by the words on them")
+for label in ("Place Order", "Add to Cart", "Next"):
+    check("%r is matched by text" % label, "has-text('%s')" % label in src7)
+check("a missing Place Order reports the buttons that WERE on screen",
+      "Visible buttons:" in src7)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

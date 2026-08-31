@@ -273,6 +273,33 @@ async def _discover_card_fields(frame) -> dict:
     return out
 
 
+async def _fill_all(scope, selector: str, value: str, timeout: int = 2500) -> int:
+    """Fill every box matching, not just the first.
+
+    This checkout asks for the same thing twice -- "Contact Details" and
+    "Shipping Address" each have First Name and Last Name -- so filling only the
+    first leaves the second one empty and red, and checkout will not move on.
+    Returns how many were filled.
+    """
+    n = 0
+    for sel in [x.strip() for x in (selector or "").split(",") if x.strip()]:
+        try:
+            loc = scope.locator(sel)
+            count = await loc.count()
+        except Exception:
+            continue
+        for i in range(count):
+            try:
+                one = loc.nth(i)
+                if not await one.is_visible():
+                    continue
+                await one.fill(str(value), timeout=timeout)
+                n += 1
+            except Exception:
+                continue
+    return n
+
+
 async def _card_frame(page, patterns: list, timeout: float = 45.0):
     """Find the gateway frame that actually CONTAINS the card fields.
 
@@ -321,7 +348,10 @@ _ADDRESS_MAP = (
                    "input[name='email']"),
     ("firstname",  "input[name='firstname']"),
     ("lastname",   "input[name='lastname']"),
+    # Required on this store, and marked with a red asterisk. There is no
+    # column for it in older data files, so --company supplies a default.
     ("company",    "input[name='company']"),
+    ("vat_id",     "input[name='vat_id']"),
     ("street",     "input[name='street[0]'], input[name='street'], "
                    "input#street_1"),
     ("city",       "input[name='city']"),
@@ -345,10 +375,13 @@ async def _fill_shipping(page, row: dict, cfg: dict) -> str:
     filled = []
     for col, sel in _ADDRESS_MAP:
         val = str(row.get(col) or "").strip()
+        if not val and col == "company":
+            val = str(cfg.get("company") or "").strip()
         if not val:
             continue
-        if await _fill_first(page, sel, val, timeout=2500):
-            filled.append(col)
+        n = await _fill_all(page, sel, val)
+        if n:
+            filled.append("%s x%d" % (col, n) if n > 1 else col)
 
     # Country and county are dropdowns whose options are loaded, so they need
     # select_option rather than fill -- and the county control changes shape
@@ -641,7 +674,13 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
                               % (field, (frame.url or "?").split("?")[0], names))
 
         step = "place order"
-        await page.locator(cfg["sel"]["place_order"]).first.click(timeout=20000)
+        if not await _click_when_ready(page, cfg["sel"]["place_order"], timeout=25000):
+            labels = await page.eval_on_selector_all(
+                "button, input[type=submit]",
+                "els => els.filter(e => e.offsetParent).map("
+                "e => (e.innerText || e.value || '').trim()).filter(Boolean).slice(0, 14)")
+            return None, ("place order: no button matched. Visible buttons: %s"
+                          % (", ".join(labels) or "none"))
         for _ in range(60):
             if captured.get("token"):
                 break
@@ -698,6 +737,7 @@ async def run(args) -> int:
         "guards": guards,
         "method": args.gateway_code or "",
         "row": {},
+        "company": args.company,
         "search_url": lambda term: base + "/catalogsearch/result/?q=%s" % term,
         "product_url": lambda pid: base + "/catalog/product/view/id/%s" % pid,
         "sel": {
@@ -705,18 +745,29 @@ async def run(args) -> int:
             "login_pass": "input[name='login[password]'], input#pass, input[name=password]",
             "login_submit": "button#send2, button[type=submit]",
             "qty": "input#qty, input[name=qty]",
-            "add_to_cart": "button#product-addtocart-button, button[title*='Add to Cart' i], "
-                           "button[title*='Add to Basket' i], button.tocart",
+            "add_to_cart": "button#product-addtocart-button, button.tocart, "
+                           "button:has-text('Add to Cart'), "
+                           "button:has-text('Add to Basket'), "
+                           "button[title*='Add to Cart' i], "
+                           "button[title*='Add to Basket' i]",
             "result_link": "a.product-item-link, .product-item-info a.product, "
                            "li.product-item a.product-item-photo",
             "ship_method": ".table-checkout-shipping-method input[type=radio], "
                            "input[name='ko_unique_1'], "
                            "#checkout-shipping-method-load input[type=radio]",
             "continue": "button[data-role='opc-continue'], button.continue, "
+                        "button:has-text('Next'), button:has-text('Continue'), "
                         "button.button.action.continue, "
                         "button[title*='Next' i], button[title*='Continue' i]",
-            "place_order": "button[title*='Place Order' i], button.checkout, "
-                           "button[data-role='review-save']",
+            # Matched by the words on the button. The title attribute is a
+            # theme detail and this theme does not set it -- the last run timed
+            # out on button[title*='Place Order'] while a button reading
+            # "Place Order" was on screen.
+            "place_order": "button:has-text('Place Order'), "
+                           "button:has-text('Place order'), "
+                           "button.action.primary.checkout, "
+                           "button[title*='Place Order' i], "
+                           "button[data-role='review-save'], button.checkout",
         },
     }
 
@@ -770,6 +821,9 @@ def main() -> int:
     p.add_argument("--hosted", default="", help="comma-separated card method substrings")
     p.add_argument("--settle-ms", type=int, default=6000,
                    help="pause after checkout loads before looking for the card form")
+    p.add_argument("--company", default="APEA Load Test",
+                   help="company name, when the checkout requires one and the "
+                        "data file has no company column")
     p.add_argument("--gateway-code", default="",
                    help="payment method code to select at checkout when the row "
                         "does not name one")
