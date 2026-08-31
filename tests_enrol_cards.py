@@ -433,6 +433,26 @@ check("label text is tried as a selector too",
 check("a partial value match is tried before giving up",
       "input[value*='%s']" in src13)
 
+# --- appended: a failure must leave evidence ---------------------------------
+print()
+print("a failed step photographs the page instead of guessing again")
+src14 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("a capture helper exists", "async def _capture(" in src14)
+check("it takes a full-page screenshot", "full_page=True" in src14)
+check("it lists the buttons that ARE there", "buttons:" in src14)
+check("and the inputs", "inputs:" in src14)
+check("and VALIDATION ERRORS, which no message showed before",
+      "VALIDATION ERRORS ON THE PAGE" in src14)
+check("and the iframes, for a gateway form", "IFRAMES" in src14)
+# Quote style is not the contract -- the step being captured is.
+for _step in ("delivery-step", "payment-step", "card-fields", "place-order",
+              "no-frame"):
+    check("the %s step captures" % _step,
+          ('"%s"' % _step) in src14 or ("'%s'" % _step) in src14)
+check("and any unexpected exception captures too",
+      "note = await _capture(page, user, step)" in src14)
+check("the path is reported back to the operator", "[captured %s" in src14)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

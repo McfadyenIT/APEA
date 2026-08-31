@@ -530,8 +530,11 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
                 ".filter(Boolean).slice(0, 16)")
         except Exception:
             _labels = []
-        _step_note = ("could not advance past the delivery step. Visible buttons: %s"
-                      % (", ".join(_labels) or "none"))
+        _step_note = ("could not advance past the delivery step. Visible buttons: %s%s"
+                      % (", ".join(_labels) or "none",
+                         await _capture(page,
+                                        (cfg.get("row") or {}).get("username") or "user",
+                                        "delivery-step")))
     else:
         _step_note = ""
     await _settle(page, timeout=25000)
@@ -583,8 +586,11 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
                    }).filter(Boolean).slice(0, 12)""")
         except Exception:
             _opts = []
-        _pay_note = ("payment options on the page: %s"
-                     % (" ;; ".join(_opts) or "none visible"))
+        _pay_note = ("payment options on the page: %s%s"
+                     % (" ;; ".join(_opts) or "none visible",
+                        await _capture(page,
+                                       (cfg.get("row") or {}).get("username") or "user",
+                                       "payment-step")))
     else:
         _pay_note = ""
     if picked:
@@ -730,6 +736,68 @@ async def _add_product(page, row: dict, cfg: dict) -> str:
     return "add to cart: " + "; ".join(notes or ["no product columns in this row"])
 
 
+async def _capture(page, user: str, step: str) -> str:
+    """Photograph the page and list what is on it, at the moment it failed.
+
+    Four selectors in a row have now been guessed from markup I assumed rather
+    than read -- the card fields, Place Order, Proceed To Payment, and the
+    payment-method control -- and each guess cost a full run against a slow
+    store. A screenshot and an element dump cost one second and end that loop:
+    the next fix is made from what the page IS, not from what it ought to be.
+    """
+    stamp = re.sub(r"[^A-Za-z0-9]+", "-", "%s-%s" % (user.split("@")[0], step))[:60]
+    base = Path("enrol-failures")
+    try:
+        base.mkdir(exist_ok=True)
+        shot = base / ("%s.png" % stamp)
+        await page.screenshot(path=str(shot), full_page=True)
+        dump = base / ("%s.txt" % stamp)
+        info = await page.evaluate(
+            """() => {
+                 const vis = e => e.offsetParent !== null;
+                 const txt = e => (e.innerText || e.value || '').trim()
+                                    .replace(/[\\s]+/g, ' ').slice(0, 60);
+                 const desc = e => [e.tagName.toLowerCase(),
+                                    e.id && ('#' + e.id),
+                                    e.getAttribute('name') && ('[name=' + e.getAttribute('name') + ']'),
+                                    e.getAttribute('value') && ('[value=' + e.getAttribute('value') + ']'),
+                                    e.disabled ? '(disabled)' : '',
+                                    txt(e) && ('"' + txt(e) + '"')]
+                                   .filter(Boolean).join(' ');
+                 return {
+                   url: location.href,
+                   buttons: [...document.querySelectorAll('button, input[type=submit], a.action')]
+                              .filter(vis).map(desc).slice(0, 30),
+                   inputs: [...document.querySelectorAll('input, select')]
+                              .filter(vis).map(desc).slice(0, 40),
+                   errors: [...document.querySelectorAll(
+                              '.mage-error, .message-error, [class*=error]')]
+                              .filter(vis).map(txt).filter(Boolean).slice(0, 12),
+                   frames: [...document.querySelectorAll('iframe')]
+                              .map(f => f.src || '(no src)').slice(0, 10),
+                 };
+               }"""
+        )
+        with io.open(dump, "w", encoding="utf-8") as fh:
+            fh.write("url: %s\n\nBUTTONS\n" % info.get("url"))
+            for b in info.get("buttons") or []:
+                fh.write("  %s\n" % b)
+            fh.write("\nINPUTS\n")
+            for i in info.get("inputs") or []:
+                fh.write("  %s\n" % i)
+            fh.write("\nVALIDATION ERRORS ON THE PAGE\n")
+            for e in info.get("errors") or ["(none)"]:
+                fh.write("  %s\n" % e)
+            fh.write("\nIFRAMES\n")
+            for f in info.get("frames") or ["(none)"]:
+                fh.write("  %s\n" % f)
+        errs = "; ".join((info.get("errors") or [])[:3])
+        return (" [captured %s | errors on page: %s]"
+                % (shot, errs or "none"))
+    except Exception as exc:
+        return " [could not capture the page: %s]" % _redact(exc)[:60]
+
+
 async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
     """Drive one account through checkout and return (token, note).
 
@@ -804,7 +872,8 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
             return None, ("card form: no gateway frame appeared. %s. Checkout is at "
                           "%s and the page holds these frames: %s"
                           % (note or "payment method selected",
-                             (page.url or "?").split("?")[0], urls))
+                             (page.url or "?").split("?")[0], urls)
+                  + await _capture(page, user, 'no-frame'))
 
         card = cfg["card"]
         # Documented selectors first, then whatever the real form actually has.
@@ -834,7 +903,8 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
                 return None, ("card form: no %s field found. The form at %s has: %s. "
                               "Earlier: %s"
                               % (field, (frame.url or "?").split("?")[0], names,
-                                 note or "?"))
+                                 note or "?")
+                      + await _capture(page, user, 'card-fields'))
 
         step = "place order"
         if not await _click_when_ready(page, cfg["sel"]["place_order"], timeout=25000):
@@ -843,7 +913,8 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
                 "els => els.filter(e => e.offsetParent).map("
                 "e => (e.innerText || e.value || '').trim()).filter(Boolean).slice(0, 14)")
             return None, ("place order: no button matched. Visible buttons: %s"
-                          % (", ".join(labels) or "none"))
+                          % (", ".join(labels) or "none")
+                  + await _capture(page, user, 'place-order'))
         for _ in range(60):
             if captured.get("token"):
                 break
@@ -855,7 +926,8 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
         return None, ("place order: no card_id crossed the wire within 60s. If a "
                       "3-D Secure challenge appeared, this account needs a person.")
     except Exception as exc:
-        return None, "%s: %s" % (step, _redact(exc)[:180])
+        note = await _capture(page, user, step)
+        return None, "%s: %s%s" % (step, _redact(exc)[:180], note)
     finally:
         await ctx.close()
 
