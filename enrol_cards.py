@@ -518,7 +518,22 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
             await page.wait_for_timeout(1500)
     except Exception:
         pass
-    await _click_when_ready(page, cfg["sel"]["continue"], timeout=12000)
+    advanced = await _click_when_ready(page, cfg["sel"]["continue"], timeout=20000)
+    if not advanced:
+        # Name what was on screen. Guessing a button's wording is what cost the
+        # last two runs; the page can just tell us.
+        try:
+            _labels = await page.eval_on_selector_all(
+                "button, input[type=submit], a.action",
+                "els => els.filter(e => e.offsetParent)"
+                ".map(e => (e.innerText || e.value || '').trim())"
+                ".filter(Boolean).slice(0, 16)")
+        except Exception:
+            _labels = []
+        _step_note = ("could not advance past the delivery step. Visible buttons: %s"
+                      % (", ".join(_labels) or "none"))
+    else:
+        _step_note = ""
     await _settle(page, timeout=25000)
     await _dismiss_overlays(page)
 
@@ -537,7 +552,12 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
             continue
     await page.wait_for_timeout(2500)
     if picked:
-        return "address: %s" % (filled or "none needed")
+        return "address: %s%s" % (filled or "none needed",
+                                  ("; " + _step_note) if _step_note else "")
+    if _step_note:
+        # The method being unselectable is a SYMPTOM when the page never left
+        # the delivery step -- report the cause, not the thing downstream of it.
+        return "%s (so the payment section never rendered)" % _step_note
     return ("payment method %r was not selectable; address: %s"
             % (method, filled or "none needed"))
 
@@ -882,10 +902,20 @@ async def run(args) -> int:
             "ship_method": ".table-checkout-shipping-method input[type=radio], "
                            "input[name='ko_unique_1'], "
                            "#checkout-shipping-method-load input[type=radio]",
-            "continue": "button[data-role='opc-continue'], button.continue, "
+            # Every wording a checkout uses to mean "on to the next step". The
+            # first live run stalled on a button reading "Proceed To Payment",
+            # which matched none of Next/Continue -- the two words I had assumed
+            # were the vocabulary. Text first, attributes behind.
+            "continue": "button:has-text('Proceed To Payment'), "
+                        "button:has-text('Proceed to Payment'), "
+                        "button:has-text('Continue to Payment'), "
+                        "button:has-text('Go to Payment'), "
+                        "button:has-text('Proceed'), "
                         "button:has-text('Next'), button:has-text('Continue'), "
+                        "button[data-role='opc-continue'], button.continue, "
                         "button.button.action.continue, "
-                        "button[title*='Next' i], button[title*='Continue' i]",
+                        "button[title*='Next' i], button[title*='Continue' i], "
+                        "button[title*='Proceed' i]",
             # Matched by the words on the button. The title attribute is a
             # theme detail and this theme does not set it -- the last run timed
             # out on button[title*='Place Order'] while a button reading

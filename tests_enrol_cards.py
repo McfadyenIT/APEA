@@ -397,6 +397,24 @@ check("there is still no way to pass a card number",
 check("the override is announced in the run header",
       "with cvv override" in src11)
 
+# --- appended: the step-advance button's real wording ------------------------
+print()
+print("the delivery step advances on the words checkouts actually use")
+src12 = io.open("enrol_cards.py", encoding="utf-8").read()
+cont = src12.split('"continue":')[1].split('"ship_method"')[0] \
+       if '"ship_method"' in src12.split('"continue":')[1][:1200] \
+       else src12.split('"continue":')[1][:1200]
+for label in ("Proceed To Payment", "Proceed", "Next", "Continue"):
+    check("%r advances the step" % label, "has-text('%s')" % label in cont)
+check("attribute selectors are kept behind the text ones",
+      cont.index("has-text") < cont.index("data-role"))
+
+print()
+print("a stalled step reports the cause, not the symptom")
+check("the visible buttons are listed", "Visible buttons:" in src12)
+check("and the payment method is not blamed for it",
+      "so the payment section never rendered" in src12)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
