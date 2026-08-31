@@ -311,6 +311,17 @@ for label in ("Place Order", "Add to Cart", "Next"):
 check("a missing Place Order reports the buttons that WERE on screen",
       "Visible buttons:" in src7)
 
+# --- appended: the address form is drawn late --------------------------------
+print()
+print("the address form is waited for, then reported if it does not match")
+src8 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("it waits for an address field to be visible before typing",
+      'wait_for(state="visible", timeout=40000)' in src8)
+check("filling nothing reports the form's REAL field names",
+      "NOTHING FILLED" in src8)
+check("the address outcome reaches the card-form failure too",
+      "Earlier: %s" in src8)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

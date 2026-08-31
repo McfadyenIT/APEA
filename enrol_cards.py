@@ -372,6 +372,18 @@ async def _fill_shipping(page, row: dict, cfg: dict) -> str:
     the page at all, and that is a success, not a failure -- the proof is
     whether checkout advances, which the caller checks.
     """
+    # The checkout is a single-page app: the address form is drawn after the
+    # page loads, so typing straight away types into nothing. Wait for a field
+    # to actually be on screen first. This is why the operator had to fill the
+    # form by hand -- the script had already been and gone.
+    try:
+        await page.locator(
+            "input[name='firstname'], input[name='lastname'], input[name='city']"
+        ).first.wait_for(state="visible", timeout=40000)
+    except Exception:
+        pass
+    await page.wait_for_timeout(1500)
+
     filled = []
     for col, sel in _ADDRESS_MAP:
         val = str(row.get(col) or "").strip()
@@ -423,7 +435,21 @@ async def _fill_shipping(page, row: dict, cfg: dict) -> str:
         # The address triggers a delivery-price lookup; it must land before the
         # methods appear.
         await page.wait_for_timeout(3500)
-    return ", ".join(filled)
+        return ", ".join(filled)
+
+    # Nothing matched. Rather than fail with "no fields filled", report the
+    # fields the form ACTUALLY has -- the same move that solved the card form
+    # and the Place Order button. One run then tells us the real names.
+    try:
+        real = await page.eval_on_selector_all(
+            "input, select",
+            """els => els.filter(e => e.offsetParent && e.type !== 'hidden')
+                        .map(e => (e.getAttribute('name') || e.id || '?')
+                                  + (e.value ? '=filled' : ''))
+                        .slice(0, 25)""")
+    except Exception:
+        real = []
+    return "NOTHING FILLED -- the form has: %s" % (", ".join(real) or "no visible fields")
 
 
 async def _reach_payment_step(page, cfg, method: str) -> str:
@@ -467,8 +493,8 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
             continue
     await page.wait_for_timeout(2500)
     if picked:
-        return "address filled (%s)" % (filled or "none needed")
-    return ("payment method %r was not selectable; address filled (%s)"
+        return "address: %s" % (filled or "none needed")
+    return ("payment method %r was not selectable; address: %s"
             % (method, filled or "none needed"))
 
 
@@ -670,8 +696,10 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
                 seen = discovered.get("_seen") or []
                 names = ", ".join(
                     (f.get("name") or f.get("id") or "?") for f in seen[:12]) or "nothing"
-                return None, ("card form: no %s field found. The form at %s has: %s"
-                              % (field, (frame.url or "?").split("?")[0], names))
+                return None, ("card form: no %s field found. The form at %s has: %s. "
+                              "Earlier: %s"
+                              % (field, (frame.url or "?").split("?")[0], names,
+                                 note or "?"))
 
         step = "place order"
         if not await _click_when_ready(page, cfg["sel"]["place_order"], timeout=25000):
