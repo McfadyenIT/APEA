@@ -133,6 +133,11 @@ paradoxlabs_cybersource:
   test_cards:
     success:    {number: "4111111111111111", exp: "12 / 34", cvc: "123",  postal: "12345"}
     mastercard: {number: "5555555555554444", exp: "12 / 34", cvc: "123",  postal: "12345"}
+    # Also published as a sandbox Mastercard (Adyen's documented test set, and
+    # accepted by CyberSource test). Recorded here rather than passed on a
+    # command line: a card the tool will type has to be one someone wrote down
+    # as safe, and the command line cannot carry that provenance.
+    mastercard_alt: {number: "5123450000000008", exp: "12 / 34", cvc: "123",  postal: "12345"}
     amex:       {number: "378282246310005",  exp: "12 / 34", cvc: "1234", postal: "12345"}
     discover:   {number: "6011111111111117", exp: "12 / 34", cvc: "123",  postal: "12345"}
     decline:    {number: "4000000000000002", exp: "12 / 34", cvc: "123",  postal: "12345"}

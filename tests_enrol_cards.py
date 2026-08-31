@@ -368,6 +368,35 @@ check("skipped gateways are printed, not swallowed", "SKIPPED" in src10)
 check("a run that enrolled nothing but skipped something exits non-zero",
       "return 0 if not cannot else 1" in src10)
 
+# --- appended: more cards, and a security-code override ----------------------
+print()
+print("a second Mastercard is available, from the knowledge base")
+from apea.agents.browser_runner_gen import _load_browser_patterns as _kb  # noqa: E402
+_cards = (_kb() or {}).get("paradoxlabs_cybersource", {}).get("test_cards", {})
+check("mastercard_alt exists", "mastercard_alt" in _cards)
+check("it is the number that was asked for",
+      _cards.get("mastercard_alt", {}).get("number") == "5123450000000008")
+
+
+def _luhn(n):
+    d = [int(c) for c in n][::-1]
+    return sum(d[0::2] + [sum(divmod(x * 2, 10)) for x in d[1::2]]) % 10 == 0
+
+
+for _n, _c in _cards.items():
+    check("%s passes the card checksum, so it is not a typo" % _n,
+          _luhn(str(_c["number"])))
+
+print()
+print("the security code can be overridden; the NUMBER cannot")
+src11 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("--cvv exists", '"--cvv"' in src11)
+check("it is validated as 3-4 digits", "3 <= len(args.cvv) <= 4" in src11)
+check("there is still no way to pass a card number",
+      "--card-number" not in src11 and "--pan" not in src11)
+check("the override is announced in the run header",
+      "with cvv override" in src11)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

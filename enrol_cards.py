@@ -810,6 +810,14 @@ async def run(args) -> int:
     if not prof:
         raise SystemExit("no knowledge-base profile matches gateway %r" % args.gateway)
     card = _check_safeguards(prof, args.base_url, args.allow_unknown_card, args.card)
+    if args.cvv:
+        # Overriding the security code is safe in a way that overriding the
+        # NUMBER is not: on a sandbox card any 3 digits are accepted, and a
+        # wrong one is a decline to test, not a way to reach a real account.
+        if not args.cvv.isdigit() or not 3 <= len(args.cvv) <= 4:
+            raise SystemExit("--cvv must be 3 or 4 digits")
+        card = dict(card)
+        card["cvc"] = args.cvv
     guards = prof.get("safeguards") or {}
 
     src = Path(args.csv)
@@ -831,8 +839,9 @@ async def run(args) -> int:
         elif action == "cannot":
             cannot.append(((r.get("username") or "").strip(), reason))
 
-    print("using the %r sandbox card (ending %s) from the knowledge base"
-          % (args.card, str(card.get("number", ""))[-4:]))
+    print("using the %r sandbox card (ending %s) from the knowledge base%s"
+          % (args.card, str(card.get("number", ""))[-4:],
+             " with cvv override" if args.cvv else ""))
     print("%d row(s), %d account(s) needing a token" % (len(rows), len(todo)))
     for user, reason in cannot:
         # Never silent. A row that declared a gateway and got no attempt has to
@@ -939,6 +948,9 @@ def main() -> int:
     p.add_argument("--hosted", default="", help="comma-separated card method substrings")
     p.add_argument("--settle-ms", type=int, default=6000,
                    help="pause after checkout loads before looking for the card form")
+    p.add_argument("--cvv", default="",
+                   help="override the security code on the chosen card "
+                        "(3-4 digits; use a wrong one to test a decline)")
     p.add_argument("--company", default="APEA Load Test",
                    help="company name, when the checkout requires one and the "
                         "data file has no company column")
