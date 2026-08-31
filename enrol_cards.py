@@ -287,6 +287,48 @@ async def _card_frame(page, patterns: list, timeout: float = 20.0):
     return None
 
 
+async def _dismiss_overlays(page) -> None:
+    """Clear the consent banner, which sits on top and swallows the first click.
+
+    Decline is tried before accept: the run only needs the banner out of the
+    way, so there is no reason to opt into anything to get it. If neither
+    button is there, nothing happens -- this is best-effort by design.
+    """
+    for sel in ("#onetrust-reject-all-handler",
+                "button.ot-pc-refuse-all-handler",
+                ".ot-sdk-container button[onclick*='reject' i]",
+                "#onetrust-accept-btn-handler",
+                "button[aria-label='Close' i]"):
+        try:
+            el = page.locator(sel).first
+            if await el.count() and await el.is_visible():
+                await el.click(timeout=3000)
+                await page.wait_for_timeout(700)
+                return
+        except Exception:
+            continue
+
+
+async def _click_when_ready(page, selector: str, timeout: int = 25000) -> bool:
+    """Click the first of these selectors that becomes visible.
+
+    Uses wait_for rather than count(). count() answers "is it in the DOM right
+    now" and returns 0 for anything the page has not rendered yet -- and these
+    pages are 6.9MB, so plenty has not. That single difference is why the last
+    run found no add button on a page that has one.
+    """
+    for sel in [x.strip() for x in (selector or "").split(",") if x.strip()]:
+        try:
+            loc = page.locator(sel).first
+            await loc.wait_for(state="visible", timeout=timeout)
+            await loc.scroll_into_view_if_needed(timeout=5000)
+            await loc.click(timeout=10000)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 async def _add_product(page, row: dict, cfg: dict) -> str:
     """Put the row's product in the basket, using the columns the data file
     already carries.
@@ -298,35 +340,48 @@ async def _add_product(page, row: dict, cfg: dict) -> str:
     /buy/<slug>/<id>.html, which cannot be derived from the CSV -- while a
     search box exists on every storefront and uses the column as-is.
     """
-    tried = []
-    for key in ("search_keyword", "sku", "product_id"):
+    attempts, tried = [], []
+
+    # The product id addresses the product directly through Magento's core
+    # route, which this store still serves even though its pretty URLs are
+    # /buy/<slug>/<id>.html -- verified against the live site, it returns the
+    # product page with an add button. One navigation, no result list to parse.
+    pid = str(row.get("product_id") or "").strip()
+    if pid:
+        attempts.append(("product_id", cfg["product_url"](pid), False))
+    # Then search, which needs no knowledge of URL shape at all and uses the
+    # column a tester naturally fills in.
+    for key in ("search_keyword", "sku"):
         term = str(row.get(key) or "").strip()
-        if not term or term in tried:
-            continue
-        tried.append(term)
+        if term and term not in tried:
+            tried.append(term)
+            attempts.append((key, cfg["search_url"](term), True))
+
+    notes = []
+    for key, url, is_search in attempts:
         try:
-            await page.goto(cfg["search_url"](term), wait_until="domcontentloaded",
-                            timeout=45000)
-            await _settle(page)
-            link = page.locator(cfg["sel"]["result_link"]).first
-            if await link.count():
-                await link.click(timeout=15000)
-                await _settle(page)
-            # Either the search landed straight on the product, or we just
-            # clicked into it. Either way the add button is the proof.
-            btn = page.locator(cfg["sel"]["add_to_cart"]).first
-            if not await btn.count():
-                continue
+            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            await _dismiss_overlays(page)
+            await _settle(page, timeout=30000)
+            if is_search:
+                # A result list needs one more click to reach the product. If
+                # the store redirected a single match straight to the product,
+                # there is no list and that is fine.
+                await _click_when_ready(page, cfg["sel"]["result_link"], timeout=8000)
+                await _dismiss_overlays(page)
+                await _settle(page, timeout=30000)
             qty = str(row.get("qty") or 1)
             if qty and qty != "1":
-                await _fill_first(page, cfg["sel"]["qty"], qty, timeout=3000)
-            await btn.click(timeout=20000)
-            await page.wait_for_timeout(3000)
+                await _fill_first(page, cfg["sel"]["qty"], qty, timeout=4000)
+            if not await _click_when_ready(page, cfg["sel"]["add_to_cart"], timeout=25000):
+                notes.append("%s -> no add button" % key)
+                continue
+            await page.wait_for_timeout(4000)
             return ""
         except Exception as exc:
+            notes.append("%s -> %s" % (key, _redact(exc)[:60]))
             continue
-    return ("add to cart: none of %s found a product with an add button "
-            "(columns tried: search_keyword, sku, product_id)" % tried)
+    return "add to cart: " + "; ".join(notes or ["no product columns in this row"])
 
 
 async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
@@ -362,6 +417,7 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
         # --- sign in -----------------------------------------------------
         step = "login"
         await page.goto(cfg["login_url"], wait_until="domcontentloaded", timeout=45000)
+        await _dismiss_overlays(page)
         if not await _fill_first(page, cfg["sel"]["login_user"], user):
             return None, "login: could not find the email field"
         if not await _fill_first(page, cfg["sel"]["login_pass"], row.get("password") or ""):
@@ -385,6 +441,7 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
         # --- checkout ----------------------------------------------------
         step = "checkout"
         await page.goto(cfg["checkout_url"], wait_until="domcontentloaded", timeout=60000)
+        await _dismiss_overlays(page)
         await page.wait_for_timeout(cfg["settle_ms"])   # checkout is a slow SPA
 
         step = "card form"
@@ -482,6 +539,7 @@ async def run(args) -> int:
         "card": card,
         "guards": guards,
         "search_url": lambda term: base + "/catalogsearch/result/?q=%s" % term,
+        "product_url": lambda pid: base + "/catalog/product/view/id/%s" % pid,
         "sel": {
             "login_user": "input[name='login[username]'], input#email, input[name=email]",
             "login_pass": "input[name='login[password]'], input#pass, input[name=password]",

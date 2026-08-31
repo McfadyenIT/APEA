@@ -13,6 +13,7 @@ script from doing something it should not:
 Run:  ./.venv/bin/python tests_enrol_cards.py     # expect FAILURES: 0
 """
 import io
+import re
 import sys
 
 sys.path.insert(0, ".")
@@ -218,10 +219,40 @@ check("_settle waits for the document instead",
 
 print()
 print("the product comes from the data file")
-check("search_keyword is tried first",
-      'for key in ("search_keyword", "sku", "product_id")' in src3)
-check("no product URL is built from a store-specific shape",
-      "/catalog/product/view/id/" not in src3)
+# Corrected after probing the live store. product_id through Magento's CORE
+# route was removed on the assumption it would not work, because the store's
+# pretty URLs are /buy/<slug>/<id>.html. The store serves BOTH -- the core
+# route returns the product page with an add button. Direct beats search: one
+# navigation, no result list to parse, nothing to click.
+check("every product column in the data file is used",
+      all(c in src3 for c in ("product_id", "search_keyword", "sku")))
+# Strip comments and docstrings first. This check failed twice on prose: the
+# code comment that EXPLAINS the /buy/<slug>/<id>.html shape contains it, and a
+# plain substring test cannot tell an explanation from an instruction.
+_code_only = re.sub(r'"""[\s\S]*?"""', "", src3)
+_code_only = "\n".join(l for l in _code_only.split("\n")
+                       if not l.lstrip().startswith("#"))
+check("the store's pretty-URL shape is never invented",
+      "/buy/" not in _code_only)
+check("search remains, so a store with no usable id still works",
+      "catalogsearch/result" in src3)
+
+# --- appended: what the second live run taught us ----------------------------
+print()
+print("the second live run's causes are addressed")
+src4 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("consent banners are dismissed before clicking",
+      "_dismiss_overlays" in src4 and "onetrust" in src4.lower())
+check("decline is preferred over accept",
+      src4.index("reject-all-handler") < src4.index("accept-btn-handler"))
+check("clicks wait for the element instead of asking count()",
+      "_click_when_ready" in src4 and 'wait_for(state="visible"' in src4)
+check("the direct product route is tried first",
+      "product_url" in src4 and "/catalog/product/view/id/" in src4)
+check("search is still there as the store-agnostic fallback",
+      "catalogsearch/result" in src4)
+check("each attempt's own reason is reported, not one lumped message",
+      'notes.append' in src4)
 
 print()
 print("FAILURES: %d" % len(FAILURES))
