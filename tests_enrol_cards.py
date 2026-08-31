@@ -290,7 +290,7 @@ check("county handles both a list and a free text box",
 check("the row reaches the address step",
       'cfg["row"] = row' in src6 and 'cfg["row"]' in src6)
 check("what was filled is reported back",
-      "address filled" in src6)
+      "address: %s" in src6)
 
 # --- appended: the two-column address form and the Place Order button --------
 print()
