@@ -322,6 +322,34 @@ def analyze(flow: list, selenium_inputs: list | None = None,
         value_by_col["sku"] = _rec_sku
         source_by_col["sku"] = "recorded"
 
+    # --- columns checkout needs that a recording may never reveal -------------
+    # A recording only yields a column when its value crossed the wire. Two never
+    # do, and both stop a run cold if they are absent from the file:
+    #
+    #   company        checkouts that ask for a business name mark it REQUIRED,
+    #                  and a saved address means it is never typed during a
+    #                  recording, so it is invisible to parameterisation.
+    #   payment_token  the store's stand-in for the card. It is minted per
+    #                  ACCOUNT at checkout, so one recording can only ever show
+    #                  one -- and a pool needs one each.
+    #
+    # Offer both, the same way `sku` is offered above: present, empty, optional.
+    # Empty is correct here. company has a runtime default; payment_token cannot
+    # be invented for an account and a blank one makes the run fail closed rather
+    # than quietly pay another way. enrol_cards.py fills it.
+    for _extra, _grp, _why in (("company", "Address", "business name, required by some checkouts"),
+                               ("payment_token", "Card", "stored-card token, one per account")):
+        if _extra in columns:
+            continue
+        columns.append(_extra)
+        _xg = next((g for g in group_list if g["group"] == _grp), None)
+        if _xg is None:
+            _xg = {"group": _grp, "fields": [],
+                   "why": _GROUP_WHY.get(_grp, _why)}
+            group_list.append(_xg)
+        _xg["fields"].append({"column": _extra, "from_field": _extra, "sample": "",
+                              "evidence": "optional"})
+
     # annotate each field so the UI/report can highlight required vs optional and
     # show WHERE the sample came from (recorded vs still needs input)
     required_cols = set(_required_columns(columns))
@@ -358,6 +386,7 @@ def _required_columns(columns: list) -> list:
 
 
 _GROUP_WHY = {
+    "Address": "delivery and billing details typed at checkout",
     "Credentials": "log in as different users (one account per concurrent user)",
     "Card": "supply test-mode card / stored-token details at payment",
     "Payment": "payment method + shipping method/carrier selected at checkout",
