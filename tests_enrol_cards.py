@@ -276,6 +276,22 @@ check("the method comes from the row, so a mixed pool still works",
 check("a failure names the frames that WERE present",
       "the page holds these frames" in src5)
 
+# --- appended: the address form that stopped every run -----------------------
+print()
+print("the delivery address is typed from the data file")
+src6 = io.open("enrol_cards.py", encoding="utf-8").read()
+cols = [c for c, _ in E._ADDRESS_MAP]
+for col in ("firstname", "lastname", "street", "city", "postcode", "telephone"):
+    check("%s comes from the row" % col, col in cols)
+check("the email field is filled from username", "username" in cols)
+check("country is a dropdown, so select_option is used", "select_option" in src6)
+check("county handles both a list and a free text box",
+      "select[name='region_id']" in src6 and "input[name='region']" in src6)
+check("the row reaches the address step",
+      'cfg["row"] = row' in src6 and 'cfg["row"]' in src6)
+check("what was filled is reported back",
+      "address filled" in src6)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

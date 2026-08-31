@@ -313,6 +313,86 @@ async def _card_frame(page, patterns: list, timeout: float = 45.0):
     return best
 
 
+# CSV column -> the form control that holds it. Magento's own field names,
+# which this store's checkout uses. Each entry lists alternates because themes
+# rename things; the first one present wins.
+_ADDRESS_MAP = (
+    ("username",   "input[name='username'], input#customer-email, "
+                   "input[name='email']"),
+    ("firstname",  "input[name='firstname']"),
+    ("lastname",   "input[name='lastname']"),
+    ("company",    "input[name='company']"),
+    ("street",     "input[name='street[0]'], input[name='street'], "
+                   "input#street_1"),
+    ("city",       "input[name='city']"),
+    ("postcode",   "input[name='postcode']"),
+    ("telephone",  "input[name='telephone']"),
+)
+
+
+async def _fill_shipping(page, row: dict, cfg: dict) -> str:
+    """Type the delivery address from the data file.
+
+    The checkout will not move on without it, and it was never being filled --
+    the run stopped on an address form waiting for a person. Every field it asks
+    for is already a column: first name, last name, street, city, postcode,
+    phone, country, county. So fill them from the row rather than asking anyone.
+
+    Every field is best-effort. A saved address means most of these are not on
+    the page at all, and that is a success, not a failure -- the proof is
+    whether checkout advances, which the caller checks.
+    """
+    filled = []
+    for col, sel in _ADDRESS_MAP:
+        val = str(row.get(col) or "").strip()
+        if not val:
+            continue
+        if await _fill_first(page, sel, val, timeout=2500):
+            filled.append(col)
+
+    # Country and county are dropdowns whose options are loaded, so they need
+    # select_option rather than fill -- and the county control changes shape
+    # per country: a list where the platform knows the regions, a free text box
+    # where it does not.
+    country = str(row.get("country_id") or "").strip()
+    if country:
+        for sel in ("select[name='country_id']", "select#country"):
+            try:
+                el = page.locator(sel).first
+                if await el.count():
+                    await el.select_option(value=country, timeout=5000)
+                    filled.append("country_id")
+                    await page.wait_for_timeout(1200)
+                    break
+            except Exception:
+                continue
+
+    region = (str(row.get("region") or "").strip()
+              or str(row.get("region_code") or "").strip())
+    if region:
+        done = False
+        for sel in ("select[name='region_id']", "select#region_id"):
+            try:
+                el = page.locator(sel).first
+                if await el.count() and await el.is_visible():
+                    await el.select_option(label=region, timeout=5000)
+                    done = True
+                    break
+            except Exception:
+                continue
+        if not done:
+            if await _fill_first(page, "input[name='region']", region, timeout=2500):
+                done = True
+        if done:
+            filled.append("region")
+
+    if filled:
+        # The address triggers a delivery-price lookup; it must land before the
+        # methods appear.
+        await page.wait_for_timeout(3500)
+    return ", ".join(filled)
+
+
 async def _reach_payment_step(page, cfg, method: str) -> str:
     """Walk checkout far enough that the card form is asked to render.
 
@@ -324,6 +404,8 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
     Best-effort throughout: a store that shows payment immediately just finds
     nothing to click, and that is a success, not a failure.
     """
+    filled = await _fill_shipping(page, cfg["row"], cfg)
+
     # Delivery method, then Next. Some themes preselect; clicking a radio that
     # is already chosen is harmless.
     try:
@@ -351,7 +433,10 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
         except Exception:
             continue
     await page.wait_for_timeout(2500)
-    return "" if picked else "payment method %r was not selectable" % method
+    if picked:
+        return "address filled (%s)" % (filled or "none needed")
+    return ("payment method %r was not selectable; address filled (%s)"
+            % (method, filled or "none needed"))
 
 
 async def _dismiss_overlays(page) -> None:
@@ -612,6 +697,7 @@ async def run(args) -> int:
         "card": card,
         "guards": guards,
         "method": args.gateway_code or "",
+        "row": {},
         "search_url": lambda term: base + "/catalogsearch/result/?q=%s" % term,
         "product_url": lambda pid: base + "/catalog/product/view/id/%s" % pid,
         "sel": {
@@ -645,6 +731,7 @@ async def run(args) -> int:
                 print("  [%d/%d] %-32s " % (i, len(todo), user), end="", flush=True)
                 cfg["method"] = ((row.get("payment_method") or "").strip()
                                  or cfg["method"])
+                cfg["row"] = row
                 token, note = await enrol_one(browser, row, cfg)
                 if token:
                     results[user.lower()] = token
