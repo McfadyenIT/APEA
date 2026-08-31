@@ -322,6 +322,18 @@ check("filling nothing reports the form's REAL field names",
 check("the address outcome reaches the card-form failure too",
       "Earlier: %s" in src8)
 
+# --- appended: our own litter broke the checkout ------------------------------
+print()
+print("the basket is emptied before each attempt")
+src9 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("an empty-cart step exists", "async def _empty_cart" in src9)
+check("it runs before the product is added",
+      src9.index("await _empty_cart(page, cfg)") < src9.index("attempts, tried = [], []"))
+check("the removal loop is bounded, not while-true",
+      "for _ in range(40)" in src9)
+check("a checkout stuck on a spinner says so, and says why",
+      "CHECKOUT NEVER FINISHED LOADING" in src9)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

@@ -381,7 +381,17 @@ async def _fill_shipping(page, row: dict, cfg: dict) -> str:
             "input[name='firstname'], input[name='lastname'], input[name='city']"
         ).first.wait_for(state="visible", timeout=40000)
     except Exception:
-        pass
+        # No address field in 40s. Distinguish "still loading" from "not there",
+        # because they need opposite fixes and look identical in a log.
+        try:
+            spinning = await page.locator(
+                ".loading-mask, .loader, [data-role='loader']").first.is_visible()
+        except Exception:
+            spinning = False
+        if spinning:
+            return ("CHECKOUT NEVER FINISHED LOADING -- still showing a spinner after "
+                    "40s. A basket left full by earlier runs is the usual cause; "
+                    "empty it at %s and try again." % cfg.get("cart_url", "the cart"))
     await page.wait_for_timeout(1500)
 
     filled = []
@@ -540,6 +550,39 @@ async def _click_when_ready(page, selector: str, timeout: int = 25000) -> bool:
     return False
 
 
+async def _empty_cart(page, cfg: dict) -> str:
+    """Empty the basket before adding anything.
+
+    Every attempt adds a product, and a failed attempt leaves it there. After
+    several runs the basket held thousands of pounds of stock and checkout
+    stopped rendering altogether -- a spinner and nothing else. That is not a
+    store fault, it is our own litter.
+
+    It also makes each account's run start from a known state, which is the
+    only way the captured token means what we think it means.
+    """
+    try:
+        await page.goto(cfg["cart_url"], wait_until="domcontentloaded", timeout=45000)
+        await _dismiss_overlays(page)
+        await _settle(page, timeout=25000)
+    except Exception as exc:
+        return "cart page unreachable: %s" % _redact(exc)[:60]
+
+    removed = 0
+    for _ in range(40):                       # bounded: never loop on a page that will not empty
+        try:
+            btn = page.locator("a.action-delete, .action.action-delete, "
+                               "a[title='Remove item']").first
+            if not await btn.count() or not await btn.is_visible():
+                break
+            await btn.click(timeout=8000)
+            await page.wait_for_timeout(2200)
+            removed += 1
+        except Exception:
+            break
+    return "emptied %d item(s)" % removed if removed else ""
+
+
 async def _add_product(page, row: dict, cfg: dict) -> str:
     """Put the row's product in the basket, using the columns the data file
     already carries.
@@ -551,6 +594,8 @@ async def _add_product(page, row: dict, cfg: dict) -> str:
     /buy/<slug>/<id>.html, which cannot be derived from the CSV -- while a
     search box exists on every storefront and uses the column as-is.
     """
+    await _empty_cart(page, cfg)
+
     attempts, tried = [], []
 
     # The product id addresses the product directly through Magento's core
@@ -758,6 +803,7 @@ async def run(args) -> int:
     cfg = {
         "login_url": base + "/customer/account/login/",
         "checkout_url": base + "/checkout/",
+        "cart_url": base + "/checkout/cart/",
         "settle_ms": args.settle_ms,
         "frame_patterns": prof.get("frame_url_patterns") or [],
         "card_sel": _card_selectors(prof),
