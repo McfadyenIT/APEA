@@ -254,6 +254,28 @@ check("search is still there as the store-agnostic fallback",
 check("each attempt's own reason is reported, not one lumped message",
       'notes.append' in src4)
 
+# --- appended: the empty-iframe run ------------------------------------------
+print()
+print("the gateway frame is chosen by CONTENT, not by URL alone")
+src5 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("child frames are searched too",
+      "child_frames" in src5)
+check("a frame only counts once it holds real inputs",
+      'input:not([type=hidden])' in src5)
+check("a timed-out search still returns what it saw, for the report",
+      "best = best or f" in src5 and "return best" in src5)
+
+print()
+print("checkout is walked to the payment step before the form is expected")
+check("the delivery step is advanced", "_reach_payment_step" in src5
+      and "ship_method" in src5)
+check("the card method is selected, because the form renders on selection",
+      "was not selectable" in src5)
+check("the method comes from the row, so a mixed pool still works",
+      'row.get("payment_method")' in src5)
+check("a failure names the frames that WERE present",
+      "the page holds these frames" in src5)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

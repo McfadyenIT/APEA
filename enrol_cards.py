@@ -273,18 +273,85 @@ async def _discover_card_fields(frame) -> dict:
     return out
 
 
-async def _card_frame(page, patterns: list, timeout: float = 20.0):
-    """The card fields live in the gateway's own cross-origin iframe. Wait for a
-    frame whose URL matches the KB's patterns rather than guessing an index."""
+async def _card_frame(page, patterns: list, timeout: float = 45.0):
+    """Find the gateway frame that actually CONTAINS the card fields.
+
+    Matching on URL alone returns the wrong frame for two reasons, and the last
+    run hit both: it reported "the form at .../embedded/checkout_load has:
+    nothing".
+
+    The frame EXISTS before its fields do. checkout_load is the container the
+    gateway then renders into, so reading it the instant its URL matches gives
+    an empty document. And Secure Acceptance nests -- the frame carrying the
+    matching URL may be the parent of the one holding the inputs.
+
+    So keep looking, through children too, until a frame has real inputs. If the
+    time runs out, return the best match anyway so the caller can report what it
+    did see rather than just "nothing appeared".
+    """
     loop = asyncio.get_event_loop()
     deadline = loop.time() + timeout
+    best = None
     while loop.time() < deadline:
-        for fr in page.frames:
-            url = (fr.url or "").lower()
-            if any(str(p).lower() in url for p in patterns):
-                return fr
-        await asyncio.sleep(0.4)
-    return None
+        cands = [f for f in page.frames
+                 if any(str(p).lower() in (f.url or "").lower() for p in patterns)]
+        for f in list(cands):
+            try:
+                cands.extend(f.child_frames)
+            except Exception:
+                pass
+        for f in cands:
+            best = best or f
+            try:
+                n = await f.eval_on_selector_all(
+                    "input:not([type=hidden]), select", "els => els.length")
+            except Exception:
+                continue
+            if n:
+                return f
+        await asyncio.sleep(0.6)
+    return best
+
+
+async def _reach_payment_step(page, cfg, method: str) -> str:
+    """Walk checkout far enough that the card form is asked to render.
+
+    The gateway does not draw its form until its payment method is SELECTED --
+    Magento's checkout shows a list and renders the chosen one. The script was
+    waiting for a form nothing had asked for. It also has to get past the
+    delivery step first, which is where the other account stalled.
+
+    Best-effort throughout: a store that shows payment immediately just finds
+    nothing to click, and that is a success, not a failure.
+    """
+    # Delivery method, then Next. Some themes preselect; clicking a radio that
+    # is already chosen is harmless.
+    try:
+        radio = page.locator(cfg["sel"]["ship_method"]).first
+        if await radio.count() and await radio.is_visible():
+            await radio.click(timeout=6000)
+            await page.wait_for_timeout(1500)
+    except Exception:
+        pass
+    await _click_when_ready(page, cfg["sel"]["continue"], timeout=12000)
+    await _settle(page, timeout=25000)
+    await _dismiss_overlays(page)
+
+    # Now choose the card method itself.
+    picked = False
+    for sel in ("input[value='%s']" % method, "#%s" % method,
+                "input[id*='%s']" % method.split("_")[-1]):
+        try:
+            el = page.locator(sel).first
+            if await el.count():
+                await el.scroll_into_view_if_needed(timeout=5000)
+                await el.click(timeout=8000, force=True)
+                picked = True
+                break
+        except Exception:
+            continue
+    await page.wait_for_timeout(2500)
+    return "" if picked else "payment method %r was not selectable" % method
 
 
 async def _dismiss_overlays(page) -> None:
@@ -444,15 +511,21 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
         await _dismiss_overlays(page)
         await page.wait_for_timeout(cfg["settle_ms"])   # checkout is a slow SPA
 
+        step = "payment step"
+        note = await _reach_payment_step(page, cfg, cfg["method"])
+
         step = "card form"
         frame = await _card_frame(page, cfg["frame_patterns"])
         if frame is not None:
             # Before a single character of the card is typed.
             _assert_frame_allowed(frame.url, cfg["guards"])
         if frame is None:
-            return None, ("card form: the gateway iframe never appeared. The account "
-                          "may have stalled earlier in checkout (address or delivery "
-                          "step) -- run with --headed to watch it.")
+            urls = ", ".join(sorted({(f.url or "").split("?")[0][:70]
+                                     for f in page.frames if f.url})) or "none"
+            return None, ("card form: no gateway frame appeared. %s. Checkout is at "
+                          "%s and the page holds these frames: %s"
+                          % (note or "payment method selected",
+                             (page.url or "?").split("?")[0], urls))
 
         card = cfg["card"]
         # Documented selectors first, then whatever the real form actually has.
@@ -538,6 +611,7 @@ async def run(args) -> int:
         "card_sel": _card_selectors(prof),
         "card": card,
         "guards": guards,
+        "method": args.gateway_code or "",
         "search_url": lambda term: base + "/catalogsearch/result/?q=%s" % term,
         "product_url": lambda pid: base + "/catalog/product/view/id/%s" % pid,
         "sel": {
@@ -549,6 +623,12 @@ async def run(args) -> int:
                            "button[title*='Add to Basket' i], button.tocart",
             "result_link": "a.product-item-link, .product-item-info a.product, "
                            "li.product-item a.product-item-photo",
+            "ship_method": ".table-checkout-shipping-method input[type=radio], "
+                           "input[name='ko_unique_1'], "
+                           "#checkout-shipping-method-load input[type=radio]",
+            "continue": "button[data-role='opc-continue'], button.continue, "
+                        "button.button.action.continue, "
+                        "button[title*='Next' i], button[title*='Continue' i]",
             "place_order": "button[title*='Place Order' i], button.checkout, "
                            "button[data-role='review-save']",
         },
@@ -563,6 +643,8 @@ async def run(args) -> int:
             for i, row in enumerate(todo, 1):
                 user = (row.get("username") or "").strip()
                 print("  [%d/%d] %-32s " % (i, len(todo), user), end="", flush=True)
+                cfg["method"] = ((row.get("payment_method") or "").strip()
+                                 or cfg["method"])
                 token, note = await enrol_one(browser, row, cfg)
                 if token:
                     results[user.lower()] = token
@@ -601,6 +683,9 @@ def main() -> int:
     p.add_argument("--hosted", default="", help="comma-separated card method substrings")
     p.add_argument("--settle-ms", type=int, default=6000,
                    help="pause after checkout loads before looking for the card form")
+    p.add_argument("--gateway-code", default="",
+                   help="payment method code to select at checkout when the row "
+                        "does not name one")
     p.add_argument("--card", default="success",
                    help="which of the gateway's published test cards to use "
                         "(success, decline, threeds, mastercard, amex - depends on gateway)")
