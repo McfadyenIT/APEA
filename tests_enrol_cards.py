@@ -149,6 +149,27 @@ check("the card comes from the knowledge base", "_check_safeguards" in src
 check("the original file is backed up before it is rewritten",
       "shutil.copyfile" in src)
 
+# --- appended: choosing among the gateway's published cards ------------------
+print()
+print("the test card can be chosen, but only from the knowledge base")
+MULTI = dict(SANDBOX)
+MULTI["test_cards"] = {
+    "success": {"number": "4111111111111111", "cvc": "123"},
+    "decline": {"number": "4000000000000002", "cvc": "123"},
+}
+check("the default is the success card",
+      E._check_safeguards(MULTI, "https://s.example", False)["number"]
+      == "4111111111111111")
+check("a named card is honoured",
+      E._check_safeguards(MULTI, "https://s.example", False, "decline")["number"]
+      == "4000000000000002")
+expect_exit("an unknown card name is refused, and lists what exists",
+            lambda: E._check_safeguards(MULTI, "https://s.example", False, "nosuch"),
+            "available")
+src2 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("there is no way to pass a raw card number on the command line",
+      "--card-number" not in src2 and "card_number=" not in src2)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

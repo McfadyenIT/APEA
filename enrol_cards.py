@@ -102,13 +102,24 @@ def _gateway_profile(kb: dict, gateway: str) -> dict:
     return {}
 
 
-def _check_safeguards(prof: dict, base_url: str, allow_unknown_card: bool) -> dict:
+def _check_safeguards(prof: dict, base_url: str, allow_unknown_card: bool,
+                      card_name: str = "success") -> dict:
     """Refuse to run outside the conditions the knowledge base already recorded
     for driving a card form. These were written down BEFORE anything was built
-    and they are the reason this script is safe to run unattended."""
+    and they are the reason this script is safe to run unattended.
+
+    card_name picks one of the gateway's published test cards. A merchant's
+    sandbox may not accept every brand's canonical number, so the choice has to
+    be available -- but only from the KB list, never a number typed on the
+    command line.
+    """
     guards = (prof.get("safeguards") or {})
     cards = (prof.get("test_cards") or {})
-    card = cards.get("success") or (list(cards.values())[0] if cards else None)
+    card = cards.get(card_name)
+    if card is None and card_name != "success":
+        raise SystemExit("no test card named %r for this gateway -- available: %s"
+                         % (card_name, ", ".join(sorted(cards)) or "none"))
+    card = card or cards.get("success") or (list(cards.values())[0] if cards else None)
     if not card:
         raise SystemExit("no sandbox test card in the knowledge base for this gateway "
                          "-- refusing to prompt for a real one")
@@ -298,7 +309,7 @@ async def run(args) -> int:
     prof = _gateway_profile(kb, args.gateway)
     if not prof:
         raise SystemExit("no knowledge-base profile matches gateway %r" % args.gateway)
-    card = _check_safeguards(prof, args.base_url, args.allow_unknown_card)
+    card = _check_safeguards(prof, args.base_url, args.allow_unknown_card, args.card)
     guards = prof.get("safeguards") or {}
 
     src = Path(args.csv)
@@ -315,6 +326,8 @@ async def run(args) -> int:
             seen.add(u)
             todo.append(r)
 
+    print("using the %r sandbox card (ending %s) from the knowledge base"
+          % (args.card, str(card.get("number", ""))[-4:]))
     print("%d row(s), %d account(s) needing a token" % (len(rows), len(todo)))
     if not todo:
         print("nothing to do -- every card account already carries one")
@@ -391,6 +404,9 @@ def main() -> int:
     p.add_argument("--hosted", default="", help="comma-separated card method substrings")
     p.add_argument("--settle-ms", type=int, default=6000,
                    help="pause after checkout loads before looking for the card form")
+    p.add_argument("--card", default="success",
+                   help="which of the gateway's published test cards to use "
+                        "(success, decline, threeds, mastercard, amex - depends on gateway)")
     p.add_argument("--headed", action="store_true", help="show the browser (use when tuning)")
     p.add_argument("--allow-unknown-card", action="store_true",
                    help=argparse.SUPPRESS)
