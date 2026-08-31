@@ -28,9 +28,9 @@ sandbox host only, no real PAN, never logged, never written to disk.
 
 USAGE
 -----
-    python enrol_cards.py --csv apea_mixed_pool_10.csv \\
+    python enrol_cards.py --csv apea_enrol_pool_10.csv \\
                           --base-url https://mcstaging.radwell.eu/uk \\
-                          --base-url https://store.example/uk
+                          --headed
 
 Accounts that already carry a token are skipped, so re-running costs nothing and
 a partial failure can simply be re-run.
