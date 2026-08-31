@@ -207,10 +207,14 @@ check("an unrelated field classifies as nothing",
 print()
 print("the page-settle helper never waits for the network to go quiet")
 src3 = io.open("enrol_cards.py", encoding="utf-8").read()
-body = src3.split("async def _settle")[1].split("async def")[0]
-check("_settle does not use networkidle", "networkidle" not in body)
-check("login does not use networkidle either",
-      "networkidle" not in src3.split("step = \"login\"")[1][:900])
+# Check the CODE, not the prose. _settle's docstring names networkidle in order
+# to explain why it is wrong, so a plain substring test fails on its own
+# explanation -- which is what happened the first time this was written.
+check("nothing waits on networkidle anywhere",
+      'wait_for_load_state("networkidle"' not in src3
+      and "wait_for_load_state('networkidle'" not in src3)
+check("_settle waits for the document instead",
+      'wait_for_load_state("domcontentloaded"' in src3)
 
 print()
 print("the product comes from the data file")
