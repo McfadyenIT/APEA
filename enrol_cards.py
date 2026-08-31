@@ -537,10 +537,26 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
     await _settle(page, timeout=25000)
     await _dismiss_overlays(page)
 
+    # The payment section is drawn after the step transition, so give it time to
+    # exist before deciding it does not.
+    try:
+        await page.locator(
+            "input[type=radio][name*='payment'], input[type=radio][value*='_'], "
+            ".payment-method, [id*='payment-method']"
+        ).first.wait_for(state="visible", timeout=30000)
+    except Exception:
+        pass
+    await page.wait_for_timeout(1500)
+
     # Now choose the card method itself.
     picked = False
-    for sel in ("input[value='%s']" % method, "#%s" % method,
-                "input[id*='%s']" % method.split("_")[-1]):
+    _last = method.split("_")[-1]
+    for sel in ("input[value='%s']" % method,
+                "#%s" % method,
+                "input[id*='%s']" % _last,
+                "input[value*='%s']" % _last,
+                "label:has-text('Credit')", "label:has-text('Debit')",
+                "label:has-text('Card')"):
         try:
             el = page.locator(sel).first
             if await el.count():
@@ -551,6 +567,26 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
         except Exception:
             continue
     await page.wait_for_timeout(2500)
+
+    if not picked:
+        # Ask the page what payment options it HAS. Three selectors in a row have
+        # now been guessed from assumed markup; the page can just answer.
+        try:
+            _opts = await page.eval_on_selector_all(
+                "input[type=radio], .payment-method, [data-role*='payment']",
+                """els => els.filter(e => e.offsetParent).map(e => {
+                     const v = e.getAttribute('value') || '';
+                     const i = e.id || '';
+                     const t = (e.closest('label,.payment-method')?.innerText || '')
+                                 .trim().split('\n')[0];
+                     return [v, i, t].filter(Boolean).join(' | ');
+                   }).filter(Boolean).slice(0, 12)""")
+        except Exception:
+            _opts = []
+        _pay_note = ("payment options on the page: %s"
+                     % (" ;; ".join(_opts) or "none visible"))
+    else:
+        _pay_note = ""
     if picked:
         return "address: %s%s" % (filled or "none needed",
                                   ("; " + _step_note) if _step_note else "")
@@ -558,8 +594,8 @@ async def _reach_payment_step(page, cfg, method: str) -> str:
         # The method being unselectable is a SYMPTOM when the page never left
         # the delivery step -- report the cause, not the thing downstream of it.
         return "%s (so the payment section never rendered)" % _step_note
-    return ("payment method %r was not selectable; address: %s"
-            % (method, filled or "none needed"))
+    return ("payment method %r was not selectable. %s"
+            % (method, _pay_note))
 
 
 async def _dismiss_overlays(page) -> None:

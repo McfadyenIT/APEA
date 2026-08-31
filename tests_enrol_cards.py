@@ -415,6 +415,24 @@ check("the visible buttons are listed", "Visible buttons:" in src12)
 check("and the payment method is not blamed for it",
       "so the payment section never rendered" in src12)
 
+# --- appended: the payment step's own markup ---------------------------------
+print()
+print("the payment section is waited for before it is judged missing")
+src13 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("a payment control is waited for",
+      "input[type=radio][name*='payment']" in src13)
+check("with a real timeout, not a fixed sleep", "timeout=30000" in src13)
+
+print()
+print("an unselectable method reports the options that DO exist")
+check("the page is asked what it has", "payment options on the page" in src13)
+check("value, id and label text are all reported",
+      "getAttribute('value')" in src13 and "closest('label" in src13)
+check("label text is tried as a selector too",
+      "label:has-text('Credit')" in src13)
+check("a partial value match is tried before giving up",
+      "input[value*='%s']" in src13)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
