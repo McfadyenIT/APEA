@@ -334,6 +334,40 @@ check("the removal loop is bounded, not while-true",
 check("a checkout stuck on a spinner says so, and says why",
       "CHECKOUT NEVER FINISHED LOADING" in src9)
 
+# --- appended: a gateway this cannot enrol must SAY so -----------------------
+print()
+print("rows are classified into enrol / skip / cannot")
+KB2 = {"cybersource": SANDBOX}
+HOSTED2 = ["cybersource", "paradoxlabs", "stripe", "paypal"]
+
+def _act(row):
+    return E._classify_row(row, HOSTED2, KB2)[0]
+
+check("a card row with no token is enrolled",
+      _act({"payment_method": "paradoxlabs_cybersource", "payment_token": ""})
+      == "enrol")
+check("a row that already has a token is skipped",
+      _act({"payment_method": "paradoxlabs_cybersource", "payment_token": "abc"})
+      == "skip")
+check("net terms is skipped, it needs nothing",
+      _act({"payment_method": "netterms", "payment_token": ""}) == "skip")
+check("PayPal is reported, NOT silently skipped",
+      _act({"payment_method": "paypal_express", "payment_token": ""}) == "cannot")
+check("Klarna likewise", _act({"payment_method": "klarna", "payment_token": ""})
+      == "cannot")
+check("a gateway with no KB profile is reported, not attempted",
+      _act({"payment_method": "worldpay_hosted", "payment_token": ""}) == "skip")
+
+reason = E._classify_row({"payment_method": "paypal_express", "payment_token": ""},
+                         HOSTED2, KB2)[1]
+check("the PayPal reason explains why, and what to do instead",
+      "sign in" in reason and "offline" in reason)
+
+src10 = io.open("enrol_cards.py", encoding="utf-8").read()
+check("skipped gateways are printed, not swallowed", "SKIPPED" in src10)
+check("a run that enrolled nothing but skipped something exits non-zero",
+      "return 0 if not cannot else 1" in src10)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

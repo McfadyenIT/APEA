@@ -166,6 +166,40 @@ def _card_selectors(prof: dict) -> dict:
             or prof.get("payment_element_fields") or {})
 
 
+# Gateways where the shopper LEAVES the store to authorise. There is no card
+# form to fill: the flow redirects to the provider, the shopper signs in to an
+# account there, and the store gets an agreement back. Nothing this script does
+# applies, and pretending otherwise would burn an order to find that out.
+_REDIRECT_GATEWAYS = ("paypal", "klarna", "amazon", "sofort", "ideal",
+                      "bancontact", "giropay", "afterpay", "clearpay", "affirm")
+
+
+def _classify_row(row: dict, hosted: list, kb: dict) -> tuple:
+    """What should happen to this row? Returns (action, reason).
+
+    Three outcomes, and the difference matters. An offline payer needs nothing
+    and its silence is correct. A card payer needs enrolling. A REDIRECT gateway
+    needs a person and must say so -- it was previously skipped with no message
+    at all, which reads exactly like "handled".
+    """
+    method = (row.get("payment_method") or "").strip()
+    low = method.lower()
+    if not method:
+        return ("skip", "no payment method declared")
+    if (row.get("payment_token") or "").strip():
+        return ("skip", "already has a token")
+    if any(g in low for g in _REDIRECT_GATEWAYS):
+        return ("cannot", "%s sends the shopper to the provider to sign in; there is "
+                          "no card form to fill. Enrol it by hand, or have those "
+                          "accounts pay by an offline method." % method)
+    if not any(h in low for h in hosted):
+        return ("skip", "%s needs no card" % method)
+    if not _gateway_profile(kb, method):
+        return ("cannot", "no knowledge-base profile for %s, so its card form and "
+                          "test cards are unknown" % method)
+    return ("enrol", "")
+
+
 def _needs_token(row: dict, hosted: list) -> bool:
     """An account needs enrolling when it DECLARES a card method and has no
     token. A row paying by an offline method needs nothing and is left alone."""
@@ -785,19 +819,29 @@ async def run(args) -> int:
 
     hosted = [str(h).lower() for h in (args.hosted or "cybersource,paradoxlabs,stripe,"
                                        "braintree,adyen,authorizenet").split(",")]
-    todo, seen = [], set()
+    todo, seen, cannot = [], set(), []
     for r in rows:
         u = (r.get("username") or "").strip().lower()
-        if u and u not in seen and _needs_token(r, hosted):
-            seen.add(u)
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        action, reason = _classify_row(r, hosted, kb)
+        if action == "enrol":
             todo.append(r)
+        elif action == "cannot":
+            cannot.append(((r.get("username") or "").strip(), reason))
 
     print("using the %r sandbox card (ending %s) from the knowledge base"
           % (args.card, str(card.get("number", ""))[-4:]))
     print("%d row(s), %d account(s) needing a token" % (len(rows), len(todo)))
+    for user, reason in cannot:
+        # Never silent. A row that declared a gateway and got no attempt has to
+        # say why, or the run reads as "all handled" when it was not.
+        print("  SKIPPED %-28s %s" % (user, reason))
     if not todo:
-        print("nothing to do -- every card account already carries one")
-        return 0
+        print("nothing to enrol" if cannot
+              else "nothing to do -- every card account already carries one")
+        return 0 if not cannot else 1
 
     base = args.base_url.rstrip("/")
     cfg = {
