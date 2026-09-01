@@ -126,6 +126,21 @@ check("it names the rows being overridden", "overridden.map(_escHtml)" in UI)
 check("and tells the operator the remedy",
       "set the payment method to" in UI and "{{payment_method}}" in UI)
 
+# --- appended: the file decides the payment method ---------------------------
+print()
+print("uploading the file sets the payment method to match it")
+_fn = UI.split("function applyMethodFromData()")[1].split("function applyPayTemplate")[0]
+check("several methods in the file -> read it per row",
+      "'{{payment_method}}' : declared[0]" in _fn)
+check("one method -> use that method, which reads more plainly",
+      "declared.length > 1 ?" in _fn)
+check("a hand-typed choice is never overwritten",
+      "cur !== el.dataset.fromData" in _fn)
+check("what it did is explained, not silent", "Set from your data file" in _fn)
+check("it runs when the file validates, before the template",
+      "applyMethodFromData();     // the file decides the method" in UI)
+check("the note element exists to explain it", 'id="ovPayMethodNote"' in UI)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

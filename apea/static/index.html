@@ -309,6 +309,7 @@
                  actually used, but a store may accept a method the recording
                  never exercised, so typing must still work. -->
             <input id="ovPayMethod" type="text" list="payMethodList" placeholder="recorded" autocomplete="off">
+          <div id="ovPayMethodNote" class="muted" style="font-size:12px;margin-top:4px"></div>
             <datalist id="payMethodList"></datalist>
           </div>
           <div><label>Data sharing (threads)</label>
@@ -1173,6 +1174,35 @@ function renderPaymentMethods(pay){
   applyPayTemplate();
   renderReadiness();
 }
+// The data file already says how each row pays. Reading that off the file and
+// setting the box to match removes the trap this replaced: a fixed method in
+// the box silently overrides every row, and the run then reports the FILE as
+// wrong -- "no card for testbinitha6" for an account whose row says netterms.
+function applyMethodFromData(){
+  const el = $('#ovPayMethod');
+  if(!el || !ACCOUNTS) return;
+  const declared = (ACCOUNTS.declared_methods || []).filter(Boolean);
+  if(!declared.length) return;
+  const cur = (el.value || '').trim();
+  // Overwrite only what WE put there. A hand-typed choice is never clobbered.
+  if(cur && cur !== el.dataset.fromData) return;
+  // Several methods in the file -> read it per row. One method -> use it, which
+  // is the same thing and reads more plainly in the box.
+  const want = declared.length > 1 ? '{{payment_method}}' : declared[0];
+  if(cur === want) return;
+  el.value = want;
+  el.dataset.fromData = want;
+  const note = $('#ovPayMethodNote');
+  if(note){
+    note.innerHTML = declared.length > 1
+      ? 'Set from your data file, which asks for '
+        + declared.map(_escHtml).join(' and ')
+        + '. <code>{{payment_method}}</code> makes each account pay the way its own row says.'
+      : 'Set from your data file — every row asks for <code>'
+        + _escHtml(declared[0]) + '</code>.';
+  }
+}
+
 function applyPayTemplate(){
   const codeEl = $('#ovPayMethod'), addlEl = $('#ovPayAddl');
   if(!codeEl || !addlEl) return;
@@ -1542,6 +1572,7 @@ async function validateData(){
       +`<div class="d">${(r.messages||[]).join('<br>')}</div></div>`
       + enrolPanel();
     wireEnrol();
+    applyMethodFromData();     // the file decides the method, before the template
     applyPayTemplate();
     renderReadiness();
   }catch(e){ dataValid=false; if(out) out.innerHTML='<p class="muted">'+e.message+'</p>'; }
