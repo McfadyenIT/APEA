@@ -295,6 +295,13 @@
       <div class="row3">
         <div><label>Users</label><input id="ovUsers" type="number" placeholder="auto"></div>
         <div><label>Duration (seconds)</label><input id="ovDuration" type="number" placeholder="auto"></div>
+        <div><label>Orders per user</label>
+          <input id="ovOrders" type="number" min="0" placeholder="0 = run the duration">
+          <div class="muted" style="font-size:12px;margin-top:4px">Stops each user
+            after this many orders. Use <b>1</b> for a smoke test: one order each,
+            then the run ends — a duration cannot express that, it just loops
+            until the clock runs out.</div>
+        </div>
         <div><label>&nbsp;</label><button class="btn ghost" id="btnPreview" style="width:100%">Preview plan</button></div>
       </div>
       <details>
@@ -1665,6 +1672,7 @@ async function refreshPlan(alertOnErr){
     const body={test_type:$('#testType').value,
       expected_users:+$('#expectedUsers').value||0, peak_users:+$('#peakUsers').value||0};
     if($('#ovUsers').value) body.users=+$('#ovUsers').value;
+    if($('#ovOrders') && $('#ovOrders').value !== '') body.orders_per_user=+$('#ovOrders').value;
     if($('#ovDuration').value) body.duration_s=+$('#ovDuration').value;
     if($('#ovSpawn').value) body.spawn_rate=+$('#ovSpawn').value;
     if(uploads.testplan) body.testplan=uploads.testplan;   // Phase 2: drive SLA/think/load from the test plan

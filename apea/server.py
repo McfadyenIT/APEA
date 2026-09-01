@@ -219,6 +219,7 @@ class PlanReq(BaseModel):
     peak_users: Optional[int] = None
     users: Optional[int] = None
     duration_s: Optional[int] = None
+    orders_per_user: Optional[int] = None   # stop each user after N orders (0/None = run the duration)
     spawn_rate: Optional[float] = None
     url: Optional[str] = None
 
@@ -1631,6 +1632,7 @@ def save_script(req: SaveReq):
                     "expected_users": stored.get("users") or 100,
                     "users": req.users or stored.get("users"),
                     "duration_s": req.duration_s or stored.get("duration_s"),
+        "orders_per_user": int(req.orders_per_user or 0),
                     "workers": req.workers or stored.get("workers") or 1,
                     "recording_file": _rec_file,
                     "created_at": datetime.utcnow().isoformat(), "source_run": req.run_id}

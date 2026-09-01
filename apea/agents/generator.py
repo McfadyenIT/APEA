@@ -1094,6 +1094,12 @@ _PAYMENT_ADDL = __PAYMENT_ADDL__       # dict merged into paymentMethod.addition
 # column -- see _row_payment_method.
 _ADDL_IS_PER_USER = any(
     isinstance(v, str) and "{{" in v for v in (_PAYMENT_ADDL or {}).values())
+# Stop each user after this many completed orders. 0 = no cap, run for the
+# duration. Locust in this build has no --iterations, and a duration cannot
+# express "one order each": it loops until the clock runs out, so the count
+# depends on how fast the store happens to be that minute. A smoke test wants a
+# known number of orders, not a number discovered afterwards.
+_MAX_ORDERS_PER_USER = __MAX_ORDERS_PER_USER__
 _PARAM_MAP = __PARAM_MAP__             # {recorded field name: CSV column} generic parameterization
 _CORRELATIONS = __CORRELATIONS__       # JMeter-style extractor rules (capture from response, inject into request)
 # API-call GROUPS (recorded Taurus transactions) + per-group Percent Executions.
@@ -2061,6 +2067,14 @@ class WebsiteUser(HttpUser):
 __BROWSE_TASKS__
     @task(__CHECKOUT_W__)
     def checkout(self):
+        # Stop BEFORE starting another iteration, not after finishing one: a user
+        # that has already placed its orders should not add another basket to the
+        # store just to be told to stop.
+        if _MAX_ORDERS_PER_USER and getattr(self, "_orders_done", 0) >= _MAX_ORDERS_PER_USER:
+            from locust.exception import StopUser
+            _clog_annotate("this user placed its %d order(s) — stopping"
+                           % _MAX_ORDERS_PER_USER)
+            raise StopUser()
         self._order_placed = False
         self._txn_name, self._txn_t0 = None, None
         # Decide, once per iteration, which business groups run this time
@@ -2120,6 +2134,8 @@ __BROWSE_TASKS__
                 self._rest_checkout()       # robust, API-driven order
             finally:
                 self._txn_end(None if self._order_placed else "order not placed")
+        if self._order_placed:
+            self._orders_done = getattr(self, "_orders_done", 0) + 1
         elif not self._order_placed:
             # The recorded order step belongs to a group that the loop already
             # timed. Wrapping it again would double-count that group.
@@ -3539,6 +3555,7 @@ def _log_summary(environment, **kwargs):
         "__CAPTCHA_TOKEN__": repr(str(captcha_token or "")),
         "__CAPTCHA_FIELD__": repr(str(captcha_field or "")),
         "__EXTRA_HEADERS__": repr(extra_headers),
+        "__MAX_ORDERS_PER_USER__": repr(int((plan_cfg or {}).get("orders_per_user") or 0)),
         "__FORCED_PAYMENT__": repr(forced_payment),
         "__PAYMENT_METHOD_DETECTION_REASON__": (
             f"# Payment method will be selected dynamically at runtime based on:\n"
