@@ -1227,7 +1227,15 @@ function applyPayTemplate(){
   const codeEl = $('#ovPayMethod'), addlEl = $('#ovPayAddl');
   if(!codeEl || !addlEl) return;
   const code = (codeEl.value || '').trim();
-  const tpl = PAY_TEMPLATES[code];
+  // {{payment_method}} is not a gateway name, so a direct lookup finds nothing
+  // and the details box is left empty -- which silently removes the card
+  // details from a run that still has card rows in it. When the method is read
+  // per row, take the template from the card gateway the FILE names.
+  let tpl = PAY_TEMPLATES[code];
+  if(!tpl && code.indexOf('{{') > -1 && ACCOUNTS){
+    const fromFile = (ACCOUNTS.declared_methods || []).find(m => PAY_TEMPLATES[m]);
+    if(fromFile) tpl = PAY_TEMPLATES[fromFile];
+  }
   const note = $('#ovPayAddlNote');
   const cur = (addlEl.value || '').trim();
   // Overwrite only what WE put there. A hand-typed value is never clobbered.
@@ -1248,6 +1256,12 @@ function applyPayTemplate(){
   if(tpl && ours){
     addlEl.value = tpl;
     addlEl.dataset.filled = tpl;
+    if(note && code.indexOf('{{') > -1 && ACCOUNTS){
+      const fromFile = (ACCOUNTS.declared_methods || []).find(m => PAY_TEMPLATES[m]);
+      if(fromFile) note.innerHTML = 'Filled in for <b>' + _escHtml(fromFile)
+        + '</b> — the card gateway your data file names. Rows that pay another '
+        + 'way ignore these details.';
+    }
     const d = $('#ovPayDetails'); if(d) d.open = true;
     const s = $('#ovPaySummary');
     if(s) s.textContent = 'Payment token & CAPTCHA — needed for this card method';

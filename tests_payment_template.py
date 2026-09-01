@@ -147,3 +147,15 @@ check("the security code carries a default", "{{card_cvv|123}}" in _kb, True)
 check("the token deliberately does NOT", "{{payment_token|" not in _kb, True)
 check("the reason is recorded beside it",
       "a recording never carries" in _kb, True)
+
+# --- appended: a per-row method still needs the card details -----------------
+print()
+print("{{payment_method}} still fills in the card details")
+_ui = _io3.open("apea/static/index.html", encoding="utf-8").read()
+_fn = _ui.split("function applyPayTemplate()")[1].split("\nfunction ")[0]
+check("a placeholder method falls back to the file's gateway",
+      "code.indexOf('{{') > -1 && ACCOUNTS" in _fn, True)
+check("it picks the declared method that HAS a template",
+      "declared_methods || []).find(m => PAY_TEMPLATES[m])" in _fn, True)
+check("and says which gateway it used", "the card gateway your data file names" in _fn, True)
+check("the no-token gate still applies", "dataHasToken" in _fn, True)
