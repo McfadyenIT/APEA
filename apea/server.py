@@ -338,6 +338,36 @@ def _read_csv_rows(path: str):
     return headers, rows
 
 
+def _clear_tokens(path: str, usernames) -> int:
+    """Blank payment_token for the named accounts, keeping every other column.
+
+    Rewrites APEA's uploaded copy, never the operator's own file -- the path
+    comes from an earlier upload, and the operator's copy on disk is theirs.
+    """
+    want = {str(u).strip().lower() for u in (usernames or []) if str(u).strip()}
+    if not want or not path or not Path(path).exists():
+        return 0
+    with open(path, newline="", encoding="utf-8-sig", errors="ignore") as fh:
+        reader = csv.DictReader(fh)
+        fields = list(reader.fieldnames or [])
+        rows = list(reader)
+    tok = next((f for f in fields if (f or "").strip().lower() == "payment_token"), None)
+    user = next((f for f in fields if (f or "").strip().lower() == "username"), None)
+    if not tok or not user:
+        return 0
+    n = 0
+    for r in rows:
+        if (r.get(user) or "").strip().lower() in want and (r.get(tok) or "").strip():
+            r[tok] = ""
+            n += 1
+    if n:
+        with open(path, "w", newline="", encoding="utf-8") as fh:
+            w = csv.DictWriter(fh, fieldnames=fields)
+            w.writeheader()
+            w.writerows(rows)
+    return n
+
+
 def _account_summary(headers, rows) -> dict:
     """What the data file can actually support, as opposed to how many rows it has.
 
@@ -1080,6 +1110,7 @@ class ForgetTokensReq(BaseModel):
     base_url: Optional[str] = None
     username: Optional[str] = None          # one account
     usernames: Optional[List[str]] = None   # several; omit both to clear the store
+    data_csv: Optional[str] = None          # also blank the cells that would refill
 
 
 @app.post("/api/enrol-cards/forget")
@@ -1101,7 +1132,12 @@ def enrol_cards_forget(req: ForgetTokensReq):
         targets.append(req.username)
     if targets:
         n = sum(token_memory.forget(base, u) for u in targets)
-        return {"forgotten": n, "accounts": targets,
+        # Forgetting the memory is only half of it. If the data file still
+        # carries a token in its own cell, the next upload reads it straight
+        # back and nothing has changed -- the operator forgets, fetches, and
+        # gets the same token. Clear both, or neither is any use.
+        cleared = _clear_tokens(req.data_csv, targets) if req.data_csv else 0
+        return {"forgotten": n, "cleared": cleared, "accounts": targets,
                 "store": base or "(the only one known)"}
     n = token_memory.forget(base, "")
     return {"forgotten": n, "accounts": "all for this store",

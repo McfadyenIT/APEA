@@ -1566,6 +1566,11 @@ function enrolPanel(){
       + (ENROL_JOB ? '' : ' Your file already carries these tokens, so there '
           + 'is nothing to download — the button below appears only after a '
           + 'fetch, to hand back a file APEA has changed.')
+      // Until now there was no way to force a fresh token once the file
+      // carried one: forgetting the memory left the cell, and clearing the
+      // cell let the memory refill it. This does both.
+      + '<br><a href="#" id="btnFreshTokens">Capture fresh tokens instead</a>'
+      + ' — forgets these and empties the cells, so the next fetch starts clean.'
       + '</div>'
       + enrolDownload()
       + '</div>';
@@ -1610,7 +1615,35 @@ function enrolDownload(){
     + '</div>';
 }
 
+function wireFresh(){
+  const a = $('#btnFreshTokens'); if(!a) return;
+  a.onclick = async (e) => {
+    e.preventDefault();
+    const have = (ACCOUNTS && ACCOUNTS.with_token) || [];
+    if(!have.length) return;
+    a.textContent = 'Clearing…';
+    try{
+      const r = await api('/api/enrol-cards/forget', {
+        base_url: ($('#url') && $('#url').value || '').trim() || null,
+        usernames: have,
+        data_csv: uploads.data_csv || null,
+      });
+      // Re-validating redraws the panel, which will now show the Fetch button
+      // because those accounts no longer have a token anywhere.
+      await validateData();
+      const box = $('#enrolBox');
+      if(box) box.insertAdjacentHTML('beforeend',
+        '<div class="muted" style="margin-top:8px;color:#e6a700">Cleared '
+        + (r.cleared || 0) + ' token cell(s) and forgot ' + (r.forgotten || 0)
+        + ' saved token(s). Click Fetch card tokens to capture fresh ones.</div>');
+    }catch(err){
+      a.textContent = String(err.message || err);
+    }
+  };
+}
+
 function wireEnrol(){
+  wireFresh();
   const btn = $('#btnEnrol'); if(!btn) return;
   btn.onclick = async () => {
     const base = ($('#url') && $('#url').value || '').trim();
