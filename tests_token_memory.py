@@ -21,6 +21,20 @@ sys.path.insert(0, ".")
 
 from apea.agents import token_memory as TM  # noqa: E402
 
+# Point the store at a throwaway file BEFORE touching anything. This suite calls
+# forget(), and on the real store that destroys tokens someone just spent a
+# browser session capturing -- which is exactly what it did: a full test run
+# wiped a token the operator had captured minutes earlier, and the next upload
+# restored nothing. A test that can damage the thing it tests is a worse bug
+# than the one it was written to catch.
+import tempfile  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+_REAL_STORE = TM._STORE
+TM._STORE = Path(tempfile.mkdtemp(prefix="apea-tokmem-test-")) / "memory.json"
+assert TM._STORE != _REAL_STORE, "the test must not use the real store"
+assert not TM._STORE.exists(), "the test store must start empty"
+
 FAILURES = []
 
 
@@ -92,6 +106,12 @@ check("the restore is reported to the page", '"restored_tokens"' in srv)
 check("and the page says it out loud", "restored_tokens" in ui and "Put back" in ui)
 check("the store is recorded where it is unambiguous",
       '_LAST_TARGET["url"] = req.base_url' in srv)
+
+print()
+print()
+print("this suite cannot touch the real memory")
+check("it is using a throwaway store", str(TM._STORE) != str(_REAL_STORE))
+check("the real store was never opened", "apea-tokmem-test-" in str(TM._STORE))
 
 print()
 print("FAILURES: %d" % len(FAILURES))
