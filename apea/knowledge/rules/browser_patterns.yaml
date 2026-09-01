@@ -439,7 +439,14 @@ replay_profiles:
     # gateway so it can only be supplied; save:false stops a load run adding a new
     # stored card on every single order.
     template_extras:
-      cc_cid: "{{card_cvv}}"
+      # The default matters. APEA fills this template into the payment box for
+      # the operator, and a card_cvv column is very often blank -- it is the one
+      # value a recording never carries, because the shopper types it. Without a
+      # default the auto-filled template is one a run cannot honour, and the
+      # failure ("no value for card_cvv") reads as bad data rather than a
+      # template that was never complete. 123 is accepted by every sandbox card
+      # in this knowledge base; a per-account column still overrides it.
+      cc_cid: "{{card_cvv|123}}"
       save: false
     blockers:
       - "A card taken with save:false is NOT in the wallet. It keeps working for repeat orders because the token persists, but the checkout lists no stored card and discovery finds nothing. Tick save when capturing, or discovery has nothing to find."

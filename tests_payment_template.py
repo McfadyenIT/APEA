@@ -63,7 +63,7 @@ for code, want in (("paradoxlabs_cybersource", "card_id"),
 print("\nThe template points at CSV columns, so each user uses its own card")
 tpl = json.loads(template_for("paradoxlabs_cybersource"))
 check("the token is a column reference", tpl["card_id"], "{{payment_token}}")
-check("so is the CVV", tpl["cc_cid"], "{{card_cvv}}")
+check("so is the CVV", tpl["cc_cid"], "{{card_cvv|123}}")
 check("save is off, so a load run does not store a card per order",
       tpl["save"], False)
 
@@ -137,3 +137,13 @@ check("and no longer uses that phrase in the panel",
 print()
 print("FAILURES:", len(fails))
 sys.exit(1 if fails else 0)
+
+# --- appended: the auto-filled template must be one a run can honour ---------
+print()
+print("the template APEA fills in works without hand-editing")
+import io as _io3
+_kb = _io3.open("apea/knowledge/rules/browser_patterns.yaml", encoding="utf-8").read()
+check("the security code carries a default", "{{card_cvv|123}}" in _kb, True)
+check("the token deliberately does NOT", "{{payment_token|" not in _kb, True)
+check("the reason is recorded beside it",
+      "a recording never carries" in _kb, True)
