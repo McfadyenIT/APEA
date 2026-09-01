@@ -151,12 +151,12 @@ check("the note element exists to explain it", 'id="ovPayMethodNote"' in UI)
 print()
 print("the enrolment controls are labelled")
 _panel = UI.split("function enrolPanel()")[1].split("function wireEnrol")[0]
-check("the company box has a visible label", "Company name" in _panel)
-check("the label wraps its input, so clicking it focuses the box",
-      "<label" in _panel and "enrolCompany" in _panel)
-check("the checkbox is labelled too", "Show the browser" in _panel)
-check("what the company name is FOR is explained",
-      "typed into checkout" in _panel and "required" in _panel)
+# The company field was removed on request -- the data file carries it, and
+# both generators now add the column. Its labelling checks went with it; the
+# rule they encoded (a control must say what it is) still applies to what is
+# left on the panel.
+check("the checkbox is labelled", "Show the browser" in _panel)
+check("the button says what it does", "Fetch card tokens" in _panel)
 
 # --- appended: the warning has to be actionable, not just correct ------------
 print()
@@ -211,6 +211,52 @@ check("the upload's random prefix is stripped, so it saves over the original",
 check("the page offers the link when the run finishes", "enrolDl" in UI)
 check("and says plainly that the file on disk is now out of date",
       "does not have these tokens" in UI)
+
+# --- appended: three things the operator asked for ---------------------------
+print()
+print("the panel stays after the tokens arrive")
+_p = UI.split("function enrolPanel()")[1].split("function wireEnrol")[0]
+check("a success state exists", "Card tokens ready for" in _p)
+check("it names the accounts that have one", "have.map(_escHtml)" in _p)
+check("it only vanishes when no card is wanted at all",
+      "if(!wantsCard) return ''" in _p)
+check("the reason is recorded", "Vanishing on success reads as a glitch" in _p)
+
+print()
+print("the company field is gone, because the data file carries it")
+check("no company input on the page", "enrolCompany" not in UI)
+check("a company is still sent", "company: 'APEA Load Test'" in UI)
+check("and why is written down", "data file's own column" in UI)
+
+print()
+print("'Before you run' sits with the validation it is about")
+_i = UI.index('id="validateOut"')
+_r = UI.index('id="readiness"')
+check("readiness follows the validation result", _r > _i and (_r - _i) < 500)
+check("there is only one readiness panel", UI.count('id="readiness"') == 1)
+
+# --- appended: three things the operator asked for ---------------------------
+print()
+print("the panel stays after the tokens arrive")
+_p = UI.split("function enrolPanel()")[1].split("function wireEnrol")[0]
+check("a success state exists", "Card tokens ready for" in _p)
+check("it names the accounts that have one", "have.map(_escHtml)" in _p)
+check("it only vanishes when no card is wanted at all",
+      "if(!wantsCard) return ''" in _p)
+check("the reason is recorded", "Vanishing on success reads as a glitch" in _p)
+
+print()
+print("the company field is gone, because the data file carries it")
+check("no company input on the page", "enrolCompany" not in UI)
+check("a company is still sent", "company: 'APEA Load Test'" in UI)
+check("and why is written down", "data file's own column" in UI)
+
+print()
+print("'Before you run' sits with the validation it is about")
+_i = UI.index('id="validateOut"')
+_r = UI.index('id="readiness"')
+check("readiness follows the validation result", _r > _i and (_r - _i) < 500)
+check("there is only one readiness panel", UI.count('id="readiness"') == 1)
 
 print()
 print("FAILURES: %d" % len(FAILURES))

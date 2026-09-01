@@ -253,6 +253,10 @@
       <input type="file" id="upData" accept=".csv">
       <div class="muted" id="sumData"></div>
       <div id="validateOut"></div>
+      <!-- "Before you run" sits with the validation it is about. It used to
+           live far down the page, beside the run controls, so the file's
+           problems and the file's verdict were nowhere near each other. -->
+      <div id="readiness" style="margin-top:10px"></div>
       <label style="margin-top:10px">User credentials CSV
         <span class="muted">— optional if username/password are already in the data CSV</span></label>
       <input type="file" id="upUsers" accept=".csv">
@@ -413,7 +417,6 @@
 
       <div id="planPreview" class="hidden" style="margin-top:14px"></div>
       <!-- What APEA resolved, so nobody has to hunt for what is missing. -->
-      <div id="readiness" style="margin-top:14px"></div>
       <div class="btns">
         <button class="btn" id="btnRun">▶ Generate &amp; Run Test</button>
       </div>
@@ -1488,7 +1491,20 @@ function enrolPanel(){
   // Only meaningful when a card gateway is actually in play.
   const wantsCard = /cybersource|paradoxlabs|stripe|braintree|adyen|authorizenet/i
                       .test(method) || /\{\{/.test(method);
-  if(!need.length || !wantsCard) return '';
+  if(!wantsCard) return '';
+  // Vanishing on success reads as a glitch: the operator watched two tokens
+  // arrive and then the whole panel went. Stay, and say what happened -- the
+  // disappearance WAS the confirmation, which is no way to confirm anything.
+  if(!need.length){
+    if(!have.length) return '';
+    return '<div class="rec" id="enrolBox" style="border-left-color:#2ecc71">'
+      + '<b>&#10003; Card tokens ready for ' + have.length + ' account'
+      + (have.length === 1 ? '' : 's') + '</b>'
+      + '<div class="d" style="margin-top:6px">' + have.map(_escHtml).join(', ')
+      + '. Nothing to fetch — these rows can pay by card. Clear a '
+      + '<code>payment_token</code> cell if you want to capture a fresh one.</div>'
+      + '</div>';
+  }
   return '<div class="rec" id="enrolBox" style="border-left-color:#e6a700">'
     + '<b>&#128179; ' + need.length + ' account'
     + (need.length === 1 ? '' : 's') + ' still need a card token</b>'
@@ -1502,20 +1518,11 @@ function enrolPanel(){
     + '<button id="btnEnrol" class="btn">&#9654; Fetch card tokens</button>'
     // An unlabelled box pre-filled with text reads as a caption, not a field.
     // This one is typed into the checkout's required Company field, so say so.
-    + '<label style="display:flex;flex-direction:column;gap:3px;font-size:11px;'
-    +   'letter-spacing:.04em;text-transform:uppercase;opacity:.75">Company name'
-    +   '<input id="enrolCompany" type="text" placeholder="company name" '
-    +     'value="APEA Load Test" style="width:190px;text-transform:none;'
-    +     'letter-spacing:normal;font-size:13px">'
-    + '</label>'
     + '<label style="display:flex;align-items:center;gap:6px;font-size:12px;'
     +   'padding-bottom:6px">'
     +   '<input id="enrolHeaded" type="checkbox" checked> Show the browser</label>'
     + '</div>'
-    + '<div class="d" style="margin-top:6px;font-size:12px;opacity:.7">'
-    +   'The company name is typed into checkout&rsquo;s Company field, which this '
-    +   'store marks required. Change it if your test data needs a different one.'
-    + '</div>'
+
     + '<pre id="enrolLog" style="display:none;margin-top:10px;max-height:220px;'
     +   'overflow:auto;font-size:12px;background:#0b1220;padding:10px;'
     +   'border-radius:6px;white-space:pre-wrap"></pre>'
@@ -1536,7 +1543,9 @@ function wireEnrol(){
       const r = await api('/api/enrol-cards', {
         data_csv: uploads.data_csv,
         base_url: base,
-        company: ($('#enrolCompany') && $('#enrolCompany').value) || 'APEA Load Test',
+        // Company comes from the data file's own column now, so there is no
+        // field to read. The server default only covers a file without one.
+        company: 'APEA Load Test',
         headed: !!($('#enrolHeaded') && $('#enrolHeaded').checked)
       });
       if(r.error){ log.textContent = r.error; btn.disabled = false;
