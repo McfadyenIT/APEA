@@ -573,7 +573,18 @@ async function uploadFile(kind, inputId, sumId, field){
     const s = d.summary||{};
     if(s.error) sum.innerHTML = '⚠️ '+s.error;
     else if(kind==='users') sum.innerHTML = `✅ ${f.name} · ${s.rows||0} credential row(s)`;
-    else if(kind==='data') sum.innerHTML = `✅ ${f.name} · ${s.keywords||0} keyword(s), ${s.product_ids||0} product id(s)`;
+    else if(kind==='data'){
+      sum.innerHTML = `✅ ${f.name} · ${s.keywords||0} keyword(s), ${s.product_ids||0} product id(s)`;
+      // Say it, every time. A file that quietly gains a value nobody typed is
+      // worse than one that is missing it -- the reader has to be able to trust
+      // that what they see is what they supplied.
+      const put = s.restored_tokens || [];
+      if(put.length) sum.innerHTML +=
+        `<div class="muted" style="margin-top:4px;color:#e6a700">&#8635; Put back `
+        + `${put.length} card token${put.length === 1 ? '' : 's'} remembered from an `
+        + `earlier enrolment: ${put.map(_escHtml).join(', ')}. Only empty cells were `
+        + `filled — clear one to capture a fresh token.</div>`;
+    }
     else sum.innerHTML = `✅ ${f.name} · ${s.endpoints||0} endpoint(s) from ${s.source||'recording'}`+(s.base_url?` · ${s.base_url}`:'');
   }catch(e){ uploads[field]=null; sum.innerHTML='⚠️ '+e.message; }
 }

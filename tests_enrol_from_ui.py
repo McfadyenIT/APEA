@@ -171,19 +171,6 @@ _rr = UI.split("function renderReadiness()")[1].split("\n}")[0]
 check("it is wired AFTER the panel is written, not inside the statement",
       _rr.index("el.innerHTML") < _rr.index("btnUseFileMethod\x27"))
 
-# --- appended: the warning has to be actionable, not just correct ------------
-print()
-print("the override warning carries a button that applies the fix")
-check("the button exists in the warning", "btnUseFileMethod" in UI)
-check("it sets the box to read the file", "pm.value = '{{payment_method}}'" in UI)
-check("it marks the value as ours, so auto-fill keeps working",
-      "pm.dataset.fromData = '{{payment_method}}'" in UI)
-check("it re-renders so the warning clears itself",
-      "applyPayTemplate();\n    renderReadiness();" in UI)
-_rr = UI.split("function renderReadiness()")[1].split("\n}")[0]
-check("it is wired AFTER the panel is written, not inside the statement",
-      _rr.index("el.innerHTML") < _rr.index("btnUseFileMethod\x27"))
-
 # --- appended: the two copies must stop drifting apart ------------------------
 print()
 print("enrolment hands the updated file back")

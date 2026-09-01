@@ -998,6 +998,7 @@ async def run(args) -> int:
         return 0 if not cannot else 1
 
     base = args.base_url.rstrip("/")
+    req_base_url = base
     cfg = {
         "login_url": base + "/customer/account/login/",
         "checkout_url": base + "/checkout/",
@@ -1077,6 +1078,19 @@ async def run(args) -> int:
     if not results:
         print("\nno tokens captured -- nothing written")
         return 1
+
+    # Remember them before touching the file. A browser never tells a page where
+    # an uploaded file came from, so the operator's own copy cannot be updated
+    # from here -- the memory is what makes a lost file stop meaning a lost token.
+    try:
+        from apea.agents import token_memory
+        n_mem = token_memory.remember(req_base_url, results)
+        if n_mem:
+            print("remembered %d token(s) for %s -- a later upload of any file with "
+                  "these accounts will pick them up" % (n_mem, req_base_url))
+    except Exception as exc:
+        print("could not remember the tokens (%s); the file below still has them"
+              % str(exc)[:60])
 
     shutil.copyfile(src, src.with_suffix(src.suffix + ".bak"))
     for r in rows:

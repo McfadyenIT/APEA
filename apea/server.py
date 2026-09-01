@@ -546,6 +546,18 @@ def plan_ai_suggest(req: PlanReq):
     return result
 
 
+_LAST_TARGET = {"url": ""}
+
+
+def _last_target_url() -> str:
+    """The store this session is working against, for keying remembered tokens.
+
+    A token belongs to ONE store, so the memory has to be keyed by host. The
+    upload endpoint does not receive a URL, so it reads the last one this session
+    analysed or ran against."""
+    return _LAST_TARGET.get("url") or ""
+
+
 @app.post("/api/upload")
 async def upload(kind: str = Form(...), file: UploadFile = File(...)):
     """Accept a CSV (users/data) or a recording (JMX/HAR/YAML).
@@ -567,10 +579,26 @@ async def upload(kind: str = Form(...), file: UploadFile = File(...)):
                        "detected": "username/password" if items else "no user columns found"}
         elif kind == "data":
             _, rows = _read_csv_rows(dest)
+            # Put back tokens captured for these accounts. Blank cells only, and
+            # reported -- a file that quietly gains values nobody typed is worse
+            # than one that is missing them.
+            try:
+                from .agents import token_memory
+                _restored = token_memory.apply_to_rows(rows, _last_target_url())
+                if _restored:
+                    import csv as _csv
+                    with open(dest, "w", encoding="utf-8", newline="") as _fh:
+                        _w = _csv.DictWriter(_fh, fieldnames=list(rows[0].keys()))
+                        _w.writeheader()
+                        _w.writerows(rows)
+            except Exception:
+                _restored = []
             items = _extract_data(rows)
             kws = sum(1 for i in items if i["search_keyword"])
             pids = sum(1 for i in items if i["product_id"])
             summary = {"rows": len(items), "keywords": kws, "product_ids": pids}
+            if _restored:
+                summary["restored_tokens"] = _restored
         elif kind == "recording":
             rec = recording_agent.parse_recording(dest)
             summary = {"source": rec.get("source"), "endpoints": len(rec.get("endpoints", [])),
@@ -970,6 +998,9 @@ def enrol_cards(req: EnrolReq):
     import subprocess
     import threading
 
+    # The one place the store is unambiguous, and the one place tokens are
+    # captured. Recording it here is what lets a later upload key the memory.
+    _LAST_TARGET["url"] = req.base_url or _LAST_TARGET.get("url") or ""
     csv_path = Path(req.data_csv)
     if not csv_path.exists():
         return {"error": "data CSV not found -- upload it first"}

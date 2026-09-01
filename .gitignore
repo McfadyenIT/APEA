@@ -26,3 +26,4 @@ apea_error.log
 # Debug reference screenshots (large binaries, not source)
 Screenshots/
 enrol-failures/
+.apea-token-memory.json
