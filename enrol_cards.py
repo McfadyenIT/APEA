@@ -886,6 +886,18 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
         # fallback -- it is what makes the script work on a form nobody has
         # written selectors for.
         discovered = await _discover_card_fields(frame)
+        # Log this on EVERY attempt, not only on failure. The operator watched
+        # the card form go unfilled, typed it by hand, and the run then finished
+        # -- so it succeeded and left no capture, and the reason it could not
+        # fill the form went with it. A rescued run is still a run that did not
+        # work unattended, and it has to say so.
+        _seen_now = discovered.get("_seen") or []
+        print("      card form fields: %s"
+              % (", ".join((f.get("name") or f.get("id") or "?")
+                           for f in _seen_now[:12]) or "none visible"), flush=True)
+        print("      matched: %s"
+              % (", ".join("%s->%s" % (k, v) for k, v in discovered.items()
+                           if k != "_seen") or "nothing"), flush=True)
         sels = dict(cfg["card_sel"])
         for k, v in discovered.items():
             if k != "_seen":

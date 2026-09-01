@@ -1085,12 +1085,18 @@ function renderReadiness(){
     if(a.with_token.length) line(true,
       `card resolved for ${a.with_token.length} of ${a.unique_logins}: `
       + a.with_token.map(_escHtml).join(', '));
-    if(a.without_token.length) line(false,
-      `<b>no card for ${a.without_token.map(_escHtml).join(', ')}.</b> `
+    // Rows the FILE gave an offline method are already explained by the
+    // override warning above. Repeating "no card" for them reads as a second,
+    // separate fault and points at the data, which is not where the problem is.
+    const _overridden = new Set(
+      method && method.indexOf('{{') === -1 ? (ACCOUNTS.offline_logins || []) : []);
+    const _reallyMissing = a.without_token.filter(u => !_overridden.has(u));
+    if(_reallyMissing.length) line(false,
+      `<b>no card for ${_reallyMissing.map(_escHtml).join(', ')}.</b> `
       + `You asked for <code>${_escHtml(method)}</code>, so the run will FAIL for `
-      + `${a.without_token.length === 1 ? 'that account' : 'those accounts'} rather than `
+      + `${_reallyMissing.length === 1 ? 'that account' : 'those accounts'} rather than `
       + `quietly billing on account. Either add a <code>payment_token</code> for `
-      + `${a.without_token.length === 1 ? 'it' : 'them'}, or ` + offlineHint() + `.`);
+      + `${_reallyMissing.length === 1 ? 'it' : 'them'}, or ` + offlineHint() + `.`);
   } else if(wantsCard){
     line(null, `<code>${_escHtml(method)}</code> is a card method but no card `
       + `details are set, and no account in your CSV has a `
@@ -1207,8 +1213,16 @@ function applyMethodFromData(){
   const declared = (ACCOUNTS.declared_methods || []).filter(Boolean);
   if(!declared.length) return;
   const cur = (el.value || '').trim();
-  // Overwrite only what WE put there. A hand-typed choice is never clobbered.
-  if(cur && cur !== el.dataset.fromData) return;
+  // Overwrite only what WE put there -- and the recording's own suggestion
+  // counts as ours. renderPaymentMethods fills this box when the recording used
+  // exactly one method, and it marks that value `suggested`; only a value the
+  // operator actually changed gets `userSet`. Treating the suggestion as
+  // untouchable is why the box stayed on paradoxlabs_cybersource for a file
+  // that asks for two methods.
+  const ourValue = !cur
+    || cur === el.dataset.fromData
+    || (cur === el.dataset.suggested && !el.dataset.userSet);
+  if(!ourValue) return;
   // Several methods in the file -> read it per row. One method -> use it, which
   // is the same thing and reads more plainly in the box.
   const want = declared.length > 1 ? '{{payment_method}}' : declared[0];

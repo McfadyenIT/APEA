@@ -141,7 +141,7 @@ check("several methods in the file -> read it per row",
 check("one method -> use that method, which reads more plainly",
       "declared.length > 1 ?" in _fn)
 check("a hand-typed choice is never overwritten",
-      "cur !== el.dataset.fromData" in _fn)
+      "!el.dataset.userSet" in _fn and "const ourValue" in _fn)
 check("what it did is explained, not silent", "Set from your data file" in _fn)
 check("it runs when the file validates, before the template",
       "applyMethodFromData();     // the file decides the method" in UI)
@@ -258,6 +258,33 @@ _r = UI.index('id="readiness"')
 check("readiness follows the validation result", _r > _i and (_r - _i) < 500)
 check("there is only one readiness panel", UI.count('id="readiness"') == 1)
 
+# --- appended: the box stayed wrong, and the row was blamed twice -------------
+print()
+print("the recording's own suggestion is replaceable by the file")
+_amd = UI.split("function applyMethodFromData()")[1].split("function applyPayTemplate")[0]
+check("a suggested value counts as ours",
+      "cur === el.dataset.suggested" in _amd)
+check("but a value the operator changed does not",
+      "!el.dataset.userSet" in _amd)
+check("and an empty box is still ours", "!cur" in _amd)
+check("the reason is recorded", "counts as ours" in _amd)
+
+print()
+print("a row the override explains is not also accused of having no card")
+check("overridden rows are filtered out", "_reallyMissing" in UI)
+check("only when a single method is forced",
+      "method.indexOf('{{') === -1 ? (ACCOUNTS.offline_logins" in UI)
+# Match a phrase that cannot straddle a line break. The comment reads "reads as
+# a second,\n// separate fault", so looking for the whole sentence fails on
+# wrapping rather than on absence.
+check("the reason is recorded", "separate fault" in UI)
+
+print()
+print("a rescued enrolment still reports what the card form offered")
+_ec = io.open("enrol_cards.py", encoding="utf-8").read()
+check("the fields are printed on every attempt", "card form fields:" in _ec)
+check("and which ones matched", 'print("      matched:' in _ec)
+check("the reason is recorded", "left no capture" in _ec)
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
