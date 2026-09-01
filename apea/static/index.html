@@ -1023,6 +1023,29 @@ function renderReadiness(){
           ? ` (${a.rows} rows, ${a.products} product${a.products === 1 ? '' : 's'})` : ''));
   }
 
+  // --- the file says one thing, the run is set to another ---
+  // A fixed method in the payment box overrides every row. When the file
+  // declares an offline payer and the box forces a card, that row is reported
+  // as "no card" -- true, and deeply misleading, because the file never asked
+  // for one. Name the override instead of blaming the data.
+  if(ACCOUNTS && method && method.indexOf('{{') === -1){
+    const off = (ACCOUNTS.offline_logins || []);
+    const declared = (ACCOUNTS.declared_methods || []);
+    const overridden = off.filter(u =>
+      (ACCOUNTS.method_by_login || {})[u] &&
+      (ACCOUNTS.method_by_login || {})[u] !== method.toLowerCase());
+    if(overridden.length && declared.length > 1){
+      line(null, `<b>Your data file asks for more than one payment method `
+        + `(${declared.map(_escHtml).join(', ')}), but the run is set to `
+        + `<code>${_escHtml(method)}</code> for everyone.</b> That overrides `
+        + `${overridden.length} row${overridden.length === 1 ? '' : 's'} — `
+        + `${overridden.map(_escHtml).join(', ')} — and is why `
+        + `${overridden.length === 1 ? 'it is' : 'they are'} reported below as `
+        + `having no card. To honour the file, set the payment method to `
+        + `<code>{{payment_method}}</code>.`);
+    }
+  }
+
   // --- payment ---
   // A card method is only actually DECLARED when the additional_data carries
   // the token reference. Method-without-details and method-with-details fail

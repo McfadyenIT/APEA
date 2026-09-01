@@ -367,13 +367,23 @@ def _account_summary(headers, rows) -> dict:
     # turns a correct file into an alarming one.
     _card = ("cybersource", "paradoxlabs", "stripe", "braintree", "adyen",
              "authorizenet", "authorize_net", "payflow", "worldpay", "sagepay")
-    per_login_card = {}
+    per_login_card, per_login_method = {}, {}
     for r in rows:
         u = (r.get("username") or r.get("email") or "").strip().lower()
         m = (r.get("payment_method") or "").strip().lower()
-        if u and (any(g in m for g in _card) or "{{" in m):
+        if not u or not m:
+            continue
+        per_login_method.setdefault(u, m)
+        if any(g in m for g in _card) or "{{" in m:
             per_login_card[u] = True
     card_logins = [u for u in logins if per_login_card.get(u)]
+    # Every distinct method the FILE asks for. When the UI forces one method
+    # instead, these are the rows it silently overrides -- which is invisible
+    # otherwise, and reads as the file being wrong.
+    declared_methods = sorted({(r.get("payment_method") or "").strip()
+                               for r in rows if (r.get("payment_method") or "").strip()})
+    offline_logins = [u for u in logins
+                      if u not in set(card_logins) and per_login_method.get(u)]
     return {
         "rows": len(rows),
         "logins": logins,
@@ -385,6 +395,9 @@ def _account_summary(headers, rows) -> dict:
         "without_token": without,
         "card_logins": card_logins,
         "card_without_token": [u for u in card_logins if not per_login_token[u]],
+        "declared_methods": declared_methods,
+        "offline_logins": offline_logins,
+        "method_by_login": per_login_method,
     }
 
 

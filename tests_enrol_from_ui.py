@@ -111,6 +111,21 @@ check("the reason is written down where it was wrong",
       "pay by invoice and need nothing" in SRV
       or "8 pay by invoice" in UI)
 
+# --- appended: a forced method silently overriding the file -------------------
+print()
+print("the panel names the override instead of blaming the data")
+check("the summary reports every method the file declares",
+      '"declared_methods": declared_methods' in SRV)
+check("and which logins are offline payers", '"offline_logins"' in SRV)
+check("and each login's own method", '"method_by_login"' in SRV)
+check("the panel only warns when the box forces ONE method",
+      "method.indexOf('{{') === -1" in UI)
+check("it warns only when the file asks for more than one",
+      "declared.length > 1" in UI)
+check("it names the rows being overridden", "overridden.map(_escHtml)" in UI)
+check("and tells the operator the remedy",
+      "set the payment method to" in UI and "{{payment_method}}" in UI)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
