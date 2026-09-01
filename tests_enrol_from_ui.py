@@ -86,14 +86,17 @@ check("a per-row method still counts as wanting a card", r"/\{\{/" in panel)
 
 print()
 print("finishing closes the loop here, not in a terminal")
-wire = UI.split("function wireEnrol()")[1][:2400]
+# The WHOLE function. Slicing a fixed number of characters passed until the
+# function grew past it, then failed on code that was present and correct --
+# a test measuring its own window rather than the behaviour.
+wire = UI.split("function wireEnrol()")[1].split("\n}\n")[0]
 check("it polls rather than streams", "setTimeout(tick" in wire)
 check("the reason is written down", "dropped" in wire and "EventSource" in wire)
 check("completion re-validates the file", "await validateData()" in wire)
-check("it does not ask for a re-upload",
-      "re-upload" not in wire.lower() or "nothing needs re-uploading" in wire)
-check("it says the original file on disk is untouched",
-      "the original on disk is unchanged" in wire)
+check("it re-validates rather than asking for a re-upload",
+      "nothing needs re-uploading" in wire)
+check("it says the file on disk is now out of date, and offers the new one",
+      "does not have these tokens" in wire and "enrolDl" in wire)
 check("a missing target URL is caught before starting",
       "Set the target URL first" in wire)
 
@@ -180,6 +183,34 @@ check("it re-renders so the warning clears itself",
 _rr = UI.split("function renderReadiness()")[1].split("\n}")[0]
 check("it is wired AFTER the panel is written, not inside the statement",
       _rr.index("el.innerHTML") < _rr.index("btnUseFileMethod\x27"))
+
+# --- appended: the two copies must stop drifting apart ------------------------
+print()
+print("enrolment hands the updated file back")
+check("a download endpoint exists", '@app.get("/api/enrol-cards/csv")' in SRV)
+check("the path comes from the job record, never the query string",
+      'rec.get("csv")' in SRV and 'src = Path(' in SRV)
+check("an unknown job is refused", SRV.count('"unknown job"') >= 2)
+check("a vanished file is refused too", "no longer on disk" in SRV)
+check("the upload's random prefix is stripped, so it saves over the original",
+      'src.name.split("_", 1)' in SRV)
+check("the page offers the link when the run finishes", "enrolDl" in UI)
+check("and says plainly that the file on disk is now out of date",
+      "does not have these tokens" in UI)
+
+# --- appended: the two copies must stop drifting apart ------------------------
+print()
+print("enrolment hands the updated file back")
+check("a download endpoint exists", '@app.get("/api/enrol-cards/csv")' in SRV)
+check("the path comes from the job record, never the query string",
+      'rec.get("csv")' in SRV and 'src = Path(' in SRV)
+check("an unknown job is refused", SRV.count('"unknown job"') >= 2)
+check("a vanished file is refused too", "no longer on disk" in SRV)
+check("the upload's random prefix is stripped, so it saves over the original",
+      'src.name.split("_", 1)' in SRV)
+check("the page offers the link when the run finishes", "enrolDl" in UI)
+check("and says plainly that the file on disk is now out of date",
+      "does not have these tokens" in UI)
 
 print()
 print("FAILURES: %d" % len(FAILURES))

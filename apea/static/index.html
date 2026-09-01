@@ -1540,11 +1540,21 @@ function wireEnrol(){
         if(!st.done){ setTimeout(tick, 1500); return; }
         btn.disabled = false;
         btn.textContent = '\u25B6 Fetch card tokens';
-        // Worth stating: APEA enrolled its OWN copy of the file, the one it
-        // will run with. The file still sitting in Downloads is untouched, and
-        // someone who re-uploads that later would wonder where the tokens went.
-        log.textContent += '\n— tokens written into APEA\u2019s copy of the data file; '
-          + 'the original on disk is unchanged —\n';
+        log.textContent += '\n— done —\n';
+        // The file on disk is now out of date. Say so once, and hand back the
+        // updated one, rather than leaving two copies to drift apart.
+        const box = $('#enrolBox');
+        if(box && !$('#enrolDl')){
+          const p = document.createElement('div');
+          p.style.marginTop = '10px';
+          p.innerHTML = '<b>Your data file on disk does not have these tokens.</b> '
+            + 'APEA wrote them into its own copy. Save the updated file over yours '
+            + 'so the next upload carries them: '
+            + '<a id="enrolDl" class="btn" style="padding:3px 10px;font-size:12px;'
+            +   'text-decoration:none;display:inline-block;margin-left:4px" '
+            +   'href="/api/enrol-cards/csv?job=' + r.job + '">&#8595; Download updated CSV</a>';
+          box.appendChild(p);
+        }
         // The script edited the CSV in place, so re-validating the file we
         // already have is enough; nothing needs re-uploading.
         await validateData();

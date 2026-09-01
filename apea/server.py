@@ -1017,6 +1017,32 @@ def enrol_cards(req: EnrolReq):
     return {"job": job, "command": " ".join(cmd[1:])}
 
 
+@app.get("/api/enrol-cards/csv")
+def enrol_cards_csv(job: str):
+    """Hand back the data file enrolment just wrote into.
+
+    Enrolment edits APEA's uploaded COPY, and the file the operator uploaded
+    from stays as it was. That drift has now cost two runs: a page showing
+    tokens, a file on disk without them, and warnings that were correct about a
+    copy nobody was looking at. Offering the updated file back closes it.
+
+    The path comes from this job's own record, never from the query string, so
+    there is nothing here to point at another file.
+    """
+    from fastapi.responses import FileResponse
+
+    rec = _ENROL_JOBS.get(job)
+    if rec is None:
+        return {"error": "unknown job"}
+    src = Path(rec.get("csv") or "")
+    if not src.exists():
+        return {"error": "that data file is no longer on disk"}
+    # Strip the upload's random prefix so the download keeps the operator's own
+    # filename -- saving it should overwrite the file they started with.
+    name = src.name.split("_", 1)[-1] if "_" in src.name else src.name
+    return FileResponse(str(src), media_type="text/csv", filename=name)
+
+
 @app.get("/api/enrol-cards/status")
 def enrol_cards_status(job: str, since: int = 0):
     """Poll a running enrolment. Returns only the lines the caller has not seen."""
