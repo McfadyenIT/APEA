@@ -120,6 +120,34 @@ for frag, why in (
     check(why, frag in SRC, "missing: %s" % frag)
 check("the old whole-run flag is gone", "_CARD_INTENT" not in SRC)
 
+# --- appended: the placeholder must never reach the store --------------------
+print()
+print("no request body sends the forced method unresolved")
+check("the payment body resolves per row",
+      'pm = {"method": _row_payment_method(self._row) or method or ""}' in SRC)
+check("the override site resolves per row too",
+      "_forced_now = _row_payment_method(self._row)" in SRC)
+check("no body assigns the raw value to a method field",
+      '"method": _FORCED_PAYMENT' not in SRC
+      and "method, _chosen_reason = _FORCED_PAYMENT" not in SRC)
+# What remains is legitimate: the resolver itself, a report field, and
+# "is a payment configured at all" presence checks.
+# Strip docstrings first. The name appears in prose inside _row_payment_method
+# explaining what it is, and a scan that cannot tell an explanation from an
+# instruction fails on its own documentation -- the third time this suite has
+# caught itself testing prose.
+_code = re.sub(r'"""[\s\S]*?"""', "", SRC)
+_raw = [ln for ln in _code.split("\n")
+        if "_FORCED_PAYMENT" in ln
+        and not ln.lstrip().startswith("#")
+        and "_FORCED_PAYMENT = " not in ln
+        and "repr(forced" not in ln]
+for ln in _raw:
+    ok = ("tmpl = _FORCED_PAYMENT" in ln          # the resolver
+          or '"forced_payment":' in ln            # reported, not sent
+          or "or _PAYMENT_ADDL" in ln)            # presence check
+    check("legitimate use: %s" % ln.strip()[:52], ok)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

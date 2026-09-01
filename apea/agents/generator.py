@@ -2765,8 +2765,14 @@ __BROWSE_TASKS__
                 _sub_note = ("testdata.csv requested payment_method='%s' but it is %s — "
                              "using '%s' (%s) instead"
                              % (_csv_pay, _why, method or "(none)", _chosen_reason))
-        if _FORCED_PAYMENT:
-            method, _chosen_reason = _FORCED_PAYMENT, "explicit payment_method override"
+        # Resolve it against THIS user's row. _FORCED_PAYMENT may name a column
+        # -- {{payment_method}} -- and using it raw sends that literal to the
+        # store, which answers "The requested Payment Method is not available"
+        # for a method that IS on the cart. The token resolved and the method
+        # did not, which is exactly what the failing run showed.
+        _forced_now = _row_payment_method(self._row)
+        if _forced_now:
+            method, _chosen_reason = _forced_now, "explicit payment_method override"
         if _STRICT and not method:
             # Fail LOUDLY rather than auto-selecting — this is the whole point of strict.
             return self._stop("Payment methods available", st,
@@ -3008,7 +3014,7 @@ __BROWSE_TASKS__
             except Exception:
                 pass
             r.success() if r.status_code < 400 else r.failure("pay-methods %s" % r.status_code)
-        pm = {"method": _FORCED_PAYMENT or method or ""}
+        pm = {"method": _row_payment_method(self._row) or method or ""}
         _addl = _row_addl(self._row)
         if _addl:
             pm["additional_data"] = _addl   # test-mode / stored-card params, per user
