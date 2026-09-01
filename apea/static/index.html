@@ -1036,14 +1036,20 @@ function renderReadiness(){
       (ACCOUNTS.method_by_login || {})[u] &&
       (ACCOUNTS.method_by_login || {})[u] !== method.toLowerCase());
     if(overridden.length && declared.length > 1){
+      // A warning that only describes the fix leaves the reader to apply it by
+      // hand, in a field they already filled in wrongly once. The button does
+      // what the sentence says -- and exists because the auto-fill deliberately
+      // will not overwrite a hand-typed value, which is right, but leaves this
+      // exact case stuck until someone acts.
       line(null, `<b>Your data file asks for more than one payment method `
         + `(${declared.map(_escHtml).join(', ')}), but the run is set to `
         + `<code>${_escHtml(method)}</code> for everyone.</b> That overrides `
         + `${overridden.length} row${overridden.length === 1 ? '' : 's'} — `
         + `${overridden.map(_escHtml).join(', ')} — and is why `
         + `${overridden.length === 1 ? 'it is' : 'they are'} reported below as `
-        + `having no card. To honour the file, set the payment method to `
-        + `<code>{{payment_method}}</code>.`);
+        + `having no card. `
+        + `<button id="btnUseFileMethod" class="btn" style="margin-left:4px;`
+        + `padding:3px 10px;font-size:12px">Use the file&rsquo;s methods</button>`);
     }
   }
 
@@ -1111,6 +1117,20 @@ function renderReadiness(){
   el.innerHTML = `<div class="rec" style="border-left-color:${bad ? '#e11627' : warn ? '#e6a700' : '#2ecc71'}">`
     + `<b>${(bad || warn) ? 'Before you run' : 'Ready to run'}</b>`
     + `<div class="d" style="margin-top:6px">${rows.join('')}</div></div>`;
+
+  // Wired AFTER the panel is written -- the button does not exist until then.
+  const useFile = $('#btnUseFileMethod');
+  if(useFile) useFile.onclick = () => {
+    const pm = $('#ovPayMethod');
+    if(!pm) return;
+    pm.value = '{{payment_method}}';
+    pm.dataset.fromData = '{{payment_method}}';
+    const n = $('#ovPayMethodNote');
+    if(n) n.innerHTML = 'Set to <code>{{payment_method}}</code> — each account now '
+      + 'pays the way its own row says.';
+    applyPayTemplate();
+    renderReadiness();
+  };
 }
 
 // ---- payment method picker + additional_data template --------------------

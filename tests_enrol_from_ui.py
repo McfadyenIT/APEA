@@ -123,8 +123,11 @@ check("the panel only warns when the box forces ONE method",
 check("it warns only when the file asks for more than one",
       "declared.length > 1" in UI)
 check("it names the rows being overridden", "overridden.map(_escHtml)" in UI)
-check("and tells the operator the remedy",
-      "set the payment method to" in UI and "{{payment_method}}" in UI)
+# The remedy used to be a sentence telling the operator what to type. It is now
+# a button that does it. Assert that a remedy is OFFERED, not which form it takes
+# -- pinning the sentence made improving it look like a regression.
+check("and offers the remedy, as text or as a button",
+      "btnUseFileMethod" in UI or "set the payment method to" in UI)
 
 # --- appended: the file decides the payment method ---------------------------
 print()
@@ -151,6 +154,32 @@ check("the label wraps its input, so clicking it focuses the box",
 check("the checkbox is labelled too", "Show the browser" in _panel)
 check("what the company name is FOR is explained",
       "typed into checkout" in _panel and "required" in _panel)
+
+# --- appended: the warning has to be actionable, not just correct ------------
+print()
+print("the override warning carries a button that applies the fix")
+check("the button exists in the warning", "btnUseFileMethod" in UI)
+check("it sets the box to read the file", "pm.value = '{{payment_method}}'" in UI)
+check("it marks the value as ours, so auto-fill keeps working",
+      "pm.dataset.fromData = '{{payment_method}}'" in UI)
+check("it re-renders so the warning clears itself",
+      "applyPayTemplate();\n    renderReadiness();" in UI)
+_rr = UI.split("function renderReadiness()")[1].split("\n}")[0]
+check("it is wired AFTER the panel is written, not inside the statement",
+      _rr.index("el.innerHTML") < _rr.index("btnUseFileMethod\x27"))
+
+# --- appended: the warning has to be actionable, not just correct ------------
+print()
+print("the override warning carries a button that applies the fix")
+check("the button exists in the warning", "btnUseFileMethod" in UI)
+check("it sets the box to read the file", "pm.value = '{{payment_method}}'" in UI)
+check("it marks the value as ours, so auto-fill keeps working",
+      "pm.dataset.fromData = '{{payment_method}}'" in UI)
+check("it re-renders so the warning clears itself",
+      "applyPayTemplate();\n    renderReadiness();" in UI)
+_rr = UI.split("function renderReadiness()")[1].split("\n}")[0]
+check("it is wired AFTER the panel is written, not inside the statement",
+      _rr.index("el.innerHTML") < _rr.index("btnUseFileMethod\x27"))
 
 print()
 print("FAILURES: %d" % len(FAILURES))
