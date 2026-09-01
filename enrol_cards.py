@@ -841,7 +841,15 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
             return None, "login: could not find the email field"
         if not await _fill_first(page, cfg["sel"]["login_pass"], row.get("password") or ""):
             return None, "login: could not find the password field"
-        await page.locator(cfg["sel"]["login_submit"]).first.click()
+        # Clicking sign-in destroys the page it is on. Playwright can raise
+        # "element is not attached" for a click that WORKED -- the navigation
+        # simply beat the call's own bookkeeping. The capture proved it: the
+        # step failed with the browser already sitting on /customer/account/.
+        # So a click error here is not a verdict; the URL is.
+        try:
+            await page.locator(cfg["sel"]["login_submit"]).first.click(timeout=15000)
+        except Exception as _click_exc:
+            _clog = "sign-in click reported %s" % _redact(_click_exc)[:60]
         try:
             await page.wait_for_url(lambda u: "login" not in str(u).lower(), timeout=30000)
         except Exception:
@@ -850,6 +858,14 @@ async def enrol_one(browser, row: dict, cfg: dict) -> tuple[str | None, str]:
         if "login" in (page.url or "").lower():
             return None, ("login: still on the sign-in page after 30s -- wrong "
                           "credentials, or a bot check is holding the form")
+        # Past this point we ARE signed in, whatever the click reported. Wait for
+        # the account page to have something on it before moving on: the capture
+        # showed a DOM with one link and no inputs, a page mid-paint that a
+        # following step would have read as empty.
+        try:
+            await page.locator("a, button").nth(3).wait_for(state="attached", timeout=20000)
+        except Exception:
+            pass
 
         # --- basket ------------------------------------------------------
         step = "add to cart"

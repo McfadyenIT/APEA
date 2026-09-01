@@ -470,6 +470,17 @@ check("_fill_all is what fills them, so BOTH get a value",
 check("the reason is recorded next to the map",
       "collects the same person TWICE" in src15)
 
+# --- appended: a click that navigates is not a failure -----------------------
+print()
+print("the sign-in click survives the navigation it causes")
+src16 = io.open("enrol_cards.py", encoding="utf-8").read()
+_login = src16.split('step = "login"')[1][:1800]
+check("the click is wrapped", "except Exception as _click_exc" in _login)
+check("the URL decides, not the click", 'if "login" in (page.url or "").lower()' in _login)
+check("the reason is recorded", "is not a verdict; the URL is" in _login)
+check("and the account page is waited for before moving on",
+      'wait_for(state="attached"' in _login)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
