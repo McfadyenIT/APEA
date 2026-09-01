@@ -33,6 +33,20 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
+def _fn_body(src, name):
+    """The source of one top-level JS function.
+
+    Sliced on the next top-level `function` rather than by counting braces --
+    enrolPanel tests for '{{' in a regex literal and brace counting walks off
+    the end of the file.
+    """
+    start = src.index("function %s(" % name)
+    nxt = src.find("\nfunction ", start + 1)
+    body = src[start:nxt if nxt > 0 else len(src)]
+    return body[:body.rindex("}") + 1]
+
+
+
 print("the endpoint exists and is guarded")
 check("POST /api/enrol-cards", '@app.post("/api/enrol-cards")' in SRV)
 check("GET  /api/enrol-cards/status", '@app.get("/api/enrol-cards/status")' in SRV)
@@ -96,7 +110,8 @@ check("completion re-validates the file", "await validateData()" in wire)
 check("it re-validates rather than asking for a re-upload",
       "nothing needs re-uploading" in wire)
 check("it says the file on disk is now out of date, and offers the new one",
-      "does not have these tokens" in wire and "enrolDl" in wire)
+      "does not have these tokens" in UI and "enrolDl" in UI
+      and "enrolDownload()" in _fn_body(UI, "enrolPanel"))
 check("a missing target URL is caught before starting",
       "Set the target URL first" in wire)
 
@@ -272,6 +287,53 @@ _ec = io.open("enrol_cards.py", encoding="utf-8").read()
 check("the fields are printed on every attempt", "card form fields:" in _ec)
 check("and which ones matched", 'print("      matched:' in _ec)
 check("the reason is recorded", "left no capture" in _ec)
+
+# --------------------------------------------------------------------------
+# The "Download updated CSV" button is reachable.
+#
+# An operator asked where it was. It was nowhere, for two reasons at once:
+#
+#   1. it was appended to #enrolBox, and the very next line called
+#      validateData(), which re-renders #enrolBox -- so it existed for about
+#      a second and could never be clicked;
+#   2. it was an <a class="btn">, but the stylesheet only ever defines
+#      button.btn, so even when present it rendered in the browser default
+#      link blue on a near-black panel.
+#
+# Both are asserted here. The colours were measured on the live page.
+# --------------------------------------------------------------------------
+print()
+print("the updated data file can actually be downloaded")
+
+_panel = _fn_body(UI, "enrolPanel")
+check("the offer is part of what the panel renders",
+      "enrolDownload()" in _panel)
+check("so a re-render cannot destroy it",
+      "box.appendChild" not in UI)
+check("the job is recorded before the panel re-renders",
+      re.search(r"ENROL_JOB = r\.job;[\s\S]{0,400}?await validateData\(\)", UI)
+      is not None)
+
+_dl = _fn_body(UI, "enrolDownload")
+check("nothing is offered before a fetch has run",
+      "if(!ENROL_JOB) return ''" in _dl)
+check("the job id is escaped into the URL",
+      "encodeURIComponent(ENROL_JOB)" in _dl)
+
+# Every .btn rule in the sheet is either button.btn or scoped under another
+# class (.callTools .btn), so a bare <a class="btn"> in this panel matches
+# none of them and falls back to the browser default -- rgb(0,0,238) on a
+# near-black card, measured on the live page. Hence the inline colours.
+check("no rule styles a plain a.btn",
+      "a.btn" not in UI.replace("button.btn", ""))
+check("so the button carries its own background", "background:#e11627" in _dl)
+check("and its own text colour", "color:#fff" in _dl)
+
+# The advice it replaced could not work: clearing the cell just lets the next
+# upload refill it from the token memory.
+check("the advice that could not work is gone",
+      "capture a fresh one" not in UI)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
