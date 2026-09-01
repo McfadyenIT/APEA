@@ -481,6 +481,68 @@ check("the reason is recorded", "is not a verdict; the URL is" in _login)
 check("and the account page is waited for before moving on",
       'wait_for(state="attached"' in _login)
 
+
+# --------------------------------------------------------------------------
+# The basket is emptied BEFORE the product is added.
+#
+# An operator asked whether an item already sitting in an account's basket
+# would be bought along with the enrolment order. It must not be. This asserts
+# the ordering in the code itself and never in the comment that explains it --
+# earlier tests in this repo matched the prose beside the code and passed while
+# the code was wrong.
+# --------------------------------------------------------------------------
+import ast as _ast
+
+_tree = _ast.parse(io.open("enrol_cards.py", encoding="utf-8").read())
+_fns = {n.name: n for n in _ast.walk(_tree)
+        if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))}
+
+
+def _calls(fn):
+    """Names called inside fn, in source order. Parsed, so no comment or
+    docstring can satisfy one of these checks."""
+    out = []
+    for node in _ast.walk(fn):
+        if isinstance(node, _ast.Call):
+            f = node.func
+            name = getattr(f, "id", None) or getattr(f, "attr", None)
+            if name:
+                out.append((getattr(node, "lineno", 0), name))
+    return [n for _, n in sorted(out)]
+
+
+print()
+print("an item already in the basket is never bought")
+_ap = _fns.get("_add_product")
+check("_add_product exists", _ap is not None)
+if _ap:
+    _seq = _calls(_ap)
+    check("it empties the basket", "_empty_cart" in _seq)
+    check("before it ever loads a product page",
+          "_empty_cart" in _seq and "goto" in _seq
+          and _seq.index("_empty_cart") < _seq.index("goto"))
+    check("before anything is added to it",
+          "_empty_cart" in _seq and "_click_when_ready" in _seq
+          and _seq.index("_empty_cart") < _seq.index("_click_when_ready"))
+
+_eo = _fns.get("enrol_one")
+check("and the order runs through that same step",
+      bool(_eo) and "_add_product" in _calls(_eo))
+
+_ec = _fns.get("_empty_cart")
+check("emptying is bounded, so it cannot spin on a stuck basket",
+      bool(_ec) and "range" in _calls(_ec))
+
+_src = io.open("enrol_cards.py", encoding="utf-8").read()
+check("what was cleared is recorded",
+      'cfg["cleared"] = await _empty_cart' in _src)
+check("reset for each account, never carried over",
+      'cfg.pop("cleared", None)' in _src)
+check("and reported whether or not the token was captured",
+      'if cfg.get("cleared")' in _src
+      and _src.index('if cfg.get("cleared")')
+      > _src.index('print("FAILED  %s" % note)'))
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

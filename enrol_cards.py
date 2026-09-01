@@ -695,7 +695,10 @@ async def _add_product(page, row: dict, cfg: dict) -> str:
     /buy/<slug>/<id>.html, which cannot be derived from the CSV -- while a
     search box exists on every storefront and uses the column as-is.
     """
-    await _empty_cart(page, cfg)
+    # Record what was thrown away. The basket is emptied so every run starts
+    # from a known state, but an operator who left something in there on
+    # purpose deserves to be told it is gone rather than find out later.
+    cfg["cleared"] = await _empty_cart(page, cfg)
 
     attempts, tried = [], []
 
@@ -1082,12 +1085,16 @@ async def run(args) -> int:
                 cfg["method"] = ((row.get("payment_method") or "").strip()
                                  or cfg["method"])
                 cfg["row"] = row
+                cfg.pop("cleared", None)      # per account, never carried over
                 token, note = await enrol_one(browser, row, cfg)
                 if token:
                     results[user.lower()] = token
                     print("OK  %s..." % token[:12])
                 else:
                     print("FAILED  %s" % note)
+                if cfg.get("cleared"):
+                    print("         basket was not empty -- %s before this order"
+                          % cfg["cleared"])
         finally:
             await browser.close()
 
