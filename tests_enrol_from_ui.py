@@ -141,6 +141,17 @@ check("it runs when the file validates, before the template",
       "applyMethodFromData();     // the file decides the method" in UI)
 check("the note element exists to explain it", 'id="ovPayMethodNote"' in UI)
 
+# --- appended: the controls have to read as controls -------------------------
+print()
+print("the enrolment controls are labelled")
+_panel = UI.split("function enrolPanel()")[1].split("function wireEnrol")[0]
+check("the company box has a visible label", "Company name" in _panel)
+check("the label wraps its input, so clicking it focuses the box",
+      "<label" in _panel and "enrolCompany" in _panel)
+check("the checkbox is labelled too", "Show the browser" in _panel)
+check("what the company name is FOR is explained",
+      "typed into checkout" in _panel and "required" in _panel)
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
