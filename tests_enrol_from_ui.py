@@ -334,6 +334,14 @@ check("and its own text colour", "color:#fff" in _dl)
 check("the advice that could not work is gone",
       "capture a fresh one" not in UI)
 
+# Absent controls need a reason. The operator asked three times where the
+# download button was; each time it was correctly absent, because nothing had
+# changed and there was nothing to hand back. Silence made that read as a bug.
+check("when there is nothing to download, the panel says so",
+      "nothing to download" in _fn_body(UI, "enrolPanel"))
+check("and only while no fetch has run",
+      "ENROL_JOB ? ''" in _fn_body(UI, "enrolPanel"))
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

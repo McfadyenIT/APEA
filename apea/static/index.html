@@ -1562,7 +1562,11 @@ function enrolPanel(){
       + '<b>&#10003; Card tokens ready for ' + have.length + ' account'
       + (have.length === 1 ? '' : 's') + '</b>'
       + '<div class="d" style="margin-top:6px">' + have.map(_escHtml).join(', ')
-      + '. Nothing to fetch — these rows can pay by card.</div>'
+      + '. Nothing to fetch — these rows can pay by card.'
+      + (ENROL_JOB ? '' : ' Your file already carries these tokens, so there '
+          + 'is nothing to download — the button below appears only after a '
+          + 'fetch, to hand back a file APEA has changed.')
+      + '</div>'
       + enrolDownload()
       + '</div>';
   }
