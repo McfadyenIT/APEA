@@ -80,6 +80,46 @@ except SyntaxError as exc:
     check("it compiles", False, "line %s: %s" % (exc.lineno, exc.msg))
 check("the cap is baked in as 1", "_MAX_ORDERS_PER_USER = 1" in t)
 
+
+# --------------------------------------------------------------------------
+# The value has to REACH the template.
+#
+# Everything above passed while the feature was completely dead: the operator
+# set "1 order per user" and got 8 orders. The number was wired to the plan
+# PREVIEW only. RunReq had no such field, the run never put it into plan_cfg,
+# and the page never sent it when generating -- so the template substituted 0
+# every time and the cap could not fire.
+#
+# Testing the cap without testing the wiring is how that shipped. Trace the
+# whole path here: page -> request model -> plan -> template.
+# --------------------------------------------------------------------------
+print()
+print("the number the operator types reaches the generated script")
+
+# 1. the page sends it when it GENERATES, not only when it previews
+_gen = UI.split("btnRun")[1] if "btnRun" in UI else UI
+check("the generate request carries it",
+      UI.count("body.orders_per_user=+$('#ovOrders').value") >= 2)
+check("and the preview still does too",
+      "orders_per_user" in UI.split("refreshPlan")[1][:1200])
+
+# 2. the run request can hold it
+_runreq = SRV.split("class RunReq")[1].split("\nclass ")[0]
+check("RunReq accepts it", "orders_per_user" in _runreq)
+
+# 3. the run puts it in the plan the generator reads
+check("the run writes it into plan_cfg",
+      'plan_cfg["orders_per_user"] = int(req.orders_per_user or 0)' in SRV)
+
+# 4. the generator reads that key
+check("the generator reads that same key",
+      '(plan_cfg or {}).get("orders_per_user")' in SRV or
+      '(plan_cfg or {}).get("orders_per_user")' in SRC)
+
+# 5. and it is not left behind in the preview-only model
+check("PlanReq still has it for the estimate",
+      "orders_per_user" in SRV.split("class PlanReq")[1].split("\nclass ")[0])
+
 print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

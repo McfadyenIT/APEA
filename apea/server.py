@@ -235,6 +235,7 @@ class RunReq(BaseModel):
     password: Optional[str] = None
     users: Optional[int] = None
     duration_s: Optional[int] = None
+    orders_per_user: Optional[int] = None  # stop each user after N orders (0/None = whole duration)
     spawn_rate: Optional[float] = None
     workers: Optional[int] = 1
     users_csv: Optional[str] = None      # server path from /api/upload (kind=users)
@@ -1359,6 +1360,10 @@ def run(req: RunReq):
             performance_planner.apply_to_plan_cfg(plan_cfg, _ep,
                                                   skip_think=_explicit_think, skip_sla=_explicit_sla)
         plan_cfg["workers"] = max(1, int(req.workers or 1))
+        # The generator reads this to cap each user's orders. Without it the
+        # template always substituted 0: an operator asking for 1 order per
+        # user got a full duration of orders and a feature that looked broken.
+        plan_cfg["orders_per_user"] = int(req.orders_per_user or 0)
         plan_cfg["data_sharing"] = (req.data_sharing or "all_threads")  # CSV->thread sharing mode
         plan_cfg["strict"] = bool(req.strict)   # reproducible mode (no self-heal / no payment auto-switch)
         if req.payment_api_replay:           # opt-in API-replay payment codegen

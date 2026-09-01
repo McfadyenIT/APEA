@@ -1839,6 +1839,10 @@ $('#btnRun').onclick = async ()=>{
     if($('#ovUsers').value) body.users=+$('#ovUsers').value;
     if($('#ovDuration').value) body.duration_s=+$('#ovDuration').value;
     if($('#ovSpawn').value) body.spawn_rate=+$('#ovSpawn').value;
+    // Sent here as well as to the plan preview. It was only ever sent to the
+    // preview, so the generated script always got 0 and the cap never fired --
+    // "1 order per user" produced 8 orders and looked like a broken feature.
+    if($('#ovOrders') && $('#ovOrders').value !== '') body.orders_per_user=+$('#ovOrders').value;
     if(uploads.testplan) body.testplan=uploads.testplan;   // Phase 2: drive SLA/think/load from the test plan
     if($('#ovThinkMin') && $('#ovThinkMin').value) body.think_min=+$('#ovThinkMin').value;
     if($('#ovThinkMax') && $('#ovThinkMax').value) body.think_max=+$('#ovThinkMax').value;
