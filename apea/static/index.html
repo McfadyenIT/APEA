@@ -269,7 +269,7 @@
     <div class="card">
       <h2>2 · Choose a test — in plain English</h2>
       <p class="hint">Pick a test type and APEA sets the users, ramp-up, duration, pacing and pass/fail
-        criteria — or start from a Performance Test Plan and it fills these in for you.</p>
+        criteria. Change any of them below.</p>
 
       <!-- Hidden per request: Performance Test Plan upload/analyze block. DOM kept
            (display:none) so run defaults are unchanged; unhide to restore. -->
@@ -285,8 +285,11 @@
         <div id="planTypes" style="margin-top:10px"></div>
       </details>
 
-      <label style="margin-top:4px">API call groups &amp; throughput
-        <span class="muted">— recorded transactions; set each group's Percent Executions (100 = run every iteration). Auto-adjusted from the test plan's scenario mix.</span></label>
+      <label style="margin-top:4px">What your recording does, and how often to repeat it</label>
+      <p class="hint" style="margin:2px 0 8px">Each step below is a transaction from your recording.
+        The request count is fixed — it is what the browser actually sent. The slider sets how often
+        that step runs. The two multiply, so a big step at a low percentage can still outweigh a
+        small step at a high one.</p>
       <div id="anThroughput"><p class="muted">Analyze a recording (Section 1) to see its transaction groups.</p></div>
 
       <label>Test type</label>
@@ -689,6 +692,7 @@ function applyPlanThroughput(){
       const r=document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]'); if(r) r.value=pct;
     }
   });
+  if(typeof renderThroughputCost === 'function') renderThroughputCost();
 }
 function renderPlanTypes(plan, sum){
   _lastTestPlan=plan;
@@ -1484,25 +1488,32 @@ function renderAnalysis(a){
   apiThroughput = {};
   const ag = a.api_groups || [];
   _agNames = ag.map(g=>g.name);
+  window._agCounts = ag;
   $('#anThroughput').innerHTML = ag.length
     ? ag.map((g,i)=>{ apiThroughput[g.name]=100; return `
         <div class="rec" style="display:flex;align-items:center;gap:10px">
           <b style="flex:1">${_escHtml(g.name)}</b>
-          <span class="muted">${g.count} call${g.count==1?'':'s'}</span>
+          <span class="muted">${g.count} request${g.count==1?'':'s'}</span>
           <input type="range" min="0" max="100" step="5" value="100" data-i="${i}" class="thrRange" style="width:130px">
           <input type="number" min="0" max="100" value="100" data-i="${i}" class="thrNum" style="width:60px"> %
+          <span class="muted thrEach" data-i="${i}" style="width:74px;text-align:right"></span>
         </div>`; }).join('')
-    : '<p class="muted">No transaction groups recorded — all calls run as one flow.</p>';
+    : '<p class="muted">No transaction groups recorded — all requests run as one flow.</p>';
+  if(ag.length) $('#anThroughput').innerHTML +=
+    '<p class="muted" id="thrTotal" style="margin-top:10px"></p>';
   document.querySelectorAll('#anThroughput .thrRange').forEach(el=>{
     el.oninput=()=>{ const i=+el.dataset.i; apiThroughput[_agNames[i]]=+el.value;
-      const n=document.querySelector('#anThroughput .thrNum[data-i="'+i+'"]'); if(n) n.value=el.value; };
+      const n=document.querySelector('#anThroughput .thrNum[data-i="'+i+'"]'); if(n) n.value=el.value;
+      renderThroughputCost(); };
   });
   document.querySelectorAll('#anThroughput .thrNum').forEach(el=>{
     el.onchange=()=>{ let v=Math.max(0,Math.min(100,+el.value||0)); el.value=v;
       const i=+el.dataset.i; apiThroughput[_agNames[i]]=v;
-      const r=document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]'); if(r) r.value=v; };
+      const r=document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]'); if(r) r.value=v;
+      renderThroughputCost(); };
   });
   if(_lastTestPlan) applyPlanThroughput();   // auto-adjust from an already-loaded plan
+  renderThroughputCost();                    // paint the costs before anything is touched
 
   const aa = a.ai_analysis || {};
   const esc = s => String(s).replace(/</g,'&lt;');
@@ -1613,6 +1624,33 @@ function enrolDownload(){
     +   'href="/api/enrol-cards/csv?job=' + encodeURIComponent(ENROL_JOB) + '">'
     +   '&#8595; Download updated CSV</a>'
     + '</div>';
+}
+
+function renderThroughputCost(){
+  // What each step costs per iteration, and the total. Without this the
+  // request count sits frozen beside a moving slider and reads as a bug --
+  // the multiplication was left for the operator to do in their head.
+  const ag = (window._agCounts || []);
+  if(!ag.length) return;
+  let total = 0, checkout = null;
+  ag.forEach((g,i)=>{
+    const pct = +(apiThroughput[g.name] || 0);
+    const each = g.count * pct / 100;
+    total += each;
+    if(/checkout|order|payment/i.test(g.name)) checkout = pct;
+    const el = document.querySelector('#anThroughput .thrEach[data-i="'+i+'"]');
+    if(el) el.textContent = '→ ' + each.toFixed(1);
+  });
+  const foot = $('#thrTotal');
+  if(!foot) return;
+  let note = '';
+  if(checkout === 0)
+    note = ' Checkout never runs, so no orders are placed.';
+  else if(checkout !== null && checkout < 50)
+    note = ' Checkout runs about 1 iteration in ' + Math.round(100/checkout)
+         + ', so a user needs roughly that many iterations before it places an order.';
+  foot.innerHTML = '<b>' + total.toFixed(1) + ' requests</b> on average per iteration.'
+                 + _escHtml(note);
 }
 
 function wireFresh(){
