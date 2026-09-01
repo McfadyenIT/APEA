@@ -103,7 +103,12 @@ ui = io.open("apea/static/index.html", encoding="utf-8").read()
 check("enrolment records what it captured", "token_memory.remember" in enr)
 check("upload restores into blank cells", "token_memory.apply_to_rows" in srv)
 check("the restore is reported to the page", '"restored_tokens"' in srv)
-check("and the page says it out loud", "restored_tokens" in ui and "Put back" in ui)
+# Pick a phrase that cannot straddle a line break. The message is built by
+# concatenating template literals, so any sentence long enough to be meaningful
+# is split across lines in the source -- the third assertion here to fail on
+# wrapping rather than on absence.
+check("and the page says it out loud",
+      "restored_tokens" in ui and "had no card token in your" in ui)
 check("the store is recorded where it is unambiguous",
       '_LAST_TARGET["url"] = req.base_url' in srv)
 
@@ -112,6 +117,26 @@ print()
 print("this suite cannot touch the real memory")
 check("it is using a throwaway store", str(TM._STORE) != str(_REAL_STORE))
 check("the real store was never opened", "apea-tokmem-test-" in str(TM._STORE))
+
+print()
+print("the operator can forget a token, or a fresh one is unreachable")
+_srv = io.open("apea/server.py", encoding="utf-8").read()
+_ui = io.open("apea/static/index.html", encoding="utf-8").read()
+check("a forget endpoint exists", '@app.post("/api/enrol-cards/forget")' in _srv)
+check("it can clear one account", "req.username" in _srv)
+check("or the whole store", 'req.username or ""' in _srv)
+check("the page offers it where the restore is announced",
+      "btnForgetTokens" in _ui)
+# Strip comments first. The old sentence lives on in the comment that explains
+# why it went, and a substring scan cannot tell an explanation from an
+# instruction -- the fourth time this repo has caught itself testing prose.
+_ui_code = "\n".join(l for l in _ui.split("\n")
+                     if "//" not in l.split("'")[0].split('"')[0])
+check("the message no longer says to clear the cell",
+      "clear one to capture a fresh token" not in _ui_code)
+check("it says the file on disk was not touched",
+      "file on disk is unchanged" in _ui)
+check("the reason is recorded", "Advice that cannot work" in _ui)
 
 print()
 print("FAILURES: %d" % len(FAILURES))

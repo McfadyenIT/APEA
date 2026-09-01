@@ -1075,6 +1075,27 @@ def enrol_cards_csv(job: str):
     return FileResponse(str(src), media_type="text/csv", filename=name)
 
 
+class ForgetTokensReq(BaseModel):
+    """Drop remembered tokens so the next fetch captures fresh ones."""
+    base_url: Optional[str] = None
+    username: Optional[str] = None      # one account; omit to clear the store
+
+
+@app.post("/api/enrol-cards/forget")
+def enrol_cards_forget(req: ForgetTokensReq):
+    """Forget remembered tokens.
+
+    Without this there is no way to capture a fresh one: emptying the cell in the
+    data file does nothing, because the next upload just fills it from memory
+    again. The old message told the operator to do exactly that, which would
+    have left them clearing a cell and watching it refill.
+    """
+    from .agents import token_memory
+    base = req.base_url or _last_target_url()
+    n = token_memory.forget(base, req.username or "")
+    return {"forgotten": n, "store": base or "(the only one known)"}
+
+
 @app.get("/api/enrol-cards/status")
 def enrol_cards_status(job: str, since: int = 0):
     """Poll a running enrolment. Returns only the lines the caller has not seen."""
