@@ -19,7 +19,7 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -1078,7 +1078,8 @@ def enrol_cards_csv(job: str):
 class ForgetTokensReq(BaseModel):
     """Drop remembered tokens so the next fetch captures fresh ones."""
     base_url: Optional[str] = None
-    username: Optional[str] = None      # one account; omit to clear the store
+    username: Optional[str] = None          # one account
+    usernames: Optional[List[str]] = None   # several; omit both to clear the store
 
 
 @app.post("/api/enrol-cards/forget")
@@ -1092,8 +1093,19 @@ def enrol_cards_forget(req: ForgetTokensReq):
     """
     from .agents import token_memory
     base = req.base_url or _last_target_url()
-    n = token_memory.forget(base, req.username or "")
-    return {"forgotten": n, "store": base or "(the only one known)"}
+    # Forget exactly what was asked for. The link on the page says "the saved
+    # one", naming the accounts it just restored -- so it must not also drop
+    # tokens for accounts that are not even in this data file.
+    targets = [u for u in (req.usernames or []) if str(u).strip()]
+    if req.username:
+        targets.append(req.username)
+    if targets:
+        n = sum(token_memory.forget(base, u) for u in targets)
+        return {"forgotten": n, "accounts": targets,
+                "store": base or "(the only one known)"}
+    n = token_memory.forget(base, "")
+    return {"forgotten": n, "accounts": "all for this store",
+            "store": base or "(the only one known)"}
 
 
 @app.get("/api/enrol-cards/status")

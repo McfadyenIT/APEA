@@ -124,7 +124,9 @@ _srv = io.open("apea/server.py", encoding="utf-8").read()
 _ui = io.open("apea/static/index.html", encoding="utf-8").read()
 check("a forget endpoint exists", '@app.post("/api/enrol-cards/forget")' in _srv)
 check("it can clear one account", "req.username" in _srv)
-check("or the whole store", 'req.username or ""' in _srv)
+# The whole-store path moved when forget learned to take a list. Assert the
+# behaviour is reachable, not the expression that used to reach it.
+check("or the whole store", 'token_memory.forget(base, "")' in _srv)
 check("the page offers it where the restore is announced",
       "btnForgetTokens" in _ui)
 # Strip comments first. The old sentence lives on in the comment that explains
@@ -137,6 +139,17 @@ check("the message no longer says to clear the cell",
 check("it says the file on disk was not touched",
       "file on disk is unchanged" in _ui)
 check("the reason is recorded", "Advice that cannot work" in _ui)
+
+print()
+print("forget targets exactly the accounts it names")
+check("the endpoint accepts a list", "usernames: Optional[List[str]]" in _srv)
+check("it forgets each of them", "for u in targets" in _srv)
+check("and still supports clearing a whole store",
+      'token_memory.forget(base, "")' in _srv)
+check("the page sends the accounts it restored", "usernames: put" in _ui)
+check("the reason is recorded", "not in this file" in _ui)
+check("the message says what a fetch will then cover",
+      "as well as any" in _ui)
 
 print()
 print("FAILURES: %d" % len(FAILURES))

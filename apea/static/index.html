@@ -588,18 +588,26 @@ async function uploadFile(kind, inputId, sumId, field){
         + `&#8635; <b>${put.map(_escHtml).join(', ')}</b> had no card token in your `
         + `file, so APEA used the one it saved when you last fetched. `
         + `Your file on disk is unchanged.<br>`
-        + `Want a brand-new token instead? `
-        + `<a href="#" id="btnForgetTokens">Forget the saved one</a>, then click `
-        + `Fetch card tokens.</div>`;
+        + `Want ${put.length === 1 ? 'a brand-new token' : 'brand-new tokens'} instead? `
+        + `<a href="#" id="btnForgetTokens">Forget `
+        + `${put.length === 1 ? 'it' : 'them'}</a>, then click Fetch card tokens — `
+        + `which will capture for ${put.map(_escHtml).join(', ')} as well as any `
+        + `account that still has none.</div>`;
     }
     else sum.innerHTML = `✅ ${f.name} · ${s.endpoints||0} endpoint(s) from ${s.source||'recording'}`+(s.base_url?` · ${s.base_url}`:'');
     const fg = $('#btnForgetTokens');
     if(fg) fg.onclick = async (ev) => {
       ev.preventDefault();
       const base = ($('#url') && $('#url').value || '').trim();
-      const r2 = await api('/api/enrol-cards/forget', {base_url: base || null});
-      fg.outerHTML = '<b>Forgotten ' + (r2.forgotten || 0)
-        + ' saved token(s).</b> Re-upload your file, then click Fetch card tokens.';
+      // Only the accounts this message named. Clearing the whole store would
+      // also drop tokens for accounts that are not in this file, which the
+      // wording does not promise and nobody would expect.
+      const r2 = await api('/api/enrol-cards/forget',
+                           {base_url: base || null, usernames: put});
+      fg.outerHTML = '<b>Forgotten the saved token for '
+        + put.map(_escHtml).join(', ') + '.</b> Re-upload your file, then click '
+        + 'Fetch card tokens to capture '
+        + (put.length === 1 ? 'a fresh one' : 'fresh ones') + '.';
     };
   }catch(e){ uploads[field]=null; sum.innerHTML='⚠️ '+e.message; }
 }
