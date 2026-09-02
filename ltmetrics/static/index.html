@@ -219,6 +219,22 @@
   details.quiet > summary .n{margin-left:auto;text-transform:none;
     letter-spacing:0;font-weight:400}
   details.quiet > *:not(summary){margin-top:10px}
+  #chartMode{display:inline-flex;border:1px solid var(--line);border-radius:8px;
+    overflow:hidden;margin-left:auto}
+  #chartMode button{background:transparent;border:none;padding:5px 14px;
+    font-size:12px;font-weight:700;cursor:pointer;color:var(--mut);
+    font-family:var(--body)}
+  #chartMode button.on{background:var(--green);color:#fff}
+  #liveJourney .jr{display:grid;grid-template-columns:1fr auto auto;gap:14px;
+    align-items:center;padding:9px 12px;border-left:3px solid var(--line);
+    border-bottom:1px solid var(--line);font-size:13px}
+  #liveJourney .jr:last-child{border-bottom:none}
+  #liveJourney .jr .ms{font-family:var(--mono);font-size:12.5px}
+  #liveJourney .jr.Healthy{border-left-color:#5C607A}
+  #liveJourney .jr.Watch{border-left-color:#8E8931}
+  #liveJourney .jr.Strained{border-left-color:#B4551F}
+  #liveJourney .jr.Failing{border-left-color:#C91A12}
+  #liveJourney .jr.Critical{border-left-color:#8A120C}
   #noiseChips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
   #noiseChips span{display:inline-flex;align-items:center;gap:6px;
     border:1px solid var(--line);border-radius:20px;padding:4px 12px;
@@ -500,6 +516,10 @@
       </div>
       <div class="callList" id="anCalls"></div>
       <div id="callCritWarn" style="margin-top:8px;color:#ffb4b4;font-size:13px;line-height:1.5"></div>
+      <label style="display:inline-flex;align-items:center;gap:8px;font-size:12px;
+             margin-top:8px;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="hideDropped" style="width:auto" checked>
+        Hide dropped calls</label>
       <div id="noiseChips"></div>
       <div id="anDropped"></div>
       <details class="quiet">
@@ -746,7 +766,16 @@
       <div class="bar"><div id="liveBar"></div></div>
       <div id="liveScale"></div>
       <div class="grid-k" id="liveKpis"></div>
+      <label style="margin-top:14px">The journey, filling up as it runs</label>
+      <div id="liveJourney"><p class="muted" style="padding:6px 0">
+        Stages appear here as the run reaches them.</p></div>
       <div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:14px">
+        <div style="display:flex;align-items:center;margin-bottom:8px">
+          <div id="chartMode" role="group" aria-label="Chart style">
+            <button type="button" data-mode="bar" class="on">Bars</button>
+            <button type="button" data-mode="line">Lines</button>
+          </div>
+        </div>
         <canvas id="liveChart" height="120"></canvas>
       </div>
       <label style="margin-top:14px">Live API calls
@@ -798,7 +827,8 @@
     </div>
 
     <div class="card hidden" id="resultCard">
-      <h2>5 · Results <span class="badge" id="gateBadge"></span></h2>
+      <h2>5 · Results <span class="badge" id="gateBadge"></span>
+        <span class="muted" id="resRunId" style="font-weight:400;font-size:13px"></span></h2>
       <p id="resSays"></p>
       <div id="stageTiles"></div>
       <div class="grid-k" id="resKpis"></div>
@@ -1065,6 +1095,29 @@ function renderPlanTypes(plan, sum){
 // started. So say it plainly -- and stop claiming a figure once the clock has
 // run out but the run is still finishing, because "0 minutes left" for two
 // minutes is worse than saying nothing.
+// The same stages phases 3 and 4 read, against a log that is still being
+// written. Nothing new is measured -- a partial log gives partial stages,
+// which is what "filling up" means.
+let _journeyBusy = false;
+async function renderLiveJourney(st){
+  const box = $('#liveJourney');
+  if(!box || !currentRun || _journeyBusy) return;
+  if(!['starting','running','analyzing','completed'].includes(st)) return;
+  _journeyBusy = true;
+  try{
+    const d = await api('/api/run/' + currentRun + '/stages');
+    const rows = (d && d.stages) || [];
+    if(!rows.length) return;
+    box.innerHTML = rows.map(r=>
+      '<div class="jr ' + (r.health || '') + '">'
+      + '<span>' + _escHtml(r.stage) + '</span>'
+      + '<span class="ms">' + (r.p95 ? Math.round(r.p95).toLocaleString() + 'ms' : '—') + '</span>'
+      + '<span class="rung rung-' + (r.health || '') + '">'
+      + _escHtml(r.health || '') + '</span></div>').join('');
+  }catch(e){
+  }finally{ _journeyBusy = false; }
+}
+
 function renderTimeLeft(s, st){
   let el = $('#liveLeft');
   if(!el){
@@ -1240,6 +1293,7 @@ async function loadStages(runId){
   // leaving it to be read off a bar.
   // 9a leads Results with the same ladder at a glance, before any table.
   renderStageTiles(rows, d);
+  renderRunId();
 
   const lead = rows.reduce((a,b)=> b.ms > a.ms ? b : a, rows[0]);
   const broke = rows.filter(s=> s.errors > 0);
@@ -1361,6 +1415,25 @@ async function loadStages(runId){
 // for a run where nothing is over -- or where half of it is critical -- would
 // be worse than printing nothing.
 const RUNG_ORDER = ['Healthy','Watch','Strained','Failing','Critical'];
+
+// A screenshot of a result should say which run it came from. 9a puts the id
+// and the time beside the heading.
+async function renderRunId(){
+  const el = $('#resRunId');
+  if(!el || !currentRun) return;
+  let when = '';
+  try{
+    const r = await api('/api/run/' + currentRun + '/detail');
+    const t = r && (r.finished_at || r.started_at);
+    if(t){
+      const dt = new Date(t);
+      if(!isNaN(dt)) when = ' · ' + dt.toLocaleDateString(undefined,
+        {month:'short', day:'numeric'}) + ', '
+        + dt.toLocaleTimeString(undefined, {hour:'2-digit', minute:'2-digit'});
+    }
+  }catch(e){}
+  el.textContent = 'run ' + currentRun + when;
+}
 
 function renderStageTiles(rows, d){
   const box = $('#stageTiles'), says = $('#resSays');
@@ -1693,6 +1766,7 @@ function applyTheme(t){
 })();
 
 buildSetupRail();
+wireChartMode();
 syncMinutes();
 wireTrafficPresets();
 tagPhases();
@@ -1992,6 +2066,18 @@ function renderCallSelector(calls, dropped){
     if(dropped.length) chips.innerHTML +=
       '<span style="border:none;padding-left:0">Images, fonts and trackers were'
       + ' dropped automatically.</span>';
+  }
+
+  // The dropped list is long by design -- 128 rows in 9a's example -- so it is
+  // folded away unless asked for. The chips above still say what is in it.
+  const hd = $('#hideDropped');
+  if(hd){
+    const apply = ()=>{
+      const box = $('#anDropped');
+      if(box) box.style.display = hd.checked ? 'none' : '';
+    };
+    hd.onchange = apply;
+    setTimeout(apply, 0);
   }
 
   const nd = $('#anDropped');
@@ -2980,13 +3066,35 @@ function showReview(res){
 }
 
 let liveChart=null;
+let CHART_MODE = 'bar';
+
+function wireChartMode(){
+  const box = $('#chartMode');
+  if(!box) return;
+  box.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{
+      box.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      CHART_MODE = b.dataset.mode;
+      // Rebuilt rather than mutated: Chart.js keeps the old element type on a
+      // dataset, so changing it in place leaves the first series drawn twice.
+      const keep = liveChart ? JSON.parse(JSON.stringify(liveChart.data)) : null;
+      initLiveChart();
+      if(keep && liveChart){ liveChart.data = keep;
+        liveChart.data.datasets[0].type = CHART_MODE; liveChart.update('none'); }
+    };
+  });
+}
 function initLiveChart(){
   const el=document.getElementById('liveChart'); if(!el||!window.Chart) return;
   if(liveChart){ liveChart.destroy(); }
   const grid='#26262b', mut='#9a9aa4';
+  // 9a offers both. Throughput reads better as bars (a count per interval)
+  // and latency as a line, so only the first series changes.
   liveChart=new Chart(el,{type:'line',
     data:{labels:[],datasets:[
-      {label:'req/s',data:[],borderColor:'#e11627',yAxisID:'y',tension:.3,pointRadius:0},
+      {label:'req/s',data:[],type:CHART_MODE,borderColor:'#e11627',
+       backgroundColor:'#5C607A',yAxisID:'y',tension:.3,pointRadius:0},
       {label:'p95 (ms)',data:[],borderColor:'#e6a23c',yAxisID:'y1',tension:.3,pointRadius:0},
       {label:'Users',data:[],borderColor:'#2ecc71',yAxisID:'y1',tension:.3,pointRadius:0},
     ]},
@@ -3080,6 +3188,7 @@ async function pollRun(){
   renderBrowserTrack(s.browser_track);
   $('#liveBar').style.width=((st==='completed')?100:(s.pct||0))+'%';
   renderTimeLeft(s, st);
+  renderLiveJourney(st);
   // 9a says what is happening in a sentence before it says it in numbers.
   const says = $('#liveSays');
   if(says){
