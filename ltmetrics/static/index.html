@@ -149,6 +149,12 @@
     padding:5px 8px}
   #stageTable table.inner tr:last-child td{border-bottom:none}
   #stageTable .bad{color:var(--bad);font-weight:700}
+  #noiseChips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
+  #noiseChips span{display:inline-flex;align-items:center;gap:6px;
+    border:1px solid var(--line);border-radius:20px;padding:4px 12px;
+    font-size:12px;color:var(--mut)}
+  #noiseChips b{color:var(--txt);font-weight:700}
+  #liveLeft{font-weight:400;font-size:13px;color:var(--mut);margin-left:8px}
   @media(max-width:900px){#resultsGrid{grid-template-columns:1fr}}
   /* Inside the rail the cards are already framed by the rail itself. */
   #setupRail .card{border:none;border-bottom:1px solid var(--hair);
@@ -398,6 +404,7 @@
       </div>
       <div class="callList" id="anCalls"></div>
       <div id="callCritWarn" style="margin-top:8px;color:#ffb4b4;font-size:13px;line-height:1.5"></div>
+      <div id="noiseChips"></div>
       <div id="anDropped"></div>
       <label style="margin-top:12px">Recorded browser actions
         <span class="muted">— every click/type/wait captured from Selenium, for reference</span></label>
@@ -944,6 +951,35 @@ function renderPlanTypes(plan, sum){
       if($('#testType').onchange) $('#testType').onchange();
     };
   });
+}
+
+// ---- how much longer -------------------------------------------------------
+// A load test's remaining time is nearly exact: the duration was set before it
+// started. So say it plainly -- and stop claiming a figure once the clock has
+// run out but the run is still finishing, because "0 minutes left" for two
+// minutes is worse than saying nothing.
+function renderTimeLeft(s, st){
+  let el = $('#liveLeft');
+  if(!el){
+    const h = $('#liveStatus') && $('#liveStatus').parentElement;
+    if(!h) return;
+    el = document.createElement('span');
+    el.id = 'liveLeft';
+    h.appendChild(el);
+  }
+  if(!['starting','running'].includes(st)){ el.textContent = ''; return; }
+
+  const elapsed = +s.elapsed_s || 0;
+  let total = +s.duration_s || 0;
+  // No duration in the payload? Derive it from progress, which is the same
+  // number the bar is already drawn from.
+  if(!total && s.pct > 0) total = elapsed * 100 / s.pct;
+  const left = Math.max(0, Math.round(total - elapsed));
+  if(!total || left <= 0){ el.textContent = '· finishing'; return; }
+
+  el.textContent = left >= 90
+    ? '· about ' + Math.round(left / 60) + ' min left'
+    : '· about ' + left + 's left';
 }
 
 // ---- what will happen -----------------------------------------------------
@@ -1671,6 +1707,30 @@ function renderCallSelector(calls, dropped){
     }).join('');
   }
   document.querySelectorAll('#anCalls .callChk').forEach(el=> el.onchange=updateCallCount);
+  // What KIND of thing was dropped. Grouped from the path and the filter's own
+  // reason -- nothing here is estimated, and a category with nothing in it is
+  // not shown rather than shown as zero.
+  const chips = $('#noiseChips');
+  if(chips){
+    const buckets = {};
+    const bump = k => { buckets[k] = (buckets[k] || 0) + 1; };
+    dropped.forEach(d=>{
+      const path = String(d.path || '').toLowerCase().split('?')[0];
+      const why = String(d.reason || '').toLowerCase();
+      if(/tracker|analytics|beacon/.test(why)) bump('Trackers');
+      else if(/\.(png|jpe?g|gif|svg|webp|ico|bmp|avif)$/.test(path)) bump('Images');
+      else if(/\.(woff2?|ttf|eot|otf|css)$/.test(path)) bump('Fonts & CSS');
+      else if(/\.js$/.test(path)) bump('Scripts');
+      else if(/preflight|options/.test(why)) bump('CORS preflight');
+      else if(/page navigation/.test(why)) bump('Page views');
+      else bump('Other');
+    });
+    const order = ['Images','Fonts & CSS','Scripts','Trackers','Page views',
+                   'CORS preflight','Other'];
+    chips.innerHTML = order.filter(k=>buckets[k])
+      .map(k=>'<span>' + _escHtml(k) + ' <b>' + buckets[k] + '</b></span>').join('');
+  }
+
   const nd = $('#anDropped');
   if(nd){
     nd.innerHTML = dropped.length
@@ -2732,6 +2792,7 @@ async function pollRun(){
   $('#livePhase').textContent=(s.phase||'')+(s.error?(' — '+s.error):'');
   renderBrowserTrack(s.browser_track);
   $('#liveBar').style.width=((st==='completed')?100:(s.pct||0))+'%';
+  renderTimeLeft(s, st);
   const kpis=[
     ['Elapsed', (s.elapsed_s||0)+'s'],['Users', Math.round(s.users||0)],
     ['Requests', Math.round(s.total_requests||0)],['Failures', Math.round(s.total_failures||0)],
