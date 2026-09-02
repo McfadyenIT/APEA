@@ -84,6 +84,29 @@ def _kb_list(key: str, default) -> tuple:
         return tuple(default)
 
 
+def _kb_stage_map(platform: str = "") -> dict:
+    """Stage for each call the generator emits itself.
+
+    Read from the KB so it is data, not code: the `generic` block covers every
+    platform because these are the TOOL's call names, and a platform block may
+    override any entry. A missing or unreadable KB returns {} and the behaviour
+    is exactly what it was before -- no stage rather than a wrong one.
+    """
+    out = {}
+    try:
+        from ..knowledge import KB
+        for block in ("generic", (platform or "").strip().lower()):
+            if not block:
+                continue
+            rules = KB.platform_rules(block) or {}
+            m = rules.get("canonical_stages")
+            if isinstance(m, dict):
+                out.update({str(k): str(v) for k, v in m.items() if k and v})
+    except Exception:
+        return out
+    return out
+
+
 def _kb_test_card() -> dict:
     """A PUBLIC sandbox test card from the KB (browser_patterns) — never a real PAN."""
     try:
@@ -1104,9 +1127,22 @@ _PARAM_MAP = __PARAM_MAP__             # {recorded field name: CSV column} gener
 _CORRELATIONS = __CORRELATIONS__       # JMeter-style extractor rules (capture from response, inject into request)
 # API-call GROUPS (recorded Taurus transactions) + per-group Percent Executions.
 # _GROUP_PCT maps group -> % of iterations that run that group (100 = always).
-# _NAME_GROUP maps a request name -> its group, for tagging the live call log.
+# _NAME_GROUP maps a request name -> its stage, for tagging the live call log.
+#
+# A transaction row is an AGGREGATE, not a call: `TXN: Checkout` spans every
+# request inside it, so its duration already includes theirs. Labelling it
+# "TXN" keeps it out of a per-stage time sum, where it would otherwise count
+# the same milliseconds twice.
 _GROUP_PCT = __GROUP_PCT__
 _NAME_GROUP = __NAME_GROUP__
+
+
+def _stage_of(name):
+    """The stage a logged row belongs to, or "TXN" for a transaction timer."""
+    n = name or ""
+    if n.startswith("TXN: "):
+        return "TXN"
+    return _NAME_GROUP.get(n, "")
 # Live per-request feed (JMeter "View Results Tree"): every request is appended
 # here as one JSON line so the UI can stream request/response/status live.
 _CALLS_PATH = os.path.join(_RUN_DIR, "results", "ltm_calls.jsonl")
@@ -3368,7 +3404,7 @@ def _ltm_on_request(request_type=None, name=None, response_time=None,
         entry = {
             "seq": seq,
             "ts": round(time.time(), 3),
-            "group": _NAME_GROUP.get(name, ""),
+            "group": _stage_of(name),
             "name": name or "",
             "method": (request_type or getattr(rq, "method", "") or ""),
             "url": str(url or getattr(rq, "url", "") or ""),
@@ -3459,7 +3495,13 @@ def _log_summary(environment, **kwargs):
             group_pct[_g] = float(_gt.get(_g, 100))
         except (TypeError, ValueError):
             group_pct[_g] = 100.0
-    name_group = {s["name"]: (s.get("group") or "") for s in flow_steps}
+    # Our own calls first, then the recording's groups on top. A group the
+    # tester actually named wins; ours only fills what the recording never
+    # wrapped. Empty strings are dropped so a groupless recorded step falls
+    # through to the canonical label instead of blanking it.
+    name_group = dict(_kb_stage_map(str(discovery.get("platform") or "")))
+    name_group.update({s["name"]: s["group"] for s in flow_steps
+                       if (s.get("group") or "").strip()})
 
     # Auto-switch guardrail: faithful/verbatim replay CANNOT place an order on a
     # Magento REST checkout — the customer token's carts/mine quote is empty when

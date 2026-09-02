@@ -29,6 +29,49 @@ generic:
             "j_spring_security_check", "customer/ajax/login"]
 
 
+  # STAGE LABELS FOR THE TOOL'S OWN CALLS --------------------------------------
+  # A call carries a transaction group only if the recording wrapped it in one.
+  # Everything the generator emits itself -- create the cart, add the item, place
+  # the order -- had no group at all, which left 81% of a measured run labelled
+  # "(none)". These names are OURS: the template emits the same ones for every
+  # client and every platform, so mapping them belongs to the tool rather than to
+  # any one store. A platform block may override any entry.
+  #
+  # A group that came from the recording always wins. If a tester named their
+  # transaction "PDP", that is what the operator sees -- their vocabulary, not
+  # ours. This only fills the gaps.
+  canonical_stages:
+    "GET / (warmup)": "Browse"
+    "Home Page": "Browse"
+    "Search Results": "Search"
+    "Product by ID": "Product"
+    "Resolve: graphql": "Product"
+    "Cart created": "Cart"
+    "Items added": "Cart"
+    "Ensure cart item (REST)": "Cart"
+    "Cart contains items": "Cart"
+    "Cart cleared": "Cart"
+    "AUTO-HEAL add cart item": "Cart"
+    "Login": "Login"
+    "Login Page": "Login"
+    "Login Submit": "Login"
+    "REST customer token": "Login"
+    "REST customer profile": "Login"
+    "AUTO-HEAL refresh token": "Login"
+    "Shipping methods available": "Checkout"
+    "Set shipping information": "Checkout"
+    "Re-bind shipping (heal)": "Checkout"
+    "Checkout agreements": "Checkout"
+    "Payment methods available": "Payment"
+    "REST payment-methods": "Payment"
+    "Set payment information": "Payment"
+    "Set payment information (retry)": "Payment"
+    "Mint payment token (API)": "Payment"
+    "Order created": "Order"
+    "Order created (retry)": "Order"
+    "Place Order (REST)": "Order"
+    "Place Order (replay)": "Order"
+
 magento:
   display_name: "Magento / Adobe Commerce"
   business_critical_paths:
