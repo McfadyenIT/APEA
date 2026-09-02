@@ -89,6 +89,12 @@
   #phaseGrid.rail-shut #railBody{display:none}
   #phaseGrid.rail-shut #railToggle span.lbl{display:none}
   #phaseMain{padding:8px 0}
+  /* Panels split out of the old single card. The heading a block already
+     carried becomes the panel's heading, so nothing is retitled. */
+  .card.panel h2{font-size:16px;margin-top:0}
+  #resultsGrid{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;
+    align-items:start}
+  @media(max-width:900px){#resultsGrid{grid-template-columns:1fr}}
   /* Inside the rail the cards are already framed by the rail itself. */
   #setupRail .card{border:none;border-bottom:1px solid var(--hair);
     border-radius:0;background:transparent;padding:16px 4px;margin:0}
@@ -857,6 +863,9 @@ const PHASE_RULES = [
 
 function tagPhases(){
   document.querySelectorAll('#tab-new .card').forEach(c=>{
+    // A panel split out of another card already knows its phase: it inherited
+    // it. Re-deriving from the heading would send "Engine log" to phase 1.
+    if(c.classList.contains('panel')) return;
     const h = c.querySelector('h2');
     const t = (h ? h.textContent : '').trim();
     let ph = '1';
@@ -921,6 +930,91 @@ function buildSetupRail(){
     try{ localStorage.setItem('ltm-rail', shut ? 'shut' : 'open'); }catch(e){}
   };
   try{ if(localStorage.getItem('ltm-rail') === 'shut') toggle.click(); }catch(e){}
+}
+
+// Where each phase's single tall card breaks into panels. Anchored on the id
+// that opens a panel, not on a child index: an index would reshuffle silently
+// the first time a row is inserted above one of them.
+const PANEL_SPLITS = {
+  liveChart: 'Requests, latency and users over time',
+  liveCalls: 'Live API calls',
+  liveLog:   'Engine log',
+  resRecs:   'AI recommendations',
+  resRca:    'Root cause & trend',
+  jiraWrap:  'Jira ticket',
+};
+
+function splitIntoPanels(){
+  // Where the next panel goes, per source card. Inserting each one directly
+  // after the card reversed the sequence -- the engine log came out above the
+  // chart it should follow.
+  const tail = new Map();
+  for(const [anchorId, title] of Object.entries(PANEL_SPLITS)){
+    const anchor = document.getElementById(anchorId);
+    if(!anchor) continue;
+    const card = anchor.closest('.card');
+    if(!card || card.classList.contains('panel')) continue;
+
+    // The block that opens the panel is the anchor's own top-level child.
+    let start = anchor;
+    while(start.parentElement && start.parentElement !== card)
+      start = start.parentElement;
+
+    // A heading immediately above it already names this panel; take it rather
+    // than adding a second one.
+    let head = start.previousElementSibling;
+    const inherited = head && /^(H2|LABEL)$/.test(head.tagName) ? head : null;
+
+    const panel = document.createElement('div');
+    panel.className = 'card panel';
+    panel.dataset.phase = card.dataset.phase || '1';
+    if(inherited){
+      panel.appendChild(inherited);
+      if(inherited.tagName === 'LABEL'){
+        const h = document.createElement('h2');
+        h.textContent = title;
+        panel.insertBefore(h, inherited);
+      }
+    }else if(!(start.firstElementChild
+               && start.firstElementChild.tagName === 'H2')){
+      const h = document.createElement('h2');
+      h.textContent = title;
+      panel.appendChild(h);
+    }
+
+    // Move this block and everything after it, until the next anchor.
+    const stop = new Set(Object.keys(PANEL_SPLITS));
+    let node = start;
+    while(node){
+      const next = node.nextElementSibling;
+      if(node !== start){
+        const opens = [...stop].some(id=>{
+          const el = document.getElementById(id);
+          return el && (node === el || node.contains(el));
+        });
+        if(opens) break;
+      }
+      panel.appendChild(node);
+      node = next;
+    }
+    const after = tail.get(card) || card;
+    card.parentElement.insertBefore(panel, after.nextElementSibling);
+    tail.set(card, panel);
+  }
+
+  // The canvas gives the results verdict and its numbers a 1.5fr / 1fr split.
+  const recs = document.getElementById('resRecs');
+  const rca = document.getElementById('resRca');
+  if(recs && rca && !document.getElementById('resultsGrid')){
+    const a = recs.closest('.card'), b = rca.closest('.card');
+    if(a && b && a.parentElement === b.parentElement){
+      const grid = document.createElement('div');
+      grid.id = 'resultsGrid';
+      grid.dataset.phase = '3';
+      a.parentElement.insertBefore(grid, a);
+      grid.append(a, b);
+    }
+  }
 }
 
 let CURRENT_PHASE = '1';
@@ -1006,6 +1100,7 @@ function applyTheme(t){
 
 buildSetupRail();
 tagPhases();
+splitIntoPanels();    // panels carry the phase of the card they came from
 watchPhaseReveals();
 showPhase('1');
 
