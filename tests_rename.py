@@ -90,7 +90,13 @@ for dirpath, dirnames, filenames in os.walk("."):
             # that no longer knows the old name cannot carry the data across.
             if t.startswith("/var/www/html/apea"):
                 continue
-            if t in ("apea_history.db", ".apea-token-memory.json"):
+            # Legacy names the code deliberately still knows. Each is how
+            # something written before the rename stays reachable: the token
+            # store, the run history, and the call log of every run already in
+            # the ledger. Code that forgets the old name cannot read the old
+            # data.
+            if t in ("apea_history.db", ".apea-token-memory.json",
+                     "apea_calls.jsonl"):
                 continue
             bad.append("%s: %s" % (p, t))
 check("nothing still says apea outside the working directory",

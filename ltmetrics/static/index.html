@@ -94,6 +94,22 @@
   .card.panel h2{font-size:16px;margin-top:0}
   #resultsGrid{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;
     align-items:start}
+  /* --- phase 4: where the time went -------------------------------------- */
+  #stageBar{display:flex;height:26px;border-radius:6px;overflow:hidden;
+    border:1px solid var(--line);margin:12px 0 6px}
+  #stageBar span{display:block;min-width:2px}
+  #stageBar span[title]{cursor:default}
+  #stageLegend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;
+    color:var(--mut);margin-bottom:14px}
+  #stageLegend i{display:inline-block;width:10px;height:10px;border-radius:2px;
+    margin-right:5px;vertical-align:-1px;font-style:normal}
+  #stageTable{width:100%;border-collapse:collapse;font-size:13px}
+  #stageTable th{text-align:left;color:var(--mut);font-weight:600;
+    font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    padding:6px 8px;border-bottom:1px solid var(--line)}
+  #stageTable td{padding:7px 8px;border-bottom:1px solid var(--line)}
+  #stageTable td.n{text-align:right;font-variant-numeric:tabular-nums}
+  #stageTable tr.lead td{font-weight:700}
   @media(max-width:900px){#resultsGrid{grid-template-columns:1fr}}
   /* Inside the rail the cards are already framed by the rail itself. */
   #setupRail .card{border:none;border-bottom:1px solid var(--hair);
@@ -583,6 +599,19 @@
       <div id="healBody"></div>
     </div>
 
+    <div class="card" id="stageCard">
+      <h2>Where the time went</h2>
+      <p class="hint">Every call in the run, grouped by the stage of the journey
+        it belongs to. Stages appear in the order the run first reached them —
+        whatever stages your recording actually has. Transaction timers are left
+        out: one spans the calls inside it, so counting it would add the same
+        milliseconds twice.</p>
+      <div id="stageBar"></div>
+      <div id="stageLegend"></div>
+      <table id="stageTable"></table>
+      <p class="hint" id="stageNote" style="margin-top:10px"></p>
+    </div>
+
     <div class="card hidden" id="timelineCard">
       <h2>Checkout timeline <span class="badge" id="timelineBadge"></span>
         <span class="muted" id="timelineMode" style="font-weight:400;font-size:13px"></span></h2>
@@ -852,13 +881,75 @@ function renderPlanTypes(plan, sum){
   });
 }
 
+// ---- where the time went (phase 4) --------------------------------------
+// One question: where did the time go, and where did it break. The numbers
+// behind it are in phase 3; this does not repeat them.
+const STAGE_COLOURS = ['#23674A','#C91A12','#EF9253','#5C607A','#0E8A4F',
+                       '#8E8931','#B4551F','#3A5A40','#767676'];
+
+async function loadStages(runId){
+  const bar = $('#stageBar'), leg = $('#stageLegend'),
+        tbl = $('#stageTable'), note = $('#stageNote');
+  if(!bar || !runId) return;
+  let d;
+  try{ d = await api('/api/run/' + runId + '/stages'); }
+  catch(e){ return; }
+  const rows = (d && d.stages) || [];
+  if(!rows.length){
+    bar.innerHTML = ''; leg.innerHTML = ''; tbl.innerHTML = '';
+    note.textContent = 'No call log for this run yet.';
+    return;
+  }
+  const colour = i => STAGE_COLOURS[i % STAGE_COLOURS.length];
+
+  bar.innerHTML = rows.map((s,i)=>
+    '<span style="width:' + s.share + '%;background:' + colour(i) + '" title="'
+    + _escHtml(s.stage + ' — ' + s.share + '% of the time') + '"></span>').join('');
+
+  leg.innerHTML = rows.map((s,i)=>
+    '<span><i style="background:' + colour(i) + '"></i>'
+    + _escHtml(s.stage) + ' ' + s.share + '%</span>').join('');
+
+  // The stage that dominates is the finding; say which it is rather than
+  // leaving it to be read off a bar.
+  const lead = rows.reduce((a,b)=> b.ms > a.ms ? b : a, rows[0]);
+  const broke = rows.filter(s=> s.errors > 0);
+
+  tbl.innerHTML =
+    '<tr><th>Stage</th><th class="n">Calls</th><th class="n">Time</th>'
+    + '<th class="n">Share</th><th class="n">Average</th><th class="n">Errors</th>'
+    + '<th>Slowest call</th></tr>'
+    + rows.map(s=>
+        '<tr' + (s === lead ? ' class="lead"' : '') + '>'
+        + '<td>' + _escHtml(s.stage) + '</td>'
+        + '<td class="n">' + s.calls + '</td>'
+        + '<td class="n">' + (s.ms/1000).toFixed(1) + 's</td>'
+        + '<td class="n">' + s.share + '%</td>'
+        + '<td class="n">' + Math.round(s.avg_ms) + 'ms</td>'
+        + '<td class="n"' + (s.errors ? ' style="color:var(--bad);font-weight:700"' : '')
+        + '>' + s.errors + '</td>'
+        + '<td class="muted">' + _escHtml(s.slowest_call || '') + '</td></tr>').join('');
+
+  const bits = [];
+  bits.push('<b>' + _escHtml(lead.stage) + '</b> takes ' + lead.share
+            + '% of all time, at ' + Math.round(lead.avg_ms) + ' ms a call.');
+  bits.push(broke.length
+    ? 'Failures in ' + broke.map(s=>_escHtml(s.stage)).join(', ') + '.'
+    : 'Nothing failed.');
+  if(d.excluded_txn)
+    bits.push(d.excluded_txn + ' transaction timers excluded as aggregates.');
+  if(d.unlabelled)
+    bits.push(d.unlabelled + ' call(s) could not be placed in a stage.');
+  note.innerHTML = bits.join(' ');
+}
+
 // ---- phases -------------------------------------------------------------
 // Which phase owns which card, matched on the card's own heading so no markup
 // has to be edited and a renamed card degrades to phase 1 rather than vanishing.
 const PHASE_RULES = [
   [/live execution|auto-heal/i, '2'],
   [/^\s*5\s*·\s*results|^\s*results\b/i, '3'],
-  [/checkout timeline/i, '4'],
+  [/checkout timeline|where the time went/i, '4'],
 ];
 
 function tagPhases(){
@@ -1044,6 +1135,9 @@ document.querySelectorAll('#phases button').forEach(b=>{
     const navNew = document.querySelector('nav button[data-tab="new"]');
     if(navNew && !navNew.classList.contains('active')) navNew.click();
     showPhase(b.dataset.phase);
+    // Opening the phase is the moment to re-read it: a run may have finished
+    // since it was last drawn.
+    if(b.dataset.phase === '4' && currentRun) loadStages(currentRun);
     window.scrollTo({top:0, behavior:'smooth'});
   };
 });
@@ -2654,6 +2748,8 @@ function renderTimeline(src){
 
 function showResults(a, s){
   $('#resultCard').classList.remove('hidden');
+  // Phase 4 reads the call log, which is complete only once the run ends.
+  if(currentRun) loadStages(currentRun);
   renderTimeline(s || (a&&a.flow) || {});
   if(!a){ // fetch detail if analysis absent
     return;

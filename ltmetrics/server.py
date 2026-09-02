@@ -1615,6 +1615,111 @@ def run_status(run_id: str):
     return out
 
 
+def _calls_path(out_dir):
+    """The call log for a run, whichever name it was written under.
+
+    Runs made before the rename wrote apea_calls.jsonl. Reading only the new
+    name would quietly empty the call feed and the stage breakdown for every
+    run already in the ledger.
+    """
+    base = Path(out_dir) / "results"
+    for fn in ("ltm_calls.jsonl", "apea_calls.jsonl"):
+        p = base / fn
+        if p.exists():
+            return p
+    return None
+
+
+def _run_out_dir(run_id: str):
+    out_dir = (executor_agent.get_state(run_id) or {}).get("output_dir")
+    if not out_dir:
+        stored = db.get_run(run_id)
+        out_dir = stored.get("output_dir") if stored else None
+    return out_dir
+
+
+@app.get("/api/run/{run_id}/stages")
+def run_stages(run_id: str):
+    """Where the time went, per stage of the journey.
+
+    Aggregated from the call log the run already writes, so this adds no
+    measurement -- only a reading of what was recorded.
+
+    Stages come back in the order the journey first reached them, not
+    alphabetically and not from a fixed list. The stages a run has are whatever
+    its recording and the platform's canonical map produced, which is what lets
+    one client's journey differ from another's without a code change.
+
+    TXN rows are excluded: a transaction timer spans the requests inside it, so
+    counting it here would add the same milliseconds twice.
+    """
+    out_dir = _run_out_dir(run_id)
+    if not out_dir:
+        return {"stages": [], "total_ms": 0, "excluded_txn": 0}
+    path = _calls_path(out_dir)
+    if path is None:
+        return {"stages": [], "total_ms": 0, "excluded_txn": 0}
+
+    # Applied to calls that carry no stage of their own, which is every call in
+    # a run made before the labelling landed.
+    try:
+        from .agents.generator import _kb_stage_map
+        canon = _kb_stage_map(str((db.get_run(run_id) or {}).get("platform") or ""))
+    except Exception:
+        canon = {}
+
+    order, agg, txn, unlabelled = [], {}, 0, 0
+    try:
+        for ln in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                c = json.loads(ln)
+            except Exception:
+                continue
+            name = str(c.get("name") or "")
+            stage = (c.get("group") or "").strip()
+            # A transaction row is an aggregate: its duration already contains
+            # the requests inside it. Older logs predate the "TXN" label, so
+            # the name is checked too.
+            if stage == "TXN" or name.startswith("TXN: "):
+                txn += 1
+                continue
+            if not stage:
+                stage = canon.get(name, "")
+            if not stage:
+                stage = "Unlabelled"
+                unlabelled += 1
+            if stage not in agg:
+                order.append(stage)
+                agg[stage] = {"stage": stage, "calls": 0, "ms": 0.0,
+                              "errors": 0, "slowest": 0.0, "slowest_call": ""}
+            a = agg[stage]
+            ms = float(c.get("ms") or 0)
+            a["calls"] += 1
+            a["ms"] += ms
+            if not c.get("ok"):
+                a["errors"] += 1
+            if ms > a["slowest"]:
+                a["slowest"] = ms
+                a["slowest_call"] = str(c.get("name") or "")[:60]
+    except Exception:
+        return {"stages": [], "total_ms": 0, "excluded_txn": 0}
+
+    total = sum(a["ms"] for a in agg.values()) or 0.0
+    stages = []
+    for name in order:
+        a = agg[name]
+        a["ms"] = round(a["ms"], 1)
+        a["avg_ms"] = round(a["ms"] / a["calls"], 1) if a["calls"] else 0
+        a["share"] = round(100.0 * a["ms"] / total, 1) if total else 0
+        a["slowest"] = round(a["slowest"], 1)
+        stages.append(a)
+    return {"stages": stages, "total_ms": round(total, 1),
+            "excluded_txn": txn, "unlabelled": unlabelled}
+
+
 @app.get("/api/run/{run_id}/calls")
 def run_calls(run_id: str, since: int = 0, limit: int = 500):
     """Incremental live feed of individual API calls (JMeter View-Results-Tree
@@ -1626,8 +1731,8 @@ def run_calls(run_id: str, since: int = 0, limit: int = 500):
         out_dir = stored.get("output_dir") if stored else None
     if not out_dir:
         return {"calls": [], "next": since, "total": 0}
-    path = Path(out_dir) / "results" / "ltm_calls.jsonl"
-    if not path.exists():
+    path = _calls_path(out_dir)
+    if path is None:
         return {"calls": [], "next": since, "total": 0}
     try:
         lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
