@@ -72,7 +72,45 @@
   /* A card that this phase does not own. Hidden, never removed -- the JS still
      finds every element it addresses. */
   .card[data-phase].phase-off{display:none}
+
+  /* --- phase 1: setup rail + findings ------------------------------------ */
+  #phaseGrid{display:grid;grid-template-columns:322px minmax(0,1fr);
+    align-items:start;gap:0}
+  #phaseGrid.rail-shut{grid-template-columns:46px minmax(0,1fr)}
+  #setupRail{background:var(--rail);border-right:1px solid var(--hair);
+    min-height:calc(100vh - 190px);position:sticky;top:46px;align-self:stretch}
+  #railToggle{display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;background:transparent;border:none;
+    border-bottom:1px solid var(--hair);color:var(--accent);min-height:44px;
+    padding:0 10px;cursor:pointer;font-family:var(--body);font-size:13px;
+    font-weight:700;white-space:nowrap;overflow:hidden}
+  #railToggle:hover{background:rgba(0,0,0,.04)}
+  #railBody{padding:14px}
+  #phaseGrid.rail-shut #railBody{display:none}
+  #phaseGrid.rail-shut #railToggle span.lbl{display:none}
+  #phaseMain{padding:8px 0}
+  /* Inside the rail the cards are already framed by the rail itself. */
+  #setupRail .card{border:none;border-bottom:1px solid var(--hair);
+    border-radius:0;background:transparent;padding:16px 4px;margin:0}
+  #setupRail .card:last-child{border-bottom:none}
+  #setupRail .card h2{font-size:15px}
+  /* 322px is one column, not two. The rules are .row and .row3 -- an
+     earlier version guessed .row2, which does not exist, so the fields
+     stayed side by side at 135px each. */
+  #setupRail .row,#setupRail .row3{grid-template-columns:1fr}
+  @media(max-width:1100px){
+    #phaseGrid{grid-template-columns:1fr}
+    #setupRail{position:static;min-height:0;border-right:none;
+      border-bottom:1px solid var(--hair)}
+  }
   main{max-width:1080px;margin:0 auto;padding:28px}
+  /* The run tab carries the rail, so it spans the window; the reading width
+     comes back inside #phaseMain rather than around the whole layout. */
+  body.has-rail main{max-width:none;padding:0}
+  body.has-rail #phaseMain{max-width:1080px;padding:24px 28px}
+  body.has-rail #tab-saved,body.has-rail #tab-history,
+  body.has-rail #tab-projects,body.has-rail #tab-ask{
+    max-width:1080px;margin:0 auto;padding:28px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
     padding:22px;margin-bottom:18px}
   .card h2{margin:0 0 6px;font-size:18px;font-weight:700}
@@ -818,13 +856,71 @@ const PHASE_RULES = [
 ];
 
 function tagPhases(){
-  document.querySelectorAll('#tab-new > .card').forEach(c=>{
+  document.querySelectorAll('#tab-new .card').forEach(c=>{
     const h = c.querySelector('h2');
     const t = (h ? h.textContent : '').trim();
     let ph = '1';
     for(const [re, n] of PHASE_RULES){ if(re.test(t)){ ph = n; break; } }
     c.dataset.phase = ph;
   });
+}
+
+// The canvas gives phase 1 a persistent rail: what you are testing, and the
+// recording it came from. Everything else gets the width.
+const RAIL_CARDS = [
+  /project\s*&\s*target/i,
+  /upload your .*recording/i,
+  /crawl\s*&\s*record/i,
+];
+
+function buildSetupRail(){
+  const tab = $('#tab-new');
+  if(!tab || $('#phaseGrid')) return;
+
+  const grid = document.createElement('div');
+  grid.id = 'phaseGrid';
+  const rail = document.createElement('aside');
+  rail.id = 'setupRail';
+  const main = document.createElement('div');
+  main.id = 'phaseMain';
+
+  const toggle = document.createElement('button');
+  toggle.id = 'railToggle';
+  toggle.type = 'button';
+  toggle.innerHTML = '<span aria-hidden="true">\u2039</span>'
+                   + '<span class="lbl">Hide setup panel</span>';
+  toggle.setAttribute('aria-controls', 'railBody');
+  toggle.setAttribute('aria-expanded', 'true');
+  const body = document.createElement('div');
+  body.id = 'railBody';
+  rail.append(toggle, body);
+
+  // Move, never rebuild: appendChild relocates the same node, so ids and
+  // listeners come with it. Cloning or re-writing innerHTML would drop them.
+  [...tab.children].forEach(c => main.appendChild(c));
+  grid.append(rail, main);
+  tab.appendChild(grid);
+  document.body.classList.add('has-rail');   // lets main go full-bleed
+
+  [...main.children].forEach(c=>{
+    if(!c.classList || !c.classList.contains('card')) return;
+    const h = (c.querySelector('h2') || {}).textContent || '';
+    if(RAIL_CARDS.some(re => re.test(h))) body.appendChild(c);
+  });
+
+  toggle.onclick = ()=>{
+    const shut = grid.classList.toggle('rail-shut');
+    const label = shut ? 'Show setup panel' : 'Hide setup panel';
+    toggle.firstElementChild.textContent = shut ? '\u203A' : '\u2039';
+    // CSS hides the label when shut, which is not the same as changing it --
+    // a screen reader would still offer to hide a panel that is already gone.
+    toggle.querySelector('.lbl').textContent = label;
+    toggle.title = label;
+    toggle.setAttribute('aria-label', label);
+    toggle.setAttribute('aria-expanded', shut ? 'false' : 'true');
+    try{ localStorage.setItem('ltm-rail', shut ? 'shut' : 'open'); }catch(e){}
+  };
+  try{ if(localStorage.getItem('ltm-rail') === 'shut') toggle.click(); }catch(e){}
 }
 
 let CURRENT_PHASE = '1';
@@ -837,9 +933,13 @@ function showPhase(n){
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
-  document.querySelectorAll('#tab-new > .card[data-phase]').forEach(c=>{
+  document.querySelectorAll('#tab-new .card[data-phase]').forEach(c=>{
     c.classList.toggle('phase-off', c.dataset.phase !== n);
   });
+  const rail = $('#setupRail');
+  if(rail) rail.style.display = (n === '1') ? '' : 'none';
+  const grid = $('#phaseGrid');
+  if(grid) grid.style.gridTemplateColumns = (n === '1') ? '' : '1fr';
   // Released on the next tick, after the observer has drained our own batch.
   setTimeout(()=>{ PHASE_MUTING = false; }, 0);
 }
@@ -865,7 +965,7 @@ document.querySelectorAll('#phases button').forEach(b=>{
 let PHASE_MUTING = false;
 function watchPhaseReveals(){
   const wasHidden = new WeakMap();
-  const cards = document.querySelectorAll('#tab-new > .card[data-phase]');
+  const cards = document.querySelectorAll('#tab-new .card[data-phase]');
   cards.forEach(c=> wasHidden.set(c, c.classList.contains('hidden')));
 
   const obs = new MutationObserver(ms=>{
@@ -904,6 +1004,7 @@ function applyTheme(t){
     document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 })();
 
+buildSetupRail();
 tagPhases();
 watchPhaseReveals();
 showPhase('1');
