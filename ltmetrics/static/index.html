@@ -149,6 +149,19 @@
     padding:5px 8px}
   #stageTable table.inner tr:last-child td{border-bottom:none}
   #stageTable .bad{color:var(--bad);font-weight:700}
+  /* Long blocks open on demand. The canvas shows four call rows, not four
+     hundred lines of recorded selectors. */
+  details.quiet{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  details.quiet > summary{cursor:pointer;list-style:none;font-size:12px;
+    color:var(--mut);text-transform:uppercase;letter-spacing:.06em;
+    font-weight:600;display:flex;align-items:center;gap:8px}
+  details.quiet > summary::-webkit-details-marker{display:none}
+  details.quiet > summary::before{content:'\25B8';font-size:10px;color:var(--accent)}
+  details.quiet[open] > summary::before{content:'\25BE'}
+  details.quiet > summary:hover{color:var(--txt)}
+  details.quiet > summary .n{margin-left:auto;text-transform:none;
+    letter-spacing:0;font-weight:400}
+  details.quiet > *:not(summary){margin-top:10px}
   #noiseChips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
   #noiseChips span{display:inline-flex;align-items:center;gap:6px;
     border:1px solid var(--line);border-radius:20px;padding:4px 12px;
@@ -392,7 +405,10 @@
            HTTP-level tool, so LT Metrics silently substitutes an offline method. That
            surprise is surfaced HERE, in the main flow, rather than only in the
            collapsed browser-track panel where nobody found it. -->
-      <div id="paymentStrategy" style="margin-top:12px"></div>
+      <details class="quiet" id="payStrategyWrap">
+        <summary>How this recording pays<span class="n" id="payStrategyOne"></span></summary>
+        <div id="paymentStrategy"></div>
+      </details>
       <div class="chips" id="discTech" style="display:none"></div>
       <label style="margin-top:14px">What we kept from the recording
         <span class="muted" id="keptCount"></span></label>
@@ -407,15 +423,20 @@
       <div id="callCritWarn" style="margin-top:8px;color:#ffb4b4;font-size:13px;line-height:1.5"></div>
       <div id="noiseChips"></div>
       <div id="anDropped"></div>
-      <label style="margin-top:12px">Recorded browser actions
-        <span class="muted">— every click, keystroke and wait, for reference</span></label>
-      <div id="anUiSteps"></div>
-      <label style="margin-top:12px">Correlated values
-        <span class="muted">— found and handled for you. Nothing to do.</span></label>
-      <div id="anCorr"></div>
-      <label style="margin-top:12px">Fields that need real values
-        <span class="muted">— download the template, fill one row per virtual user, and upload it back</span></label>
-      <div id="anGroups"></div>
+      <details class="quiet">
+        <summary>Recorded browser actions<span class="n">every click, keystroke and wait</span></summary>
+        <div id="anUiSteps"></div>
+      </details>
+      <details class="quiet">
+        <summary>Correlated values<span class="n" id="corrCount">found and handled for you</span></summary>
+        <div id="anCorr"></div>
+      </details>
+      <details class="quiet" open>
+        <summary>Fields that need real values<span class="n" id="fieldCount"></span></summary>
+        <p class="hint">Download the template, fill one row per virtual user, and
+          upload it back.</p>
+        <div id="anGroups"></div>
+      </details>
       <div id="anNotes"></div>
       <div class="btns">
         <button class="btn" id="btnSampleCsv">⬇ Download sample data CSV</button>
@@ -2217,6 +2238,16 @@ function renderAnalysis(a){
   renderPaymentMethods(a.payment);
   renderPaymentStrategy(a.detected_gateway);
   $('#anUiSteps').innerHTML = renderUiSteps(a.ui_steps);
+
+  // A collapsed block must still say how much is inside it, or collapsing
+  // turns into hiding.
+  const nCorr = (a.correlations || []).length;
+  const cc = $('#corrCount');
+  if(cc) cc.textContent = nCorr
+    ? nCorr + ' found and handled for you' : 'none needed';
+  const nFields = (a.groups || []).reduce((t, g) => t + ((g.fields || []).length), 0);
+  const fc = $('#fieldCount');
+  if(fc) fc.textContent = nFields ? nFields + ' field(s)' : '';
   $('#anCorr').innerHTML = (a.correlations||[]).length
     ? a.correlations.map(c=>`<div class="rec">🔗 <b>${c.value}</b> <span class="muted">(from ${c.field})</span><div class="d">${c.handling}</div></div>`).join('')
     : '<p class="muted">No dynamic values needing correlation were detected.</p>';
