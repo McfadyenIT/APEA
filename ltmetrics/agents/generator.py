@@ -1474,6 +1474,10 @@ def _bump(key, n=1):
 # cart" / "cart is locked" races and inconsistent order creation.
 _USER_IDX = [0]
 _ROW_IDX = [0]
+# One number per virtual user, so a logged call can name who made it. Without
+# it a stage can be counted but never turned into a funnel: calls do not tell
+# you how many USERS got that far.
+_VU_SEQ = [0]
 # Data->thread sharing (JMeter-style CSV sharing mode):
 #   "all_threads" (default) — one shared pool, round-robin with recycle (wrap) across
 #                             ALL users; a row/account may be reused when users exceed
@@ -1966,7 +1970,16 @@ class WebsiteUser(HttpUser):
     # __WAIT_TIME__ is chosen by the planner from the requested pacing.
     wait_time = __WAIT_TIME__
 
+    def context(self):
+        """Carried into every request event, so a logged call can say which
+        user made it. Locust passes this through untouched; nothing else reads
+        it, and adding it costs no request and no timing."""
+        return {"vu": getattr(self, "_vu", 0)}
+
     def on_start(self):
+        with _LOCK:
+            _VU_SEQ[0] += 1
+            self._vu = _VU_SEQ[0]
         self.credentials, self.search_keywords, self.product_ids = _load_testdata()
         self._rows = _load_rows()
         self._row = _next_row(self._rows)   # this user's full CSV row (all columns)
@@ -3405,6 +3418,7 @@ def _ltm_on_request(request_type=None, name=None, response_time=None,
             "seq": seq,
             "ts": round(time.time(), 3),
             "group": _stage_of(name),
+            "vu": (context or {}).get("vu", 0) if isinstance(context, dict) else 0,
             "name": name or "",
             "method": (request_type or getattr(rq, "method", "") or ""),
             "url": str(url or getattr(rq, "url", "") or ""),

@@ -1675,6 +1675,7 @@ def run_stages(run_id: str):
         canon = {}
 
     order, agg, txn, unlabelled = [], {}, 0, 0
+    seen_vu = set()
     try:
         for ln in path.read_text(encoding="utf-8", errors="ignore").splitlines():
             ln = ln.strip()
@@ -1701,7 +1702,12 @@ def run_stages(run_id: str):
                 order.append(stage)
                 agg[stage] = {"stage": stage, "calls": 0, "ms": 0.0,
                               "errors": 0, "slowest": 0.0, "slowest_call": "",
-                              "first_ts": None, "last_ts": None, "by_call": {}}
+                              "first_ts": None, "last_ts": None, "by_call": {},
+                              "users": set()}
+            vu = c.get("vu")
+            if isinstance(vu, int) and vu > 0:
+                agg[stage]["users"].add(vu)
+                seen_vu.add(vu)
             a = agg[stage]
             ms = float(c.get("ms") or 0)
             a["calls"] += 1
@@ -1753,11 +1759,26 @@ def run_stages(run_id: str):
             b["avg_ms"] = round(b["ms"] / b["calls"], 1) if b["calls"] else 0
             b["slowest"] = round(b["slowest"], 1)
         a["by_call"] = calls
+        a["users"] = len(a["users"])
         a.pop("first_ts", None)
         a.pop("last_ts", None)
         stages.append(a)
+
+    # A run recorded before calls carried a user number reads as one user
+    # reaching everything. Say we do not know rather than draw that.
+    funnel_ok = len(seen_vu) > 0
+    if funnel_ok:
+        prev = None
+        for a in stages:
+            a["dropped"] = max(0, prev - a["users"]) if prev is not None else 0
+            prev = a["users"]
+    else:
+        for a in stages:
+            a["users"] = None
+            a["dropped"] = None
     return {"stages": stages, "total_ms": round(total, 1),
-            "excluded_txn": txn, "unlabelled": unlabelled}
+            "excluded_txn": txn, "unlabelled": unlabelled,
+            "users": len(seen_vu), "funnel": funnel_ok}
 
 
 @app.get("/api/run/{run_id}/calls")

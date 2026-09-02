@@ -1079,14 +1079,25 @@ async function loadStages(runId){
   // stage COST; "Spans" is how long it was in play. With users running
   // concurrently these differ a lot, and reading one as the other is the
   // easiest way to misread a load test.
+  // Only shown when the run can actually answer it. A dash in a "users"
+  // column reads as zero, which is a different claim from "not recorded".
+  const funnel = !!d.funnel;
+  const cols = funnel ? 11 : 9;
   tbl.innerHTML =
-    '<tr><th></th><th>Stage</th><th class="n">Calls</th><th class="n">Time</th>'
+    '<tr><th></th><th>Stage</th>'
+    + (funnel ? '<th class="n">Users</th><th class="n">Stopped</th>' : '')
+    + '<th class="n">Calls</th><th class="n">Time</th>'
     + '<th class="n">Share</th><th class="n">Spans</th><th class="n">Average</th>'
     + '<th class="n">Errors</th><th>Slowest call</th></tr>'
     + rows.map((s,i)=>
         '<tr class="stage-row' + (s === lead ? ' lead' : '') + '" data-i="' + i + '">'
         + '<td class="tw">+</td>'
         + '<td>' + _escHtml(s.stage) + '</td>'
+        + (funnel
+            ? '<td class="n">' + (s.users || 0) + '</td>'
+              + '<td class="n' + (s.dropped ? ' bad' : '') + '">'
+              + (s.dropped ? '\u2212' + s.dropped : '') + '</td>'
+            : '')
         + '<td class="n">' + s.calls + '</td>'
         + '<td class="n">' + (s.ms/1000).toFixed(1) + 's</td>'
         + '<td class="n">' + s.share + '%</td>'
@@ -1094,7 +1105,7 @@ async function loadStages(runId){
         + '<td class="n">' + Math.round(s.avg_ms) + 'ms</td>'
         + '<td class="n' + (s.errors ? ' bad' : '') + '">' + s.errors + '</td>'
         + '<td class="muted">' + _escHtml(s.slowest_call || '') + '</td></tr>'
-        + '<tr class="calls" data-for="' + i + '" hidden><td colspan="9">'
+        + '<tr class="calls" data-for="' + i + '" hidden><td colspan="' + cols + '">'
         + '<table class="inner">'
         + (s.by_call || []).map(b=>
             '<tr><td>' + _escHtml(b.name) + '</td>'
@@ -1122,6 +1133,18 @@ async function loadStages(runId){
   bits.push(broke.length
     ? 'Failures in ' + broke.map(s=>_escHtml(s.stage)).join(', ') + '.'
     : 'Nothing failed.');
+  if(funnel){
+    const lost = rows.reduce((a,s)=> a + (s.dropped || 0), 0);
+    const first = rows[0], last = rows[rows.length - 1];
+    bits.push(lost
+      ? (first.users + ' user(s) started, ' + last.users + ' reached '
+         + _escHtml(last.stage) + '.')
+      : ('All ' + (first.users || 0) + ' user(s) reached every stage.'));
+  }else{
+    // Say why the columns are missing, rather than leaving a gap.
+    bits.push('This run does not record which user made each call, so how many '
+              + 'reached each stage cannot be counted. Runs from now on will.');
+  }
   if(d.excluded_txn)
     bits.push(d.excluded_txn + ' transaction timers excluded as aggregates.');
   if(d.unlabelled)
