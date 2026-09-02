@@ -109,6 +109,18 @@
   #trafficPresets .ps{font-size:12px;color:var(--mut);display:block;
     margin-top:4px}
   #trafficSays{font-size:13px;color:var(--mut);margin:2px 0 16px}
+  .railEyebrow{display:flex;align-items:center;gap:8px;font-size:11px;
+    font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin:16px 0 6px}
+  .railEyebrow i{display:block;width:26px;height:1px;background:var(--accent);
+    font-style:normal}
+  .railNote{font-size:12px;color:var(--mut);line-height:1.5;margin:0 0 10px}
+  #railLinks{margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)}
+  #railLinks button{display:block;width:100%;text-align:left;background:none;
+    border:1px solid var(--line);border-radius:8px;padding:9px 12px;
+    margin-bottom:8px;font-size:12px;color:var(--txt);cursor:pointer;
+    font-family:var(--body)}
+  #railLinks button:hover{background:var(--panel2)}
   #railSummary{font-size:12px;margin-top:4px}
   #railSummary div{display:grid;grid-template-columns:64px 1fr;gap:8px;
     padding:5px 0;border-bottom:1px solid var(--hair)}
@@ -336,7 +348,10 @@
       <a class="link" style="margin-left:10px" onclick="clearSaved()">✕ Clear</a>
     </div>
     <div class="card">
-      <h2>1 · Project &amp; target</h2>
+      <div class="railEyebrow"><i></i>What you are testing</div>
+      <p class="railNote">Collapses on its own once analysis is done, so results
+        get the full width.</p>
+      <h2 class="hidden">1 · Project &amp; target</h2>
       <p class="hint">Name your project. The target URL is taken from your recording (you can override it here). Login is driven by the recording; for multi-user load, upload a credentials CSV below with several accounts.</p>
       <div class="row">
         <div><label>Project name</label><input id="projectName" placeholder="My Web App" value="My Web App"></div>
@@ -347,7 +362,10 @@
     </div>
 
     <div class="card">
-      <h2>1 · Upload your BlazeMeter recording</h2>
+      <div class="railEyebrow"><i></i>Upload your recording</div>
+      <p class="railNote">JMeter <code>.jmx</code>, Taurus <code>.yaml</code> or a
+        <code>.har</code> capture.</p>
+      <h2 class="hidden">1 · Upload your BlazeMeter recording</h2>
       <p class="hint">LT Metrics works entirely from your recording — JMeter <code>.jmx</code>,
         Taurus/BlazeMeter <code>.yaml/.yml</code>, or <code>.har</code>. It reads the journey,
         auto-correlates dynamic values, and tells you exactly what data to upload.</p>
@@ -495,7 +513,9 @@
       <p class="muted" id="testPurpose"></p>
       <div class="row3">
         <div><label>Users</label><input id="ovUsers" type="number" placeholder="auto"></div>
-        <div><label>Duration (seconds)</label><input id="ovDuration" type="number" placeholder="auto"></div>
+        <div><label>Minutes</label>
+          <input id="ovMinutes" type="number" min="0" step="1" placeholder="auto">
+          <input id="ovDuration" type="number" class="hidden"></div>
         <div><label>Orders per user</label>
           <input id="ovOrders" type="number" min="0" placeholder="0 = run the duration">
           <div class="muted" style="font-size:12px;margin-top:4px">Stops each user
@@ -1034,6 +1054,10 @@ function describePlan(){
   return bits.join(' ');
 }
 
+// Filled when a data file is validated; the canvas shows it as "300 rows ·
+// 4 columns" in the rail, next to the traffic it will drive.
+let DATA_SUMMARY = '';
+
 function renderPlanSummary(){
   const p = _planNow();
   const box = $('#railSummary'), will = $('#railWill');
@@ -1047,8 +1071,9 @@ function renderPlanSummary(){
       + row('Traffic', p.users ? p.users + ' users'
             + (p.mins ? ' · ' + p.mins + ' min' : '') : '')
       + row('Ramp', p.spawn ? p.spawn + '/s' : '')
-      + row('Gates', [p.p95 ? 'p95 < ' + p.p95 + 'ms' : '',
-                      p.err ? 'err < ' + p.err + '%' : ''].filter(Boolean).join(' · '))
+      + row('Gates', [p.p95 ? 'p95 \u2264 ' + p.p95.toLocaleString() + 'ms' : '',
+                      p.err ? 'err \u2264 ' + p.err + '%' : ''].filter(Boolean).join(' · '))
+      + row('Data', DATA_SUMMARY)
       + row('Orders', p.orders ? p.orders + ' per user' : '');
   }
   if(will) will.textContent = describePlan()
@@ -1066,6 +1091,23 @@ function renderPlanSummary(){
   }
 }
 
+// Minutes in, seconds stored. Twelve places read ovDuration as seconds and all
+// of them are right; relabelling one input is not worth changing the meaning of
+// a value they depend on.
+function syncMinutes(){
+  const m = $('#ovMinutes'), d = $('#ovDuration');
+  if(!m || !d) return;
+  m.addEventListener('input', ()=>{
+    d.value = m.value === '' ? '' : String(Math.round(+m.value * 60));
+    renderPlanSummary();
+  });
+  // A preset or a saved script writes seconds; show the minutes that match.
+  const back = ()=>{ m.value = d.value === '' ? '' : String(Math.round(+d.value / 60)); };
+  new MutationObserver(back).observe(d, {attributes:true, attributeFilter:['value']});
+  d.addEventListener('change', back);
+  back();
+}
+
 function wireTrafficPresets(){
   const box = $('#trafficPresets');
   if(!box) return;
@@ -1081,9 +1123,10 @@ function wireTrafficPresets(){
           t.value = [...t.options].find(o=>/stress/i.test(o.value || o.text)).value;
         if(t) t.dispatchEvent(new Event('change'));
       }else{
-        const u = $('#ovUsers'), d = $('#ovDuration');
+        const u = $('#ovUsers'), d = $('#ovDuration'), m = $('#ovMinutes');
         if(u) u.value = b.dataset.users;
         if(d) d.value = String(+b.dataset.mins * 60);
+        if(m) m.value = b.dataset.mins;
       }
       renderPlanSummary();
       if(typeof refreshPlan === 'function') refreshPlan();
@@ -1265,9 +1308,21 @@ function buildSetupRail(){
   // setup panel is collapsed.
   const sum = document.createElement('div');
   sum.className = 'card';
-  sum.innerHTML = '<h2>What will happen</h2>'
-    + '<div id="railSummary"></div><p id="railWill"></p>';
+  sum.innerHTML = '<div class="railEyebrow"><i></i>What will happen</div>'
+    + '<div id="railSummary"></div><p id="railWill"></p>'
+    + '<div id="railLinks">'
+    + '<button type="button" data-tab="saved">Library — saved scripts, runs, projects</button>'
+    + '<button type="button" data-tab="ask">Ask LT Metrics about past runs</button>'
+    + '</div>';
   body.appendChild(sum);
+  // The canvas puts these in the rail rather than the top row. They drive the
+  // same tabs, so nothing is duplicated -- the click is forwarded.
+  sum.querySelectorAll('#railLinks button').forEach(b=>{
+    b.onclick = ()=>{
+      const nav = document.querySelector('nav button[data-tab="' + b.dataset.tab + '"]');
+      if(nav) nav.click();
+    };
+  });
 
   // Move, never rebuild: appendChild relocates the same node, so ids and
   // listeners come with it. Cloning or re-writing innerHTML would drop them.
@@ -1467,6 +1522,7 @@ function applyTheme(t){
 })();
 
 buildSetupRail();
+syncMinutes();
 wireTrafficPresets();
 tagPhases();
 splitIntoPanels();    // panels carry the phase of the card they came from
@@ -1757,7 +1813,7 @@ function renderCallSelector(calls, dropped){
     const order = ['Images','Fonts & CSS','Scripts','Trackers','Page views',
                    'CORS preflight','Other'];
     chips.innerHTML = order.filter(k=>buckets[k])
-      .map(k=>'<span>' + _escHtml(k) + ' <b>' + buckets[k] + '</b></span>').join('');
+      .map(k=>'<span>' + _escHtml(k) + ' · <b>' + buckets[k] + '</b></span>').join('');
     // The canvas closes this block with one sentence. Its other sentence --
     // "Colour is how each call behaved last run" -- is left out: nothing
     // colours these rows by a previous run, and describing a colour that is
