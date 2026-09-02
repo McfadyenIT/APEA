@@ -50,8 +50,12 @@ for token, value in (("--green", "#23674A"), ("--orange", "#EF9253"),
 
 check("the header is a flat green bar",
       "background:var(--green)" in UI)
-check("no gradient survives from the old look",
-      "radial-gradient" not in UI)
+# This was always about the HEADER's radial-gradient, not gradients in
+# general -- 9a draws its eyebrow marker from them.
+check("no gradient survives on the header",
+      "radial-gradient(120% 180%" not in UI)
+check("but the eyebrow marker uses them, as 9a does",
+      "radial-gradient(circle, var(--mcf-red)" in UI)
 
 print()
 print("light by default, and the old palette is kept rather than deleted")

@@ -19,6 +19,7 @@
     --head:'Inter','Aptos','Segoe UI',system-ui,sans-serif;
     --body:'Inter','Aptos','Segoe UI',system-ui,-apple-system,sans-serif;
     --mono:'JetBrains Mono','Consolas',ui-monospace,monospace;
+    --mcf-red:#E00000;--ls-overline:.20em;
   }
   /* The previous look, kept whole so the toggle has somewhere to go. */
   html[data-theme="dark"]{
@@ -90,11 +91,26 @@
   #phaseGrid.rail-shut #railToggle span.lbl{display:none}
   #phaseMain{padding:8px 0}
   /* --- phase 1 contents, per the canvas --------------------------------- */
-  .eyebrow{display:flex;align-items:center;gap:10px;font-size:12px;
-    font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--accent);margin:4px 0 8px}
-  .eyebrow i{display:block;width:34px;height:1px;background:var(--accent);
-    font-style:normal}
+  /* The design's section mark: two solid dots joined by dashes, a faded pair,
+     then a dark dot. Copied from 9a's stylesheet rather than approximated --
+     it appears before every eyebrow and its absence was the first thing an
+     operator noticed. */
+  .eyebrow,.railEyebrow{font-size:12px;font-weight:700;
+    text-transform:uppercase;letter-spacing:var(--ls-overline);
+    color:var(--mcf-red);display:inline-flex;align-items:center;gap:14px;
+    margin:4px 0 8px}
+  .eyebrow::before,.railEyebrow::before{
+    content:"";display:block;flex:none;width:58px;height:12px;
+    background:
+      radial-gradient(circle, var(--mcf-red) 5px, transparent 5px) 0 0/12px 12px no-repeat,
+      linear-gradient(var(--mcf-red),var(--mcf-red)) 12px 5px/6px 2px no-repeat,
+      radial-gradient(circle, var(--mcf-red) 5px, transparent 5px) 18px 0/12px 12px no-repeat,
+      linear-gradient(var(--mcf-red),var(--mcf-red)) 30px 5px/6px 2px no-repeat,
+      radial-gradient(circle, rgba(224,0,0,.45) 5px, transparent 5px) 36px 0/12px 12px no-repeat,
+      linear-gradient(rgba(224,0,0,.6),rgba(224,0,0,.6)) 48px 5px/6px 2px no-repeat,
+      radial-gradient(circle, var(--txt) 5px, transparent 5px) 54px 0/12px 12px no-repeat;
+  }
+  .eyebrow i,.railEyebrow i{display:none}
   .ask{font-size:26px;font-weight:700;line-height:1.25;margin:0 0 4px;
     max-width:34ch;font-family:var(--head)}
   #trafficPresets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
@@ -109,11 +125,7 @@
   #trafficPresets .ps{font-size:12px;color:var(--mut);display:block;
     margin-top:4px}
   #trafficSays{font-size:13px;color:var(--mut);margin:2px 0 16px}
-  .railEyebrow{display:flex;align-items:center;gap:8px;font-size:11px;
-    font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--accent);margin:16px 0 6px}
-  .railEyebrow i{display:block;width:26px;height:1px;background:var(--accent);
-    font-style:normal}
+  .railEyebrow{margin:16px 0 6px}
   .railNote{font-size:12px;color:var(--mut);line-height:1.5;margin:0 0 10px}
   #railLinks{margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)}
   #railLinks button{display:block;width:100%;text-align:left;background:none;
@@ -122,11 +134,15 @@
     font-family:var(--body)}
   #railLinks button:hover{background:var(--panel2)}
   #railSummary{font-size:12px;margin-top:4px}
-  #railSummary div{display:grid;grid-template-columns:64px 1fr;gap:8px;
-    padding:5px 0;border-bottom:1px solid var(--hair)}
-  #railSummary div:last-child{border-bottom:none}
+  #railSummary div{display:grid;grid-template-columns:64px 1fr;gap:10px;
+    padding:6px 0}
   #railSummary b{color:var(--mut);font-weight:600;text-transform:uppercase;
-    letter-spacing:.06em;font-size:10px;padding-top:2px}
+    letter-spacing:.08em;font-size:10px;padding-top:3px}
+  /* 9a sets these in mono. In sans they read as prose; in mono they read as
+     values, which is what they are. */
+  #railSummary span{font-family:var(--mono);font-size:12.5px}
+  #railWill{border-left:3px solid var(--orange);border-top:none;
+    padding:10px 0 10px 12px;margin-top:14px;color:var(--txt);font-size:12.5px}
   #railWill{font-size:12px;color:var(--mut);line-height:1.5;margin-top:10px;
     padding-top:10px;border-top:1px solid var(--hair)}
   @media(max-width:900px){#trafficPresets{grid-template-columns:1fr}}
@@ -372,6 +388,7 @@
       <label>Recording <span class="muted">— .jmx, .yaml/.yml, or .har</span></label>
       <input type="file" id="upRec" accept=".jmx,.yaml,.yml,.har">
       <div class="muted" id="sumRec"></div>
+      <p class="railNote" id="railRecording" style="margin-top:8px"></p>
       <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
         <input id="enhancePlaywright" type="checkbox" style="width:auto" checked>
         Also crawl live with Playwright — renders JS and fills gaps the recording might have
@@ -417,7 +434,10 @@
 
     <div class="card hidden" id="discoveryCard">
       <h2>2 · Recording analysis</h2>
-      <div class="grid-k" id="discKpis"></div>
+      <details class="quiet"><summary>Recording details<span class="n"
+        id="discOne"></span></summary>
+        <div class="grid-k" id="discKpis"></div>
+      </details>
       <label>Recorded journey</label><div id="discJourneys"></div>
       <!-- Payment strategy. A hosted card gateway cannot be completed by ANY
            HTTP-level tool, so LT Metrics silently substitutes an offline method. That
@@ -1308,8 +1328,9 @@ function buildSetupRail(){
   // setup panel is collapsed.
   const sum = document.createElement('div');
   sum.className = 'card';
-  sum.innerHTML = '<div class="railEyebrow"><i></i>What will happen</div>'
-    + '<div id="railSummary"></div><p id="railWill"></p>'
+  sum.innerHTML = '<div id="railSummary"></div>'
+    + '<div class="railEyebrow" style="font-size:10px;margin:14px 0 0">'
+    + 'What will happen</div><p id="railWill"></p>'
     + '<div id="railLinks">'
     + '<button type="button" data-tab="saved">Library — saved scripts, runs, projects</button>'
     + '<button type="button" data-tab="ask">Ask LT Metrics about past runs</button>'
@@ -2286,6 +2307,20 @@ function renderAnalysis(a){
     ['UI actions', (a.ui_steps||[]).length],
     ['Correlations', (a.correlations||[]).length],
   ].map(([l,v])=>`<div class="k"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+  // The same facts as a sentence, where 9a puts them. Written into the rail
+  // under the uploaded file, and onto the collapsed tiles so nothing is lost.
+  const kept = (a.calls || []).length;
+  const dropped = (a.dropped || []).length;
+  const nFieldsA = (a.groups || []).reduce((t, g) => t + ((g.fields || []).length), 0);
+  const line = [
+    (a.steps || 0) + ' journey steps',
+    (kept || dropped) ? kept + ' of ' + (kept + dropped) + ' calls kept' : '',
+    (a.correlations || []).length + ' dynamic values correlated',
+    nFieldsA ? nFieldsA + ' fields need data' : '',
+  ].filter(Boolean).join(' · ');
+  const one = $('#discOne'); if(one) one.textContent = line;
+  const rl = $('#railRecording'); if(rl) rl.textContent = line;
+
   const j=a.journey||{};
   $('#discJourneys').innerHTML = `<div class="journey"><b>${j.name||'Recorded Journey'}</b><br>${(j.steps||[]).join(' → ')||'—'}</div>`;
   if(a.error) $('#discJourneys').innerHTML += `<p class="muted" style="color:#e11627">Parse note: ${a.error}</p>`;
