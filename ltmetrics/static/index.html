@@ -340,7 +340,9 @@
   .callItem{display:flex;align-items:center;gap:10px;padding:8px 12px;
     border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;margin:0}
   .callItem:last-child{border-bottom:none}
-  .callItem:hover{background:#26262b}
+  /* Was a fixed dark-palette value, which turned the row black under the
+     light theme. */
+  .callItem:hover{background:var(--panel2)}
   .callItem input{width:auto;margin:0;accent-color:var(--accent)}
   .callItem .m{font-family:ui-monospace,monospace;font-weight:700;min-width:54px;color:var(--mut)}
   .callItem .p{font-family:ui-monospace,monospace;flex:1;word-break:break-all;color:var(--txt)}
@@ -623,7 +625,9 @@
         <div><label>Users</label><input id="ovUsers" type="number" placeholder="auto"></div>
         <div><label>Minutes</label>
           <input id="ovMinutes" type="number" min="0" step="1" placeholder="auto">
-          <input id="ovDuration" type="number" class="hidden"></div>
+          <input id="ovDuration" type="number" class="hidden">
+          <div class="muted" id="ovMinutesSays"
+               style="font-size:12px;margin-top:4px"></div></div>
         <div><label>Orders per user</label>
           <input id="ovOrders" type="number" min="0" placeholder="0 = run the duration">
           <div class="muted" style="font-size:12px;margin-top:4px">Stops each user
@@ -1104,7 +1108,8 @@ function renderPlanTypes(plan, sum){
   if(!tests.length){ box.innerHTML=''; return; }
   const rows=tests.map((t,i)=>{
     const cfg=[]; if(t.users!=null) cfg.push(t.users+' users');
-    if(t.duration) cfg.push(esc(t.duration)); else if(t.duration_s) cfg.push(t.duration_s+'s');
+    if(t.duration) cfg.push(esc(t.duration));
+    else if(t.duration_s) cfg.push(humanSecs(t.duration_s));
     if(t.ramp_up) cfg.push('ramp↑ '+esc(t.ramp_up));
     if(t.ramp_down) cfg.push('ramp↓ '+esc(t.ramp_down));
     const meta=cfg.length?` <span class="muted">(${cfg.join(' · ')})</span>`:'';
@@ -1245,18 +1250,41 @@ function renderPlanSummary(){
   }
 }
 
+// One wording for a length of time, so no two parts of the page state the same
+// duration in different units. Matches _humanize() in agents/planner.py.
+function humanSecs(secs){
+  secs = Math.round(+secs || 0);
+  if(!secs) return '';
+  if(secs < 60) return secs + (secs === 1 ? ' second' : ' seconds');
+  const h = Math.floor(secs / 3600), m = Math.round((secs % 3600) / 60);
+  const mins = Math.round(secs / 60);
+  if(secs < 3600) return mins + (mins === 1 ? ' minute' : ' minutes');
+  const hrs = h + (h === 1 ? ' hour' : ' hours');
+  return m ? hrs + ' ' + m + ' min' : hrs;
+}
+
 // Minutes in, seconds stored. Twelve places read ovDuration as seconds and all
 // of them are right; relabelling one input is not worth changing the meaning of
 // a value they depend on.
 function syncMinutes(){
   const m = $('#ovMinutes'), d = $('#ovDuration');
   if(!m || !d) return;
+  // 120 in a field marked Minutes is two hours. Saying so as it is typed is
+  // what separates that from the two minutes someone may have meant.
+  const says = ()=>{
+    const el = $('#ovMinutesSays');
+    if(!el) return;
+    const h = humanSecs(+d.value || 0);
+    el.textContent = h ? 'Runs for ' + h + '.' : '';
+  };
   m.addEventListener('input', ()=>{
     d.value = m.value === '' ? '' : String(Math.round(+m.value * 60));
+    says();
     renderPlanSummary();
   });
   // A preset or a saved script writes seconds; show the minutes that match.
-  const back = ()=>{ m.value = d.value === '' ? '' : String(Math.round(+d.value / 60)); };
+  const back = ()=>{ m.value = d.value === '' ? '' : String(Math.round(+d.value / 60));
+                     says(); };
   new MutationObserver(back).observe(d, {attributes:true, attributeFilter:['value']});
   d.addEventListener('change', back);
   back();
@@ -1848,8 +1876,15 @@ function applyTheme(t){
   try{ t = localStorage.getItem('ltm-theme') || 'light'; }catch(e){}
   applyTheme(t);
   const b = $('#btnTheme');
-  if(b) b.onclick = ()=> applyTheme(
-    document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  // The chart reads its colours when it is built, so a switch has to reach it
+  // -- recoloured in place, keeping whatever a run has plotted. It goes here
+  // rather than in applyTheme() because applyTheme() also runs during start-up,
+  // before `liveChart` is declared; a click cannot happen that early.
+  if(b) b.onclick = ()=>{
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark'
+               ? 'light' : 'dark');
+    applyChartTheme();
+  };
 })();
 
 buildSetupRail();
@@ -3057,7 +3092,7 @@ async function aiSuggestPlan(){
     }
     if(r.plan_sequence && r.plan_sequence.length){
       html+='<p class="muted" style="margin-top:8px"><b>Recommended suite:</b></p>';
-      html+=r.plan_sequence.map(t=>`<div class="rec">▶ <b>${t.test_type||''}</b> · ${t.users||'?'} users · ${t.duration_s||'?'}s<div class="d">${(t.why||'').replace(/</g,'&lt;')}</div></div>`).join('');
+      html+=r.plan_sequence.map(t=>`<div class="rec">▶ <b>${t.test_type||''}</b> · ${t.users||'?'} users · ${t.duration_s?humanSecs(t.duration_s):'?'}<div class="d">${(t.why||'').replace(/</g,'&lt;')}</div></div>`).join('');
     }
     out.innerHTML=html||'<p class="muted">No suggestions returned.</p>';
     const ap=$('#btnApplyAi'); if(ap) ap.onclick=()=>{
@@ -3190,16 +3225,40 @@ function wireChartMode(){
     };
   });
 }
+function chartColours(){
+  const css = getComputedStyle(document.documentElement);
+  const tok = (n, f) => (css.getPropertyValue(n) || '').trim() || f;
+  return {grid: tok('--line', '#e6e0d6'), mut: tok('--mut', '#767676'),
+          fill: tok('--peach', '#FBD9BE')};
+}
+
+// Recolour what is already drawn. Rebuilding would drop every point plotted so
+// far, which during a run is the whole point of the chart.
+function applyChartTheme(){
+  if(!liveChart) return;
+  const {grid, mut, fill} = chartColours();
+  const o = liveChart.options;
+  o.plugins.legend.labels.color = mut;
+  o.scales.x.ticks.color = mut;  o.scales.x.grid.color = grid;
+  o.scales.y.ticks.color = mut;  o.scales.y.grid.color = grid;
+  o.scales.y.title.color = mut;
+  o.scales.y1.ticks.color = mut;
+  liveChart.data.datasets[0].backgroundColor = fill;
+  liveChart.update('none');
+}
+
 function initLiveChart(){
   const el=document.getElementById('liveChart'); if(!el||!window.Chart) return;
   if(liveChart){ liveChart.destroy(); }
-  const grid='#26262b', mut='#9a9aa4';
+  // Read from the theme rather than fixed: these were dark-palette values, so
+  // the light theme got black gridlines on a cream card.
+  const {grid, mut} = chartColours();
   // 9a offers both. Throughput reads better as bars (a count per interval)
   // and latency as a line, so only the first series changes.
   liveChart=new Chart(el,{type:'line',
     data:{labels:[],datasets:[
       {label:'req/s',data:[],type:CHART_MODE,borderColor:'#e11627',
-       backgroundColor:'#5C607A',yAxisID:'y',tension:.3,pointRadius:0},
+       backgroundColor:chartColours().fill,yAxisID:'y',tension:.3,pointRadius:0},
       {label:'p95 (ms)',data:[],borderColor:'#e6a23c',yAxisID:'y1',tension:.3,pointRadius:0},
       {label:'Users',data:[],borderColor:'#2ecc71',yAxisID:'y1',tension:.3,pointRadius:0},
     ]},

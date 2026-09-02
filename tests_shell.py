@@ -129,6 +129,42 @@ check("and showPhase raises that guard", "PHASE_MUTING = true" in _show)
 check("released after the batch drains", "PHASE_MUTING = false" in _show)
 
 print()
+print("nothing keeps a colour from the palette it was written for")
+# .callItem:hover was #26262b, a dark-palette value left in place, so hovering
+# a call under the light theme turned the row black with dark text on it.
+check("the call hover uses the theme, not a fixed colour",
+      ".callItem:hover{background:var(--panel2)}" in UI)
+check("and that colour is defined for both themes",
+      UI.count("--panel2:") >= 2)
+check("no hover hardcodes a dark-palette background",
+      "#26262b" not in UI)
+
+print()
+print("the chart is drawn in whatever theme is showing")
+_cc = fn_body("chartColours")
+check("its colours come from the theme's tokens",
+      "--line" in _cc and "--mut" in _cc)
+check("with a fallback if a token is missing", "|| f" in _cc)
+check("the bar fill is a brand colour, not the slate it was",
+      "'--peach'" in _cc and "backgroundColor:chartColours().fill" in UI
+      and "backgroundColor:'#5C607A'" not in UI)
+_at = fn_body("applyChartTheme")
+check("a theme switch recolours what is already drawn",
+      "liveChart.update('none')" in _at)
+check("rather than rebuilding and losing the run so far",
+      "destroy()" not in _at)
+# applyTheme() also runs during start-up, hundreds of lines above
+# `let liveChart = null`. Touching the chart there threw before it existed and
+# aborted the rest of the start-up script.
+_apply = UI[UI.index("function applyTheme(t){"):]
+_apply = _apply[:_apply.index("\n}") + 2]
+check("start-up's applyTheme does not reach for the chart",
+      "applyChartTheme" not in _apply)
+check("the switch does it from the click instead",
+      "applyTheme(document.documentElement.getAttribute('data-theme') === 'dark'"
+      in UI and "applyChartTheme();\n  };" in UI)
+
+print()
 print("a card names its own phase; the heading text does not decide")
 # The regression this exists for: rewording #liveCard's heading to 9a's
 # "Running" removed the words /live execution/ the rule matched on, so the

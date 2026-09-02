@@ -20,6 +20,13 @@ UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 FAILURES = []
 
 
+def fn_body(name):
+    start = UI.index("function %s(" % name)
+    nxt = UI.find("\nfunction ", start + 1)
+    body = UI[start:nxt if nxt > 0 else len(UI)]
+    return body[:body.rindex("}") + 1]
+
+
 def check(name, cond, detail=""):
     print("  %-60s %s%s" % (name[:60], "ok" if cond else "FAIL",
                             "" if cond else "  " + detail))
@@ -55,6 +62,24 @@ check("the run button names what it will do",
 check("the reason is recorded",
       "300 users believing they set 3" in UI or "thinking you set 3" in UI
       or "believing they set 3" in UI)
+
+print()
+print("a duration cannot be misread")
+# 120 in a field marked Minutes is two hours. Nothing converted it wrongly --
+# it is the number that looks like the two minutes someone may have meant.
+check("the field says what it will run for", 'id="ovMinutesSays"' in UI)
+check("as it is typed", "says();\n    renderPlanSummary();" in UI)
+check("and when a preset or saved script writes the value back",
+      "String(Math.round(+d.value / 60));\n                     says(); }" in UI)
+_h = fn_body("humanSecs")
+check("under a minute is said in seconds", "' seconds'" in _h)
+check("an hour or more is said in hours", "' hours'" in _h)
+check("and singulars are not said as plurals",
+      "' second'" in _h and "' minute'" in _h and "' hour'" in _h)
+check("no part of the page states a duration in bare seconds",
+      "duration_s+'s'" not in UI and "${t.duration_s||'?'}s" not in UI)
+check("those two places use the same wording as the field",
+      UI.count("humanSecs(t.duration_s)") == 2)
 
 print()
 print("nothing is shown that has no data behind it")
