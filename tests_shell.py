@@ -1,0 +1,102 @@
+"""The LT Metrics shell: header, four phases, light/dark.
+
+Stage 1 of the approved redesign. The rule it has to keep is that nothing
+moves: a card the current phase does not own is hidden, never removed, so all
+140 elements the page addresses by id are still there for their handlers. Break
+that and the app fails silently -- the button is gone, no error is raised.
+
+Two traps this file exists to catch:
+
+  * showPhase() edits `phase-off` on every card, which fires the same observer
+    that watches for the app revealing a card. Without a guard it switched
+    phase, saw the cards it had just hidden, and switched straight back.
+  * the app reveals the live-run and results cards itself by dropping `hidden`.
+    If the phase system ignores that, starting a run looks like nothing
+    happened.
+
+Run:  ./.venv/bin/python tests_shell.py     # expect FAILURES: 0
+"""
+import io
+import re
+import sys
+
+sys.path.insert(0, ".")
+
+UI = io.open("apea/static/index.html", encoding="utf-8").read()
+
+FAILURES = []
+
+
+def check(name, cond, detail=""):
+    print("  %-60s %s%s" % (name[:60], "ok" if cond else "FAIL",
+                            "" if cond else "  " + detail))
+    if not cond:
+        FAILURES.append(name)
+
+
+def fn_body(name):
+    start = UI.index("function %s(" % name)
+    nxt = UI.find("\nfunction ", start + 1)
+    body = UI[start:nxt if nxt > 0 else len(UI)]
+    return body[:body.rindex("}") + 1]
+
+
+print("the approved palette, not an approximation")
+for token, value in (("--green", "#23674A"), ("--orange", "#EF9253"),
+                     ("--peach", "#FBD9BE"), ("--accent", "#C91A12"),
+                     ("--txt", "#191919"), ("--mut", "#767676"),
+                     ("--ok", "#0E8A4F")):
+    check("%s is %s" % (token, value), "%s:%s" % (token, value) in UI)
+
+check("the header is a flat green bar",
+      "background:var(--green)" in UI)
+check("no gradient survives from the old look",
+      "radial-gradient" not in UI)
+
+print()
+print("light by default, and the old palette is kept rather than deleted")
+check("dark is a theme, not the default",
+      'html[data-theme="dark"]' in UI)
+check("the previous dark values are still there",
+      "--bg:#0b0b0c" in UI and "--txt:#f4f4f6" in UI)
+check("the toggle is wired", "btnTheme" in UI and "applyTheme" in UI)
+check("and the choice survives a reload", "ltm-theme" in UI)
+
+print()
+print("four phases, built from cards that already exist")
+check("the bar is there", 'id="phases"' in UI)
+for n, label in ((1, "Set up the test"), (2, "Watch it run"),
+                 (3, "Results"), (4, "Understand the result")):
+    check("phase %d is %r" % (n, label), label in UI)
+check("phases are announced to assistive tech",
+      'role="tablist"' in UI and 'aria-selected' in UI)
+
+_tag = fn_body("tagPhases")
+check("cards are matched on their own heading",
+      "querySelector('h2')" in _tag)
+check("an unrecognised card falls back to phase 1 rather than vanishing",
+      "let ph = '1'" in _tag)
+
+_show = fn_body("showPhase")
+check("a card is hidden, never removed",
+      "classList.toggle('phase-off'" in _show and "remove()" not in _show)
+check("the CSS only hides it", ".card[data-phase].phase-off{display:none}" in UI)
+
+print()
+print("the phase system follows the app instead of fighting it")
+_w = fn_body("watchPhaseReveals")
+check("it watches for a card being revealed", "MutationObserver" in _w)
+check("only the moment `hidden` goes away counts",
+      "before === true" in _w and "nowHidden === false" in _w)
+check("its own edits are ignored", "PHASE_MUTING" in _w)
+check("and showPhase raises that guard", "PHASE_MUTING = true" in _show)
+check("released after the batch drains", "PHASE_MUTING = false" in _show)
+
+print()
+print("the phases belong to the run, not to the library tabs")
+check("they are hidden on the other tabs",
+      "b.dataset.tab === 'new'" in UI and "ph.style.display" in UI)
+
+print()
+print("FAILURES: %d" % len(FAILURES))
+sys.exit(1 if FAILURES else 0)
