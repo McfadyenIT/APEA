@@ -1694,7 +1694,8 @@ def run_stages(run_id: str):
             if stage not in agg:
                 order.append(stage)
                 agg[stage] = {"stage": stage, "calls": 0, "ms": 0.0,
-                              "errors": 0, "slowest": 0.0, "slowest_call": ""}
+                              "errors": 0, "slowest": 0.0, "slowest_call": "",
+                              "first_ts": None, "last_ts": None, "by_call": {}}
             a = agg[stage]
             ms = float(c.get("ms") or 0)
             a["calls"] += 1
@@ -1704,6 +1705,27 @@ def run_stages(run_id: str):
             if ms > a["slowest"]:
                 a["slowest"] = ms
                 a["slowest_call"] = str(c.get("name") or "")[:60]
+
+            # How far the stage stretches: wall-clock from its first call to
+            # its last. Not the same as time spent -- concurrent users overlap,
+            # so a stage can span 60s while its calls add up to 300s.
+            ts = c.get("ts")
+            if isinstance(ts, (int, float)):
+                if a["first_ts"] is None or ts < a["first_ts"]:
+                    a["first_ts"] = ts
+                if a["last_ts"] is None or ts > a["last_ts"]:
+                    a["last_ts"] = ts
+
+            # The calls inside this stage, so a slow stage can be opened up.
+            b = a["by_call"].setdefault(
+                name[:70], {"name": name[:70], "calls": 0, "ms": 0.0,
+                            "errors": 0, "slowest": 0.0})
+            b["calls"] += 1
+            b["ms"] += ms
+            if not c.get("ok"):
+                b["errors"] += 1
+            if ms > b["slowest"]:
+                b["slowest"] = ms
     except Exception:
         return {"stages": [], "total_ms": 0, "excluded_txn": 0}
 
@@ -1715,6 +1737,18 @@ def run_stages(run_id: str):
         a["avg_ms"] = round(a["ms"] / a["calls"], 1) if a["calls"] else 0
         a["share"] = round(100.0 * a["ms"] / total, 1) if total else 0
         a["slowest"] = round(a["slowest"], 1)
+        span = 0.0
+        if a["first_ts"] is not None and a["last_ts"] is not None:
+            span = max(0.0, float(a["last_ts"]) - float(a["first_ts"]))
+        a["span_s"] = round(span, 1)
+        calls = sorted(a.pop("by_call").values(), key=lambda x: -x["ms"])
+        for b in calls:
+            b["ms"] = round(b["ms"], 1)
+            b["avg_ms"] = round(b["ms"] / b["calls"], 1) if b["calls"] else 0
+            b["slowest"] = round(b["slowest"], 1)
+        a["by_call"] = calls
+        a.pop("first_ts", None)
+        a.pop("last_ts", None)
         stages.append(a)
     return {"stages": stages, "total_ms": round(total, 1),
             "excluded_txn": txn, "unlabelled": unlabelled}

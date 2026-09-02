@@ -100,8 +100,8 @@ print("the number the operator types reaches the generated script")
 _gen = UI.split("btnRun")[1] if "btnRun" in UI else UI
 check("the generate request carries it",
       UI.count("body.orders_per_user=+$('#ovOrders').value") >= 2)
-check("and the preview still does too",
-      "orders_per_user" in UI.split("refreshPlan")[1][:1200])
+_preview = UI[UI.index("async function refreshPlan("):][:1600]
+check("and the preview still does too", "orders_per_user" in _preview)
 
 # 2. the run request can hold it
 _runreq = SRV.split("class RunReq")[1].split("\nclass ")[0]

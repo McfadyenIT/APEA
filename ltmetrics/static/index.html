@@ -89,6 +89,35 @@
   #phaseGrid.rail-shut #railBody{display:none}
   #phaseGrid.rail-shut #railToggle span.lbl{display:none}
   #phaseMain{padding:8px 0}
+  /* --- phase 1 contents, per the canvas --------------------------------- */
+  .eyebrow{display:flex;align-items:center;gap:10px;font-size:12px;
+    font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin:4px 0 8px}
+  .eyebrow i{display:block;width:34px;height:1px;background:var(--accent);
+    font-style:normal}
+  .ask{font-size:26px;font-weight:700;line-height:1.25;margin:0 0 4px;
+    max-width:34ch;font-family:var(--head)}
+  #trafficPresets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+    margin:10px 0}
+  #trafficPresets button{text-align:left;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+    cursor:pointer;font-family:var(--body);color:var(--txt)}
+  #trafficPresets button:hover{background:var(--panel2)}
+  #trafficPresets button.on{border-color:var(--accent);border-width:2px;
+    padding:13px 15px}
+  #trafficPresets .pt{font-size:15px;font-weight:700;display:block}
+  #trafficPresets .ps{font-size:12px;color:var(--mut);display:block;
+    margin-top:4px}
+  #trafficSays{font-size:13px;color:var(--mut);margin:2px 0 16px}
+  #railSummary{font-size:12px;margin-top:4px}
+  #railSummary div{display:grid;grid-template-columns:64px 1fr;gap:8px;
+    padding:5px 0;border-bottom:1px solid var(--hair)}
+  #railSummary div:last-child{border-bottom:none}
+  #railSummary b{color:var(--mut);font-weight:600;text-transform:uppercase;
+    letter-spacing:.06em;font-size:10px;padding-top:2px}
+  #railWill{font-size:12px;color:var(--mut);line-height:1.5;margin-top:10px;
+    padding-top:10px;border-top:1px solid var(--hair)}
+  @media(max-width:900px){#trafficPresets{grid-template-columns:1fr}}
   /* Panels split out of the old single card. The heading a block already
      carried becomes the panel's heading, so nothing is retitled. */
   .card.panel h2{font-size:16px;margin-top:0}
@@ -110,6 +139,16 @@
   #stageTable td{padding:7px 8px;border-bottom:1px solid var(--line)}
   #stageTable td.n{text-align:right;font-variant-numeric:tabular-nums}
   #stageTable tr.lead td{font-weight:700}
+  #stageTable tr.stage-row{cursor:pointer}
+  #stageTable tr.stage-row:hover td{background:var(--panel2)}
+  #stageTable td.tw{width:16px;color:var(--mut);font-family:var(--mono)}
+  #stageTable tr.calls td{background:var(--panel2);padding:0}
+  #stageTable table.inner{width:100%;border-collapse:collapse;
+    font-size:12px;margin:0}
+  #stageTable table.inner td{border-bottom:1px solid var(--line);
+    padding:5px 8px}
+  #stageTable table.inner tr:last-child td{border-bottom:none}
+  #stageTable .bad{color:var(--bad);font-weight:700}
   @media(max-width:900px){#resultsGrid{grid-template-columns:1fr}}
   /* Inside the rail the cards are already framed by the rail itself. */
   #setupRail .card{border:none;border-bottom:1px solid var(--hair);
@@ -391,6 +430,12 @@
       </div>
     </div>
 
+    <div class="card" id="askCard">
+      <div class="eyebrow"><i></i>Review what we found, then choose the traffic</div>
+      <p class="ask">Your recording is on the left. Check the plan, then set the
+        traffic.</p>
+    </div>
+
     <div class="card">
       <h2>2 · Choose a test — in plain English</h2>
       <p class="hint">Pick a test type and LT Metrics sets the users, ramp-up, duration, pacing and pass/fail
@@ -552,6 +597,21 @@
 
       <div id="planPreview" class="hidden" style="margin-top:14px"></div>
       <!-- What LT Metrics resolved, so nobody has to hunt for what is missing. -->
+      <div class="eyebrow" style="margin-top:22px"><i></i>How much traffic?</div>
+      <p class="hint">Pick the shape of the day. These only fill in the numbers
+        above — you can still change any of them.</p>
+      <div id="trafficPresets">
+        <button type="button" data-users="100" data-mins="60">
+          <span class="pt">A normal day</span>
+          <span class="ps">100 users · 60 min</span></button>
+        <button type="button" data-users="300" data-mins="45">
+          <span class="pt">A busy day</span>
+          <span class="ps">300 users · 45 min</span></button>
+        <button type="button" data-users="0" data-mins="0" data-break="1">
+          <span class="pt">Find the breaking point</span>
+          <span class="ps">ramp until it fails</span></button>
+      </div>
+      <p id="trafficSays"></p>
       <div class="btns">
         <button class="btn" id="btnRun">▶ Generate &amp; Run Test</button>
       </div>
@@ -603,8 +663,13 @@
       <h2>Where the time went</h2>
       <p class="hint">Every call in the run, grouped by the stage of the journey
         it belongs to. Stages appear in the order the run first reached them —
-        whatever stages your recording actually has. Transaction timers are left
-        out: one spans the calls inside it, so counting it would add the same
+        whatever stages your recording actually has. Click a stage to see the
+        calls inside it.</p>
+      <p class="hint"><b>Time</b> is what a stage cost in total. <b>Spans</b> is
+        how long it was in play from first call to last. With users running at
+        the same time these differ a lot, and reading one as the other is the
+        easiest way to misread a load test. Transaction timers are left out:
+        one contains the calls inside it, so counting it would add the same
         milliseconds twice.</p>
       <div id="stageBar"></div>
       <div id="stageLegend"></div>
@@ -881,6 +946,101 @@ function renderPlanTypes(plan, sum){
   });
 }
 
+// ---- what will happen -----------------------------------------------------
+// One sentence for the run about to start, and the same numbers in the rail.
+// The form already says all of this; saying it in words is what stops someone
+// starting 300 users believing they set 3.
+function _planNow(){
+  const n = id => { const e = $('#' + id); return e && e.value ? +e.value : 0; };
+  const txt = id => { const e = $('#' + id); return e && e.value ? e.value : ''; };
+  const users = n('ovUsers') || n('expectedUsers') || 0;
+  const secs = n('ovDuration') || 0;
+  const orders = n('ovOrders') || 0;
+  return {
+    users, secs, orders,
+    mins: secs ? Math.round(secs / 60) : 0,
+    type: (($('#testType') || {}).selectedOptions || [{}])[0]
+            && $('#testType').selectedOptions[0].textContent.trim() || '',
+    project: txt('projectName'), target: txt('url'),
+    spawn: n('ovSpawn'), p95: n('ovSlaP95'), err: n('ovSlaErr'),
+  };
+}
+
+function describePlan(){
+  const p = _planNow();
+  const bits = [];
+  if(p.users) bits.push(p.users + (p.users === 1 ? ' shopper' : ' shoppers'));
+  if(p.mins) bits.push('for ' + p.mins + (p.mins === 1 ? ' minute' : ' minutes'));
+  else if(p.secs) bits.push('for ' + p.secs + 's');
+  if(p.orders) bits.push('· ' + p.orders
+      + (p.orders === 1 ? ' order each' : ' orders each'));
+  return bits.join(' ');
+}
+
+function renderPlanSummary(){
+  const p = _planNow();
+  const box = $('#railSummary'), will = $('#railWill');
+  if(box){
+    const row = (k, v) => v
+      ? '<div><b>' + k + '</b><span>' + _escHtml(String(v)) + '</span></div>' : '';
+    box.innerHTML =
+        row('Project', p.project)
+      + row('Target', (p.target || '').replace(/^https?:\/\//, ''))
+      + row('Test', p.type)
+      + row('Traffic', p.users ? p.users + ' users'
+            + (p.mins ? ' · ' + p.mins + ' min' : '') : '')
+      + row('Ramp', p.spawn ? p.spawn + '/s' : '')
+      + row('Gates', [p.p95 ? 'p95 < ' + p.p95 + 'ms' : '',
+                      p.err ? 'err < ' + p.err + '%' : ''].filter(Boolean).join(' · '))
+      + row('Orders', p.orders ? p.orders + ' per user' : '');
+  }
+  if(will) will.textContent = describePlan()
+    || 'Set the users and duration to see what this run will do.';
+
+  const says = $('#trafficSays');
+  if(says) says.textContent = describePlan();
+
+  // The button says what it is about to do.
+  const btn = $('#btnRun');
+  if(btn && !btn.disabled){
+    const d = describePlan();
+    btn.innerHTML = d ? '\u25B6 Start the run \u2014 ' + _escHtml(d)
+                      : '\u25B6 Generate &amp; Run Test';
+  }
+}
+
+function wireTrafficPresets(){
+  const box = $('#trafficPresets');
+  if(!box) return;
+  box.querySelectorAll('button').forEach(b=>{
+    b.onclick = ()=>{
+      box.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      if(b.dataset.break){
+        // Finding the breaking point is a different SHAPE of test, not a
+        // bigger number, so switch the type rather than inventing a figure.
+        const t = $('#testType');
+        if(t && [...t.options].some(o=>/stress/i.test(o.value || o.text)))
+          t.value = [...t.options].find(o=>/stress/i.test(o.value || o.text)).value;
+        if(t) t.dispatchEvent(new Event('change'));
+      }else{
+        const u = $('#ovUsers'), d = $('#ovDuration');
+        if(u) u.value = b.dataset.users;
+        if(d) d.value = String(+b.dataset.mins * 60);
+      }
+      renderPlanSummary();
+      if(typeof refreshPlan === 'function') refreshPlan();
+    };
+  });
+  ['ovUsers','ovDuration','ovOrders','ovSpawn','ovSlaP95','ovSlaErr',
+   'projectName','url','testType'].forEach(id=>{
+    const e = $('#' + id);
+    if(e) e.addEventListener('input', renderPlanSummary);
+    if(e) e.addEventListener('change', renderPlanSummary);
+  });
+  renderPlanSummary();
+}
+
 // ---- where the time went (phase 4) --------------------------------------
 // One question: where did the time go, and where did it break. The numbers
 // behind it are in phase 3; this does not repeat them.
@@ -915,20 +1075,46 @@ async function loadStages(runId){
   const lead = rows.reduce((a,b)=> b.ms > a.ms ? b : a, rows[0]);
   const broke = rows.filter(s=> s.errors > 0);
 
+  // Two different numbers, deliberately side by side. "Time" is what the
+  // stage COST; "Spans" is how long it was in play. With users running
+  // concurrently these differ a lot, and reading one as the other is the
+  // easiest way to misread a load test.
   tbl.innerHTML =
-    '<tr><th>Stage</th><th class="n">Calls</th><th class="n">Time</th>'
-    + '<th class="n">Share</th><th class="n">Average</th><th class="n">Errors</th>'
-    + '<th>Slowest call</th></tr>'
-    + rows.map(s=>
-        '<tr' + (s === lead ? ' class="lead"' : '') + '>'
+    '<tr><th></th><th>Stage</th><th class="n">Calls</th><th class="n">Time</th>'
+    + '<th class="n">Share</th><th class="n">Spans</th><th class="n">Average</th>'
+    + '<th class="n">Errors</th><th>Slowest call</th></tr>'
+    + rows.map((s,i)=>
+        '<tr class="stage-row' + (s === lead ? ' lead' : '') + '" data-i="' + i + '">'
+        + '<td class="tw">+</td>'
         + '<td>' + _escHtml(s.stage) + '</td>'
         + '<td class="n">' + s.calls + '</td>'
         + '<td class="n">' + (s.ms/1000).toFixed(1) + 's</td>'
         + '<td class="n">' + s.share + '%</td>'
+        + '<td class="n">' + (s.span_s || 0).toFixed(1) + 's</td>'
         + '<td class="n">' + Math.round(s.avg_ms) + 'ms</td>'
-        + '<td class="n"' + (s.errors ? ' style="color:var(--bad);font-weight:700"' : '')
-        + '>' + s.errors + '</td>'
-        + '<td class="muted">' + _escHtml(s.slowest_call || '') + '</td></tr>').join('');
+        + '<td class="n' + (s.errors ? ' bad' : '') + '">' + s.errors + '</td>'
+        + '<td class="muted">' + _escHtml(s.slowest_call || '') + '</td></tr>'
+        + '<tr class="calls" data-for="' + i + '" hidden><td colspan="9">'
+        + '<table class="inner">'
+        + (s.by_call || []).map(b=>
+            '<tr><td>' + _escHtml(b.name) + '</td>'
+            + '<td class="n">' + b.calls + '\u00d7</td>'
+            + '<td class="n">' + (b.ms/1000).toFixed(1) + 's</td>'
+            + '<td class="n">avg ' + Math.round(b.avg_ms) + 'ms</td>'
+            + '<td class="n">slowest ' + Math.round(b.slowest) + 'ms</td>'
+            + '<td class="n' + (b.errors ? ' bad' : '') + '">'
+            + (b.errors ? b.errors + ' failed' : '') + '</td></tr>').join('')
+        + '</table></td></tr>').join('');
+
+  // Open a stage to see what is inside it.
+  tbl.querySelectorAll('tr.stage-row').forEach(tr=>{
+    tr.onclick = ()=>{
+      const body = tbl.querySelector('tr.calls[data-for="' + tr.dataset.i + '"]');
+      if(!body) return;
+      body.hidden = !body.hidden;
+      tr.firstElementChild.textContent = body.hidden ? '+' : '\u2212';
+    };
+  });
 
   const bits = [];
   bits.push('<b>' + _escHtml(lead.stage) + '</b> takes ' + lead.share
@@ -994,6 +1180,14 @@ function buildSetupRail(){
   const body = document.createElement('div');
   body.id = 'railBody';
   rail.append(toggle, body);
+
+  // What is actually set, in the rail, so the choice stays visible once the
+  // setup panel is collapsed.
+  const sum = document.createElement('div');
+  sum.className = 'card';
+  sum.innerHTML = '<h2>What will happen</h2>'
+    + '<div id="railSummary"></div><p id="railWill"></p>';
+  body.appendChild(sum);
 
   // Move, never rebuild: appendChild relocates the same node, so ids and
   // listeners come with it. Cloning or re-writing innerHTML would drop them.
@@ -1193,6 +1387,7 @@ function applyTheme(t){
 })();
 
 buildSetupRail();
+wireTrafficPresets();
 tagPhases();
 splitIntoPanels();    // panels carry the phase of the card they came from
 watchPhaseReveals();
