@@ -105,5 +105,22 @@ check("a run with no gate makes no claim",
       "no gate set" in UI)
 
 print()
+print("phase 3 shows the same ladder as tiles")
+check("the tiles exist", 'id="stageTiles"' in UI)
+check("built from the same rows as phase 4", "renderStageTiles(rows, d)" in UI)
+check("called from inside loadStages, where those rows exist",
+      UI.index("renderStageTiles(rows, d)") > UI.index("async function loadStages"))
+check("p95 shown in seconds, as 9a does", "(s.p95/1000).toFixed(1)" in UI)
+
+print()
+print("the verdict adapts rather than reciting 9a's example")
+check("one stage over names it as the weak link", "is the weak link" in UI)
+check("several over are counted, not folded into one",
+      "stages are over the gate" in UI)
+check("a clean run says so", "stayed inside the" in UI)
+check("no gate means no verdict", "no pass mark was set" in UI.lower())
+check("the reason is recorded", "worse than printing nothing" in UI)
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

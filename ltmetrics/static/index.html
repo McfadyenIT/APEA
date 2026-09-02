@@ -186,6 +186,21 @@
   .rung-Strained{color:#B4551F}
   .rung-Failing{color:#C91A12}
   .rung-Critical{color:#8A120C}
+  #resSays{font-size:24px;font-weight:700;line-height:1.3;margin:6px 0 16px;
+    font-family:var(--head);max-width:46ch}
+  #stageTiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:12px;margin:12px 0 18px}
+  #stageTiles .t{border:1px solid var(--line);border-top:3px solid var(--line);
+    border-radius:8px;padding:12px 14px;background:var(--panel)}
+  #stageTiles .t .n{font-size:11px;color:var(--mut);text-transform:uppercase;
+    letter-spacing:.08em;font-weight:700}
+  #stageTiles .t .v{font-size:26px;font-weight:700;margin:6px 0 4px;
+    font-family:var(--head)}
+  #stageTiles .t.Healthy{border-top-color:#5C607A}
+  #stageTiles .t.Watch{border-top-color:#8E8931}
+  #stageTiles .t.Strained{border-top-color:#B4551F}
+  #stageTiles .t.Failing{border-top-color:#C91A12}
+  #stageTiles .t.Critical{border-top-color:#8A120C}
   #ladderKey{display:flex;flex-wrap:wrap;gap:16px;align-items:center;
     background:var(--panel2);border:1px solid var(--line);border-radius:8px;
     padding:10px 14px;margin:10px 0 14px;font-size:12px}
@@ -784,6 +799,8 @@
 
     <div class="card hidden" id="resultCard">
       <h2>5 · Results <span class="badge" id="gateBadge"></span></h2>
+      <p id="resSays"></p>
+      <div id="stageTiles"></div>
       <div class="grid-k" id="resKpis"></div>
       <div class="btns">
         <button class="btn" id="btnReport">📊 Open full report</button>
@@ -1221,6 +1238,9 @@ async function loadStages(runId){
 
   // The stage that dominates is the finding; say which it is rather than
   // leaving it to be read off a bar.
+  // 9a leads Results with the same ladder at a glance, before any table.
+  renderStageTiles(rows, d);
+
   const lead = rows.reduce((a,b)=> b.ms > a.ms ? b : a, rows[0]);
   const broke = rows.filter(s=> s.errors > 0);
 
@@ -1333,6 +1353,51 @@ async function loadStages(runId){
   if(d.unlabelled)
     bits.push(d.unlabelled + ' call(s) could not be placed in a stage.');
   note.innerHTML = bits.join(' ');
+}
+
+// ---- the verdict, at a glance (phase 3) -----------------------------------
+// The same ladder as phase 4, shown as tiles. The sentence adapts: 9a's copy
+// suits a run where one stage is over and the rest are fine, and printing it
+// for a run where nothing is over -- or where half of it is critical -- would
+// be worse than printing nothing.
+const RUNG_ORDER = ['Healthy','Watch','Strained','Failing','Critical'];
+
+function renderStageTiles(rows, d){
+  const box = $('#stageTiles'), says = $('#resSays');
+  if(!box) return;
+  if(!rows || !rows.length){ box.innerHTML = ''; if(says) says.textContent=''; return; }
+
+  box.innerHTML = rows.map(s=>{
+    const secs = s.p95 ? (s.p95/1000).toFixed(1) + 's' : '—';
+    const tick = s.health === 'Healthy' ? '\u2713 ' : '';
+    return '<div class="t ' + (s.health || '') + '">'
+      + '<div class="n">' + _escHtml(s.stage) + '</div>'
+      + '<div class="v">' + secs + '</div>'
+      + '<div class="sub"><span class="rung rung-' + (s.health||'')
+      + '">' + tick + _escHtml(s.health || 'no gate') + '</span></div></div>';
+  }).join('');
+
+  if(!says) return;
+  const rank = h => RUNG_ORDER.indexOf(h);
+  const over = rows.filter(r=> rank(r.health) >= 3);      // Failing or worse
+  const strained = rows.filter(r=> rank(r.health) === 2);
+  if(!d.gate_ms){
+    says.textContent = 'No pass mark was set for this run, so there is no '
+      + 'verdict to give — only the numbers below.';
+  }else if(!over.length && !strained.length){
+    says.textContent = 'Every stage stayed inside the '
+      + d.gate_ms.toLocaleString() + 'ms gate.';
+  }else if(over.length === 1){
+    says.textContent = 'Your site handled it — ' + over[0].stage.toLowerCase()
+      + ' is the weak link.';
+  }else if(over.length > 1){
+    says.textContent = over.length + ' stages are over the gate: '
+      + over.map(r=>r.stage.toLowerCase()).join(', ') + '.';
+  }else{
+    says.textContent = 'Nothing broke the gate, but '
+      + strained.map(r=>r.stage.toLowerCase()).join(', ')
+      + (strained.length === 1 ? ' is' : ' are') + ' close to it.';
+  }
 }
 
 // ---- phases -------------------------------------------------------------
@@ -3296,7 +3361,8 @@ function renderTimeline(src){
 
 function showResults(a, s){
   $('#resultCard').classList.remove('hidden');
-  // Phase 4 reads the call log, which is complete only once the run ends.
+  // Phases 3 and 4 both read the call log, which is complete only once the run
+  // ends. One fetch feeds both.
   if(currentRun) loadStages(currentRun);
   renderTimeline(s || (a&&a.flow) || {});
   if(!a){ // fetch detail if analysis absent
