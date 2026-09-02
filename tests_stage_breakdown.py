@@ -80,7 +80,8 @@ check("and the count is reported rather than hidden", '"excluded_txn"' in SRV)
 
 print()
 print("the panel answers one question")
-check("it is in phase 4", "where the time went/i, '4'" in UI)
+# The card declares its phase now, rather than being recognised by its title.
+check("it is in phase 4", 'id="stageCard" data-phase="4"' in UI)
 check("it has its own card, not the timeline's",
       'id="stageCard"' in UI and 'class="card hidden" id="timelineCard"' in UI)
 check("the dominant stage is named, not left to be read off a bar",

@@ -782,7 +782,7 @@
       <details><summary>View generated Locust script</summary><pre class="code" id="scriptPreview"></pre></details>
     </div>
 
-    <div class="card hidden" id="liveCard">
+    <div class="card hidden" id="liveCard" data-phase="2">
       <!-- 9a leads with the state and the time, then the sentence. The old
            heading crammed the phase number, the badge, the stop button and the
            remaining time onto one line, which is why it read as a run-on. -->
@@ -824,7 +824,7 @@
       <div class="log" id="liveLog">waiting for output…</div>
     </div>
 
-    <div class="card hidden" id="healCard">
+    <div class="card hidden" id="healCard" data-phase="2">
       <h2>🤖 AI Auto-heal <span class="badge" id="healBadge"></span></h2>
       <p class="hint">When a run fails, Claude reads the actual failures, fixes the script
         (correlation, headers, REST prefix, payment method, address fields…) and regenerates
@@ -833,7 +833,7 @@
       <div id="healBody"></div>
     </div>
 
-    <div class="card" id="stageCard">
+    <div class="card" id="stageCard" data-phase="4">
       <div class="eyebrow">Where the time went</div>
       <p class="hint">Every call in the run, grouped by the stage of the journey
         it belongs to. Stages appear in the order the run first reached them —
@@ -852,7 +852,7 @@
       <p class="hint" id="stageNote" style="margin-top:10px"></p>
     </div>
 
-    <div class="card hidden" id="timelineCard">
+    <div class="card hidden" id="timelineCard" data-phase="4">
       <h2>Checkout timeline <span class="badge" id="timelineBadge"></span>
         <span class="muted" id="timelineMode" style="font-weight:400;font-size:13px"></span></h2>
       <p class="hint">Each checkout API step (from the recording), in order — with request,
@@ -860,7 +860,7 @@
       <div id="timelineBody"></div>
     </div>
 
-    <div class="card hidden" id="resultCard">
+    <div class="card hidden" id="resultCard" data-phase="3">
       <h2>5 · Results <span class="badge" id="gateBadge"></span>
         <span class="muted" id="resRunId" style="font-weight:400;font-size:13px"></span></h2>
       <p id="resSays"></p>
@@ -1509,24 +1509,25 @@ function renderStageTiles(rows, d){
 }
 
 // ---- phases -------------------------------------------------------------
-// Which phase owns which card, matched on the card's own heading so no markup
-// has to be edited and a renamed card degrades to phase 1 rather than vanishing.
-const PHASE_RULES = [
-  [/live execution|auto-heal/i, '2'],
-  [/^\s*5\s*·\s*results|^\s*results\b/i, '3'],
-  [/checkout timeline|where the time went/i, '4'],
-];
+// A card belongs to the phase it declares in the markup (data-phase); anything
+// undeclared is phase 1. This used to be decided by matching the card's own
+// heading text, which meant every rewording silently re-tagged cards: renaming
+// the live card's heading to 9a's "Running" dropped it and its three panels
+// into phase 1 and left "Watch it run" blank.
+
+// A card that names its own phase in the markup keeps it. Captured once,
+// before anything writes to dataset.phase, so re-tagging cannot lose it.
+const PHASE_DECLARED = new Map();
+document.querySelectorAll('#tab-new .card[data-phase]').forEach(c=>{
+  PHASE_DECLARED.set(c, c.dataset.phase);
+});
 
 function tagPhases(){
   document.querySelectorAll('#tab-new .card').forEach(c=>{
     // A panel split out of another card already knows its phase: it inherited
     // it. Re-deriving from the heading would send "Engine log" to phase 1.
     if(c.classList.contains('panel')) return;
-    const h = c.querySelector('h2, .eyebrow');
-    const t = (h ? h.textContent : '').trim();
-    let ph = '1';
-    for(const [re, n] of PHASE_RULES){ if(re.test(t)){ ph = n; break; } }
-    c.dataset.phase = ph;
+    c.dataset.phase = PHASE_DECLARED.has(c) ? PHASE_DECLARED.get(c) : '1';
   });
 }
 
@@ -1739,8 +1740,42 @@ function showPhase(n){
   if(rail) rail.style.display = (n === '1') ? '' : 'none';
   const grid = $('#phaseGrid');
   if(grid) grid.style.gridTemplateColumns = (n === '1') ? '' : '1fr';
+  showPhaseEmptyState(n);
   // Released on the next tick, after the observer has drained our own batch.
   setTimeout(()=>{ PHASE_MUTING = false; }, 0);
+}
+
+// Said only when the phase really has nothing visible, so it never competes
+// with content -- and so a card that lands in the wrong phase shows as an
+// unexpectedly empty page instead of passing for an ordinary one.
+const PHASE_EMPTY = {
+  '2': ['Nothing is running yet.',
+        'Start a run from Set up the test. The live traffic, the calls and the '
+        + 'engine log appear here while it works.'],
+  '3': ['No results yet.',
+        'The verdict, the numbers and the exports appear here as soon as a '
+        + 'run finishes.'],
+  '4': ['Nothing to explain yet.',
+        'Once a run finishes, this is where the time went, stage by stage.'],
+};
+
+function showPhaseEmptyState(n){
+  const main = $('#phaseMain') || $('#tab-new');
+  if(!main) return;
+  let box = $('#phaseEmpty');
+  const cards = [...document.querySelectorAll('#tab-new .card[data-phase="' + n + '"]')];
+  const anyVisible = cards.some(c=> !c.classList.contains('hidden'));
+  const copy = PHASE_EMPTY[n];
+  if(anyVisible || !copy){ if(box) box.remove(); return; }
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'phaseEmpty';
+    box.className = 'card';
+  }
+  main.appendChild(box);          // last, under whatever else is there
+  box.innerHTML = '<div class="eyebrow"></div><p class="ask"></p>';
+  box.querySelector('.eyebrow').textContent = copy[0];
+  box.querySelector('.ask').textContent = copy[1];
 }
 
 document.querySelectorAll('#phases button').forEach(b=>{
@@ -1774,6 +1809,12 @@ function watchPhaseReveals(){
 
   const obs = new MutationObserver(ms=>{
     if(PHASE_MUTING) return;
+    // Whatever else happens, a phase that has just gained content must stop
+    // saying it has none -- including mid-run, when the poll does the
+    // revealing and the guard below is up.
+    if(ms.some(m=> m.target instanceof Element && m.target.dataset
+                   && m.target.dataset.phase === CURRENT_PHASE))
+      showPhaseEmptyState(CURRENT_PHASE);
     // A run drives its own phase: it knows the order, and the poll reveals
     // cards from several phases while it works.
     if(RUN_IN_FLIGHT) return;

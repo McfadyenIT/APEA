@@ -106,11 +106,12 @@ check("phases are announced to assistive tech",
       'role="tablist"' in UI and 'aria-selected' in UI)
 
 _tag = fn_body("tagPhases")
-# Section headings are eyebrows now, so the match widened with them.
-check("cards are matched on their own heading",
-      "querySelector('h2, .eyebrow')" in _tag)
-check("an unrecognised card falls back to phase 1 rather than vanishing",
-      "let ph = '1'" in _tag)
+check("a card is placed by what it declares, not by what it says",
+      "PHASE_DECLARED.has(c) ? PHASE_DECLARED.get(c) : '1'" in _tag)
+check("and nothing is inferred from heading text any more",
+      "PHASE_RULES" not in UI)
+check("an undeclared card falls to phase 1 rather than vanishing",
+      ": '1'" in _tag)
 
 _show = fn_body("showPhase")
 check("a card is hidden, never removed",
@@ -126,6 +127,44 @@ check("only the moment `hidden` goes away counts",
 check("its own edits are ignored", "PHASE_MUTING" in _w)
 check("and showPhase raises that guard", "PHASE_MUTING = true" in _show)
 check("released after the batch drains", "PHASE_MUTING = false" in _show)
+
+print()
+print("a card names its own phase; the heading text does not decide")
+# The regression this exists for: rewording #liveCard's heading to 9a's
+# "Running" removed the words /live execution/ the rule matched on, so the
+# card and its three panels fell to the default phase 1 and "Watch it run"
+# rendered blank.
+check("the live-run card is phase 2 in the markup",
+      'id="liveCard" data-phase="2"' in UI)
+check("so is auto-heal", 'id="healCard" data-phase="2"' in UI)
+check("results are phase 3", 'id="resultCard" data-phase="3"' in UI)
+check("the stage breakdown is phase 4", 'id="stageCard" data-phase="4"' in UI)
+check("and the timeline with it", 'id="timelineCard" data-phase="4"' in UI)
+check("the declaration is captured before anything overwrites it",
+      "PHASE_DECLARED = new Map()" in UI)
+check("and that declaration is what tagPhases assigns",
+      "c.dataset.phase = PHASE_DECLARED.has(c)" in UI)
+check("the wording that was replaced is not referred to anywhere",
+      "live execution" not in UI)
+
+print()
+print("a phase with nothing to show says so")
+_empty = fn_body("showPhaseEmptyState")
+check("each of 2, 3 and 4 has something to say",
+      all(("'%s':" % n) in UI for n in ("2", "3", "4")) and "PHASE_EMPTY" in UI)
+check("phase 1 is never empty, so it gets no notice",
+      "PHASE_EMPTY = {\n  '2'" in UI)
+check("it is said only when nothing is visible", "anyVisible" in _empty)
+check("hidden cards do not count as content",
+      "classList.contains('hidden')" in _empty)
+check("and it is removed once there is content",
+      "if(anyVisible || !copy){ if(box) box.remove(); return; }" in _empty)
+check("showPhase refreshes it", "showPhaseEmptyState(n)" in fn_body("showPhase"))
+check("so does a reveal, even mid-run",
+      "showPhaseEmptyState(CURRENT_PHASE)" in UI)
+check("checked before the run guard, not after",
+      UI.index("showPhaseEmptyState(CURRENT_PHASE)")
+      < UI.index("if(RUN_IN_FLIGHT) return;"))
 
 print()
 print("the phases belong to the run, not to the library tabs")
