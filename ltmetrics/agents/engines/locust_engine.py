@@ -14,11 +14,18 @@ class LocustEngine(ExecutionEngine):
     name = "locust"
 
     def available(self) -> bool:
+        """Is Locust installed?
+
+        Answered WITHOUT importing it. Importing locust runs gevent's
+        monkey.patch_all(), and off the main thread that hangs the process --
+        a fresh server died on the first /api/health, which the page calls on
+        load. find_spec locates the module without executing it.
+        """
         if shutil.which("locust"):
             return True
         try:
-            import locust  # noqa: F401
-            return True
+            import importlib.util
+            return importlib.util.find_spec("locust") is not None
         except Exception:
             return False
 

@@ -81,9 +81,10 @@ def locust_available() -> bool:
 
 
 def _module_present() -> bool:
+    """Present, without importing it -- see LocustEngine.available()."""
     try:
-        import locust  # noqa: F401
-        return True
+        import importlib.util
+        return importlib.util.find_spec("locust") is not None
     except Exception:
         return False
 
