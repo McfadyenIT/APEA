@@ -20,6 +20,8 @@
     --body:'Inter','Aptos','Segoe UI',system-ui,-apple-system,sans-serif;
     --mono:'JetBrains Mono','Consolas',ui-monospace,monospace;
     --mcf-red:#E00000;--ls-overline:.20em;
+    /* The mark is red; the words are burnt orange. 9a sets them separately. */
+    --eyebrow:#B34E14;
   }
   /* The previous look, kept whole so the toggle has somewhere to go. */
   html[data-theme="dark"]{
@@ -27,6 +29,7 @@
     --txt:#f4f4f6;--mut:#9a9aa4;--accent:#e11627;--accent-hi:#f5333f;
     --ok:#37c871;--bad:#e11627;--warn:#e6a23c;
     --green:#1b4d37;--cream:#221c17;--peach:#FBD9BE;--orange:#B4551F;
+    --eyebrow:#EF9253;
     --rail:#141416;--hair:#2c2c30;
   }
   *{box-sizing:border-box}
@@ -95,11 +98,11 @@
      then a dark dot. Copied from 9a's stylesheet rather than approximated --
      it appears before every eyebrow and its absence was the first thing an
      operator noticed. */
-  .eyebrow,.railEyebrow{font-size:12px;font-weight:700;
+  .eyebrow,.railEyebrow,details.quiet > summary{font-size:12px;font-weight:700;
     text-transform:uppercase;letter-spacing:var(--ls-overline);
-    color:var(--mcf-red);display:inline-flex;align-items:center;gap:14px;
+    color:var(--eyebrow);display:flex;align-items:center;gap:14px;
     margin:4px 0 8px}
-  .eyebrow::before,.railEyebrow::before{
+  .eyebrow::before,.railEyebrow::before,details.quiet > summary::before{
     content:"";display:block;flex:none;width:58px;height:12px;
     background:
       radial-gradient(circle, var(--mcf-red) 5px, transparent 5px) 0 0/12px 12px no-repeat,
@@ -216,15 +219,16 @@
   /* Long blocks open on demand. The canvas shows four call rows, not four
      hundred lines of recorded selectors. */
   details.quiet{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
-  details.quiet > summary{cursor:pointer;list-style:none;font-size:12px;
-    color:var(--mut);text-transform:uppercase;letter-spacing:.06em;
-    font-weight:600;display:flex;align-items:center;gap:8px}
+  /* A section that happens to be collapsed is still a section, so it carries
+     the same mark and the same words as any other heading. */
+  details.quiet > summary{cursor:pointer;list-style:none}
   details.quiet > summary::-webkit-details-marker{display:none}
-  details.quiet > summary::before{content:'\25B8';font-size:10px;color:var(--accent)}
-  details.quiet[open] > summary::before{content:'\25BE'}
-  details.quiet > summary:hover{color:var(--txt)}
+  details.quiet > summary::after{content:'\25B8';font-size:10px;
+    color:var(--eyebrow);margin-left:4px}
+  details.quiet[open] > summary::after{content:'\25BE'}
+  details.quiet > summary:hover{color:var(--accent-hi)}
   details.quiet > summary .n{margin-left:auto;text-transform:none;
-    letter-spacing:0;font-weight:400}
+    letter-spacing:0;font-weight:400;color:var(--mut);font-size:12px}
   details.quiet > *:not(summary){margin-top:10px}
   #chartMode{display:inline-flex;border:1px solid var(--line);border-radius:8px;
     overflow:hidden;margin-left:auto}
@@ -504,7 +508,7 @@
         id="discOne"></span></summary>
         <div class="grid-k" id="discKpis"></div>
       </details>
-      <label>Recorded journey</label><div id="discJourneys"></div>
+      <div class="eyebrow">Recorded journey</div><div id="discJourneys"></div>
       <!-- Payment strategy. A hosted card gateway cannot be completed by ANY
            HTTP-level tool, so LT Metrics silently substitutes an offline method. That
            surprise is surfaced HERE, in the main flow, rather than only in the
@@ -514,8 +518,9 @@
         <div id="paymentStrategy"></div>
       </details>
       <div class="chips" id="discTech" style="display:none"></div>
-      <label style="margin-top:14px">What we kept from the recording
-        <span class="muted" id="keptCount"></span></label>
+      <div class="eyebrow" style="margin-top:18px">What we kept from the recording
+        <span class="muted" id="keptCount" style="margin-left:auto;
+              text-transform:none;letter-spacing:0;font-weight:400"></span></div>
       <div class="callTools">
         <span class="muted" style="margin-right:6px">Filter the noise</span>
         <button class="btn ghost" type="button" id="callApiOnly">Only REST &amp; API</button>

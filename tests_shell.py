@@ -58,6 +58,36 @@ check("but the eyebrow marker uses them, as 9a does",
       "radial-gradient(circle, var(--mcf-red)" in UI)
 
 print()
+print("the mark is red; the words are not")
+# 9a sets these separately -- o11Eyebrow is #B34E14 light / #EF9253 dark while
+# the mark stays #E00000. One colour for both made the overline read hot.
+check("the eyebrow has its own colour token", "--eyebrow:#B34E14" in UI)
+check("which is not the mark's red",
+      "--eyebrow:#E00000" not in UI and "--mcf-red:#E00000" in UI)
+check("and it changes in dark, as 9a does", "--eyebrow:#EF9253" in UI)
+check("the words take that token, not the mark's",
+      "letter-spacing:var(--ls-overline);\n    color:var(--eyebrow)" in UI)
+check("the mark itself stays red",
+      "background:\n      radial-gradient(circle, var(--mcf-red)" in UI)
+
+print()
+print("a section that happens to be collapsed is still a section")
+check("summaries share the eyebrow's type",
+      ".eyebrow,.railEyebrow,details.quiet > summary{" in UI)
+check("and its mark",
+      ".railEyebrow::before,details.quiet > summary::before{" in UI)
+check("they no longer set a colour of their own",
+      "details.quiet > summary{cursor:pointer;list-style:none}" in UI)
+check("the open/closed arrow moved out of the mark's place",
+      "details.quiet > summary::after{content:" in UI)
+check("so it cannot displace the mark",
+      "details.quiet > summary::before{content:" not in UI)
+check("the recorded journey is one as well",
+      '<div class="eyebrow">Recorded journey</div>' in UI)
+check("the kept-calls heading is a section heading too",
+      '<div class="eyebrow" style="margin-top:18px">What we kept' in UI)
+
+print()
 print("light by default, and the old palette is kept rather than deleted")
 check("dark is a theme, not the default",
       'html[data-theme="dark"]' in UI)
