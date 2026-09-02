@@ -1649,7 +1649,10 @@ function renderThroughputCost(){
   else if(checkout !== null && checkout < 50)
     note = ' Checkout runs about 1 iteration in ' + Math.round(100/checkout)
          + ', so a user needs roughly that many iterations before it places an order.';
-  foot.innerHTML = '<b>' + total.toFixed(1) + ' requests</b> on average per iteration.'
+  foot.innerHTML = '<b>' + total.toFixed(1) + ' requests</b> per full pass of the '
+                 + 'recorded journey. The generated test replays the calls ticked '
+                 + 'above plus the REST calls it correlates itself, so the run '
+                 + 'usually sends fewer than this.'
                  + _escHtml(note);
 }
 

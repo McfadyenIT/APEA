@@ -35,6 +35,15 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
+def fn_body(name):
+    """One top-level JS function's source. Sliced on the next top-level
+    `function` -- brace counting walks off the end on regex literals."""
+    start = UI.index("function %s(" % name)
+    nxt = UI.find("\nfunction ", start + 1)
+    body = UI[start:nxt if nxt > 0 else len(UI)]
+    return body[:body.rindex("}") + 1]
+
+
 def label_block():
     """The <label> for the panel, and the markup up to the panel itself."""
     i = UI.index("What your recording does")
@@ -94,6 +103,34 @@ print()
 print("a rare checkout is called out")
 check("it warns when checkout seldom runs", "1 iteration in" in UI)
 check("and when it never runs", "no orders are placed" in UI)
+
+
+# --------------------------------------------------------------------------
+# The total counts the RECORDING, not the run.
+#
+# The operator noticed the arithmetic did not close: the panel said 40.0 while
+# the calls list said "10 of 16 selected". Both were right and neither matched
+# what the test sent -- 18.8 requests per lap on their 5-user run.
+#
+#   40  every step in the recorded journey, across all six groups
+#   16  the REST/API subset offered for ticking
+#   10  the ones actually ticked
+#   18.8  what the generated script sent per lap
+#
+# The count is honest; "on average per iteration" was not, because it reads as
+# a prediction about the run. Say which of the four numbers this is.
+# --------------------------------------------------------------------------
+print()
+print("the total does not pretend to predict the run")
+_dl = fn_body("renderThroughputCost")
+check("it names the recorded journey",
+      "per full pass of the" in _dl and "recorded journey" in _dl)
+check("and says the run sends fewer",
+      "usually sends fewer" in _dl)
+check("crediting both reasons: the ticked calls and correlation",
+      "ticked" in _dl and "correlates" in _dl)
+check("the misleading phrasing is gone",
+      "on average per iteration" not in UI)
 
 print()
 print("FAILURES: %d" % len(FAILURES))
