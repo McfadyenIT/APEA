@@ -3,7 +3,7 @@ classifier must pick Secure Acceptance for Radwell's captured traffic."""
 import sys
 sys.path.insert(0, '/var/www/html/apea')
 import yaml
-from apea.agents import payment_replay
+from ltmetrics.agents import payment_replay
 
 fails = []
 
@@ -17,7 +17,7 @@ def check(label, got, want):
 
 
 print("=== YAML parses and the three profiles exist ===")
-doc = yaml.safe_load(open("/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml", encoding="utf-8"))
+doc = yaml.safe_load(open("/var/www/html/apea/ltmetrics/knowledge/rules/browser_patterns.yaml", encoding="utf-8"))
 prof = (doc or {}).get("replay_profiles") or {}
 for name in ("cybersource_secure_acceptance", "cybersource_microform_v2",
              "cybersource_flex_api_v2"):
@@ -70,7 +70,7 @@ import yaml
 sys.path.insert(0, '/var/www/html/apea')
 
 doc = yaml.safe_load(open(
-    "/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+    "/var/www/html/apea/ltmetrics/knowledge/rules/browser_patterns.yaml",
     encoding="utf-8"))
 prof = (doc or {}).get("replay_profiles") or {}
 sa = prof.get("cybersource_secure_acceptance") or {}
@@ -116,7 +116,7 @@ check("3ds challenge needs a browser",
       (sa.get("3ds_challenge") or {}).get("browser_required"), True)
 
 print("\n=== the evidence-class rule is written down ===")
-raw = open("/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+raw = open("/var/www/html/apea/ltmetrics/knowledge/rules/browser_patterns.yaml",
            encoding="utf-8").read()
 check("EVIDENCE CLASSES note present", "EVIDENCE CLASSES" in raw, True)
 check("names the JS false-positive trap",
@@ -133,7 +133,7 @@ check("signed_field_names is order-sensitive",
 check("card fields expected only in the submission",
       vg.get("expected_only_in_submission"), ["card_number", "card_cvn"])
 
-raw = open("/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+raw = open("/var/www/html/apea/ltmetrics/knowledge/rules/browser_patterns.yaml",
            encoding="utf-8").read()
 check("the phrase 'byte for byte' is gone as a requirement",
       "match byte for byte" in raw, False)
@@ -246,7 +246,7 @@ _root = _pl.Path(__file__).resolve().parent
 _leaked = sorted(f.name for f in _root.glob("tests_*.py")
                  if _LIVE in f.read_text(encoding="utf-8"))
 check("no test asserts on the captured token", _leaked, [])
-KB_TEXT = open("/var/www/html/apea/apea/knowledge/rules/browser_patterns.yaml",
+KB_TEXT = open("/var/www/html/apea/ltmetrics/knowledge/rules/browser_patterns.yaml",
                encoding="utf-8").read()
 check("the KB carries no live token", _LIVE not in KB_TEXT, True)
 check("the KB states the durable invariant instead",

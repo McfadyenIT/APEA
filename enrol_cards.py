@@ -28,7 +28,7 @@ sandbox host only, no real PAN, never logged, never written to disk.
 
 USAGE
 -----
-    python enrol_cards.py --csv apea_enrol_pool_10.csv \\
+    python enrol_cards.py --csv ltm_enrol_pool_10.csv \\
                           --base-url https://mcstaging.radwell.eu/uk \\
                           --headed
 
@@ -80,7 +80,7 @@ def _load_kb() -> dict:
     """The CyberSource browser profile: card selectors, sandbox test cards and
     the safeguards. Reused rather than restated so there is one source."""
     try:
-        from apea.agents.browser_runner_gen import _load_browser_patterns
+        from ltmetrics.agents.browser_runner_gen import _load_browser_patterns
         return _load_browser_patterns() or {}
     except Exception as exc:                      # pragma: no cover - import guard
         raise SystemExit("cannot read the knowledge base: %s" % exc)
@@ -88,7 +88,7 @@ def _load_kb() -> dict:
 
 def _gateway_profile(kb: dict, gateway: str) -> dict:
     """Match the CSV's method code to a KB profile by substring, the same test
-    the rest of APEA uses, so 'paradoxlabs_cybersource' finds 'cybersource'."""
+    the rest of LT Metrics uses, so 'paradoxlabs_cybersource' finds 'cybersource'."""
     g = (gateway or "").lower()
     for code, prof in (kb or {}).items():
         if not isinstance(prof, dict):
@@ -1106,7 +1106,7 @@ async def run(args) -> int:
     # an uploaded file came from, so the operator's own copy cannot be updated
     # from here -- the memory is what makes a lost file stop meaning a lost token.
     try:
-        from apea.agents import token_memory
+        from ltmetrics.agents import token_memory
         n_mem = token_memory.remember(req_base_url, results)
         if n_mem:
             print("remembered %d token(s) for %s -- a later upload of any file with "
@@ -1143,7 +1143,7 @@ def main() -> int:
     p.add_argument("--cvv", default="",
                    help="override the security code on the chosen card "
                         "(3-4 digits; use a wrong one to test a decline)")
-    p.add_argument("--company", default="APEA Load Test",
+    p.add_argument("--company", default="LT Metrics Load Test",
                    help="company name, when the checkout requires one and the "
                         "data file has no company column")
     p.add_argument("--gateway-code", default="",

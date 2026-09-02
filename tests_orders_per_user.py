@@ -14,11 +14,11 @@ import sys
 
 sys.path.insert(0, ".")
 
-from apea.agents import generator as G  # noqa: E402
+from ltmetrics.agents import generator as G  # noqa: E402
 
 SRC = io.open(G.__file__, encoding="utf-8").read()
-SRV = io.open("apea/server.py", encoding="utf-8").read()
-UI = io.open("apea/static/index.html", encoding="utf-8").read()
+SRV = io.open("ltmetrics/server.py", encoding="utf-8").read()
+UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 FAILURES = []
 
 

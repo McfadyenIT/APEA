@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ===================================================================
-#  APEA - one-click launcher (macOS / Linux)
+#  LT Metrics - one-click launcher (macOS / Linux)
 #  Run:  ./start.sh   (chmod +x start.sh the first time)
 # ===================================================================
 set -e
@@ -25,7 +25,7 @@ python -m pip install --quiet --upgrade pip
 python -m pip install --quiet -r requirements.txt
 
 echo ""
-echo "Starting APEA - your browser will open at http://127.0.0.1:8000"
-echo "Press Ctrl+C to stop APEA."
+echo "Starting LT Metrics - your browser will open at http://127.0.0.1:8000"
+echo "Press Ctrl+C to stop LT Metrics."
 echo ""
 python run.py

@@ -24,8 +24,8 @@ import re
 import sys
 from pathlib import Path
 
-from apea.agents import recording, parser, filter as rfilter, normalizer
-from apea.agents import metadata_generator as meta, flow_discovery
+from ltmetrics.agents import recording, parser, filter as rfilter, normalizer
+from ltmetrics.agents import metadata_generator as meta, flow_discovery
 
 _fails = 0
 ROOT = Path(__file__).resolve().parent

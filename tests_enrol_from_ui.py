@@ -1,4 +1,4 @@
-"""Fetching card tokens from the APEA page, instead of from a terminal.
+"""Fetching card tokens from the LT Metrics page, instead of from a terminal.
 
 The tokens this button fetches are the same values the validation panel beside
 it is already checking. Sending someone out to a shell to produce them, then
@@ -22,8 +22,8 @@ import sys
 sys.path.insert(0, ".")
 
 FAILURES = []
-SRV = io.open("apea/server.py", encoding="utf-8").read()
-UI = io.open("apea/static/index.html", encoding="utf-8").read()
+SRV = io.open("ltmetrics/server.py", encoding="utf-8").read()
+UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 
 
 def check(name, cond, detail=""):
@@ -227,7 +227,7 @@ check("the reason is recorded", "Vanishing on success reads as a glitch" in _p)
 print()
 print("the company field is gone, because the data file carries it")
 check("no company input on the page", "enrolCompany" not in UI)
-check("a company is still sent", "company: 'APEA Load Test'" in UI)
+check("a company is still sent", "company: 'LT Metrics Load Test'" in UI)
 check("and why is written down", "data file's own column" in UI)
 
 print()
@@ -250,7 +250,7 @@ check("the reason is recorded", "Vanishing on success reads as a glitch" in _p)
 print()
 print("the company field is gone, because the data file carries it")
 check("no company input on the page", "enrolCompany" not in UI)
-check("a company is still sent", "company: 'APEA Load Test'" in UI)
+check("a company is still sent", "company: 'LT Metrics Load Test'" in UI)
 check("and why is written down", "data file's own column" in UI)
 
 print()

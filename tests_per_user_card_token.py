@@ -1,6 +1,6 @@
 """Regression guard: a stored-card token must be resolvable PER VIRTUAL USER.
 
-Run after any change to the payment injection in apea/agents/generator.py:
+Run after any change to the payment injection in ltmetrics/agents/generator.py:
 
     ./.venv/bin/python tests_per_user_card_token.py     # expect: FAILURES: 0
 
@@ -25,7 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from apea.agents.generator import _assemble_flow_script   # noqa: E402
+from ltmetrics.agents.generator import _assemble_flow_script   # noqa: E402
 
 fails = []
 
@@ -151,7 +151,7 @@ check("intent is DECLARED, never inferred from a blank cell",
 check("intent is decided per ROW, not once for the whole run",
       "_method = _row_payment_method(row)" in script, True)
 
-exe = (ROOT / "apea" / "agents" / "executor.py").read_text(encoding="utf-8")
+exe = (ROOT / "ltmetrics" / "agents" / "executor.py").read_text(encoding="utf-8")
 check("the executor fails the run on an unmet HTTP-track intent",
       "_http_req and not _http_ok" in exe, True)
 check("the browser track's gate is still honoured",

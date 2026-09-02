@@ -1,8 +1,8 @@
 @echo off
 REM ==================================================================
-REM  APEA - enable the real-browser (Playwright) track  [one-time]
+REM  LT Metrics - enable the real-browser (Playwright) track  [one-time]
 REM  Double-click this once to install Playwright + Chromium into the
-REM  same private environment APEA uses. Safe to re-run; it just checks
+REM  same private environment LT Metrics uses. Safe to re-run; it just checks
 REM  and updates. Needed only for the Track-B card-payment (Stripe /
 REM  CyberSource) testing - normal load tests do NOT need this.
 REM ==================================================================
@@ -11,7 +11,7 @@ cd /d "%~dp0"
 
 if not exist ".venv\" (
     echo.
-    echo APEA's environment isn't set up yet. Run start.bat once first,
+    echo LT Metrics's environment isn't set up yet. Run start.bat once first,
     echo then run this again.
     echo.
     pause
@@ -43,7 +43,7 @@ if errorlevel 1 (
 
 echo.
 echo Done. The real-browser (Playwright) track is now enabled.
-echo Start APEA (start.bat), then run a test with the browser track turned on
+echo Start LT Metrics (start.bat), then run a test with the browser track turned on
 echo (browser VUs greater than 0 + a browser payment gateway) to drive real card iframes.
 echo.
 pause

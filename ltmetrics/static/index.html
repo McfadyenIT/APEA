@@ -1,0 +1,2620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LT Metrics — Load Testing Reimagined</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root{
+    /* LT Metrics -- light by default, as approved */
+    --bg:#FFFFFF;--panel:#FFFFFF;--panel2:#FAF7F2;--line:#EDEDED;
+    --txt:#191919;--mut:#767676;--accent:#C91A12;--accent-hi:#8A120C;
+    --ok:#0E8A4F;--bad:#E00000;--warn:#B4551F;
+    --green:#23674A;--cream:#FBEADB;--peach:#FBD9BE;--orange:#EF9253;
+    --rail:#FBF4EC;--hair:#E4E4E4;
+    --head:'Inter','Aptos','Segoe UI',system-ui,sans-serif;
+    --body:'Inter','Aptos','Segoe UI',system-ui,-apple-system,sans-serif;
+    --mono:'JetBrains Mono','Consolas',ui-monospace,monospace;
+  }
+  /* The previous look, kept whole so the toggle has somewhere to go. */
+  html[data-theme="dark"]{
+    --bg:#0b0b0c;--panel:#161618;--panel2:#1f1f22;--line:#2c2c30;
+    --txt:#f4f4f6;--mut:#9a9aa4;--accent:#e11627;--accent-hi:#f5333f;
+    --ok:#37c871;--bad:#e11627;--warn:#e6a23c;
+    --green:#1b4d37;--cream:#221c17;--peach:#FBD9BE;--orange:#B4551F;
+    --rail:#141416;--hair:#2c2c30;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--body);
+    border-top:3px solid var(--accent)}
+  h1,h2,h3{font-family:var(--head);letter-spacing:-.01em}
+  /* --- header: flat green bar, no gradient, per the approved canvas ------ */
+  header{display:flex;align-items:center;gap:16px;padding:14px 28px;
+    background:var(--green);color:#fff}
+  header h1{font-size:17px;margin:0;font-weight:700}
+  header .tag{font-size:12px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.16em;line-height:1}
+  /* The pills sit on green now, so they cannot borrow --mut / --panel. */
+  .pill{font-size:12px;color:rgba(255,255,255,.85);
+    border:1px solid rgba(255,255,255,.4);padding:6px 12px;background:transparent;
+    white-space:nowrap}
+  .pill b{color:var(--peach)}
+  header button.btn{background:var(--accent);color:#fff}
+  header button.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.5);
+    color:#fff}
+  header button.btn.ghost:hover{background:rgba(255,255,255,.12)}
+
+  /* --- the four phases --------------------------------------------------- */
+  #phases{display:grid;grid-template-columns:repeat(4,1fr);
+    background:var(--cream);border-bottom:1px solid var(--hair)}
+  #phases button{display:flex;flex-direction:column;align-items:flex-start;gap:5px;
+    text-align:left;background:transparent;border:none;
+    border-right:1px solid rgba(0,0,0,.08);padding:15px 22px;min-height:44px;
+    cursor:pointer;font-family:var(--body);color:var(--txt)}
+  #phases button:last-child{border-right:none}
+  #phases button:hover{background:rgba(0,0,0,.04)}
+  #phases button.active{background:var(--orange);color:#191919}
+  #phases .ph-t{font-size:16px;font-weight:700}
+  #phases .ph-s{font-size:13px;color:var(--mut);line-height:1.4}
+  #phases button.active .ph-s{color:#5A2E0B}
+
+  nav{display:flex;gap:2px;padding:0 28px;border-bottom:1px solid var(--line);
+    background:var(--rail);position:sticky;top:0;z-index:5}
+  nav button{background:none;border:none;color:var(--mut);padding:13px 16px;cursor:pointer;
+    font-size:13px;font-weight:600;border-bottom:2px solid transparent;font-family:var(--head)}
+  nav button:hover{color:var(--txt)}
+  nav button.active{color:var(--txt);border-bottom-color:var(--accent)}
+
+  /* A card that this phase does not own. Hidden, never removed -- the JS still
+     finds every element it addresses. */
+  .card[data-phase].phase-off{display:none}
+  main{max-width:1080px;margin:0 auto;padding:28px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:22px;margin-bottom:18px}
+  .card h2{margin:0 0 6px;font-size:18px;font-weight:700}
+  .card p.hint{color:var(--mut);margin:0 0 16px;font-size:13px;line-height:1.5}
+  label{display:block;font-size:12px;color:var(--mut);margin:12px 0 6px;
+    text-transform:uppercase;letter-spacing:.06em}
+  input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:11px 13px;border-radius:8px;font-size:14px;font-family:var(--body)}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  button.btn{background:var(--accent);color:#fff;border:none;padding:12px 22px;
+    border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;font-family:var(--head)}
+  button.btn:hover{background:var(--accent-hi)}
+  button.btn.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+  button.btn.ghost:hover{border-color:var(--accent)}
+  button.btn:disabled{opacity:.5;cursor:not-allowed}
+  .btns{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
+  .grid-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
+  .k{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:15px}
+  .k .l{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .k .v{font-size:23px;font-weight:700;margin-top:4px;font-family:var(--head)}
+  .chips span{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+    border-radius:20px;padding:4px 12px;margin:3px 4px 0 0;font-size:12px}
+  .journey{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:8px;padding:11px 13px;margin:8px 0;font-size:13px}
+  .journey b{color:var(--accent-hi)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{padding:10px 11px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--mut);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+  td.num,th.num{text-align:right}
+  .bar{height:12px;background:var(--panel2);border-radius:8px;overflow:hidden;margin:10px 0}
+  .bar>div{height:100%;background:linear-gradient(90deg,#e11627,#f5333f);width:0;
+    transition:width .4s}
+  .badge{padding:3px 10px;border-radius:6px;font-weight:700;font-size:12px}
+  .b-ok{background:var(--ok);color:#06121f}.b-bad{background:var(--bad);color:#fff}
+  .b-run{background:var(--warn);color:#1a1200}
+  .log{background:#070708;border:1px solid var(--line);border-radius:8px;padding:12px;
+    font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#d8d8dd;
+    max-height:180px;overflow:auto;white-space:pre-wrap}
+  .rec{background:var(--panel2);border-left:4px solid var(--accent);border-radius:8px;
+    padding:12px 14px;margin:9px 0;font-size:13px}
+  .rec .d{color:var(--mut);margin-top:5px;line-height:1.5}
+  .muted{color:var(--mut);font-size:13px}
+  details summary{cursor:pointer;color:var(--accent-hi);font-size:13px;margin-top:10px}
+  /* call selector */
+  .callTools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+  .callTools .btn{padding:6px 12px;font-size:12px}
+  .callList{border:1px solid var(--line);border-radius:10px;background:var(--panel2);
+    max-height:340px;overflow:auto}
+  .callItem{display:flex;align-items:center;gap:10px;padding:8px 12px;
+    border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;margin:0}
+  .callItem:last-child{border-bottom:none}
+  .callItem:hover{background:#26262b}
+  .callItem input{width:auto;margin:0;accent-color:var(--accent)}
+  .callItem .m{font-family:ui-monospace,monospace;font-weight:700;min-width:54px;color:var(--mut)}
+  .callItem .p{font-family:ui-monospace,monospace;flex:1;word-break:break-all;color:var(--txt)}
+  .kind{padding:2px 8px;border-radius:6px;font-size:10.5px;font-weight:700;letter-spacing:.3px}
+  .kind.REST{background:#123a2a;color:#3ddc97}
+  .kind.API{background:#0f2e4d;color:#5b93ff}
+  .kind.XHR{background:#3a2d12;color:#e6a700}
+  .kind.GET{background:#2a2a30;color:#c9c9d2}
+  .kind.POST,.kind.PUT,.kind.PATCH,.kind.DELETE{background:#3a1220;color:#ff6b9a}
+  .noiseItem{display:flex;gap:10px;padding:6px 12px;border-bottom:1px solid var(--line);
+    font-size:12px;color:var(--mut)}
+  .noiseItem:last-child{border-bottom:none}
+  .noiseItem .m{font-family:ui-monospace,monospace;min-width:54px}
+  .noiseItem .p{font-family:ui-monospace,monospace;flex:1;word-break:break-all}
+  pre.code{background:#070708;border:1px solid var(--line);border-radius:8px;padding:12px;
+    font-size:11.5px;overflow:auto;max-height:340px;color:#d8d8dd}
+  .hidden{display:none}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--mut);
+    border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;
+    vertical-align:middle;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  a.link{color:var(--accent-hi);text-decoration:none}
+  @media(max-width:720px){.row,.row3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <svg width="34" height="34" viewBox="0 0 100 100" aria-label="LT Metrics mark"
+       style="display:block;flex-shrink:0">
+    <rect x="0" y="0" width="100" height="100" fill="#FFFFFF"></rect>
+    <rect x="20" y="60" width="26" height="13" fill="#8A8A8A"></rect>
+    <rect x="20" y="34" width="44" height="13" fill="#C91A12"></rect>
+    <rect x="14" y="18" width="6" height="66" fill="#191919"></rect>
+    <rect x="14" y="78" width="66" height="6" fill="#191919"></rect>
+  </svg>
+  <div style="display:flex;flex-direction:column;gap:4px">
+    <h1 style="font-family:var(--mono);font-size:17px;font-weight:700;
+        letter-spacing:.1em;color:#fff;line-height:1;margin:0">LT METRICS</h1>
+    <div class="tag" style="color:var(--peach)">Load Testing Reimagined</div>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+    <div class="pill" id="healthPill">checking engine…</div>
+    <div class="pill" id="aiPill" title="Set ANTHROPIC_API_KEY to enable the agentic layer">AI: checking…</div>
+    <div class="pill" style="border-color:rgba(255,255,255,.4)">Claude + <b style="color:var(--peach)">Locust</b></div>
+    <button class="btn ghost" id="btnTheme" title="Switch between the light and dark palette"
+            style="padding:6px 14px">Dark mode</button>
+    <button class="btn" id="btnRestart" title="Kill running tests and restart the engine (also reloads code changes)"
+            style="padding:6px 12px">⟳ Restart</button>
+  </div>
+</header>
+
+<!-- The four phases of a run. They show and hide cards that are already on the
+     page, so every handler keeps its element. -->
+<div id="phases" role="tablist" aria-label="Run phases">
+  <button role="tab" data-phase="1" class="active" aria-selected="true">
+    <span class="ph-t">1 · Set up the test</span>
+    <span class="ph-s">Recording, traffic, thresholds</span></button>
+  <button role="tab" data-phase="2" aria-selected="false">
+    <span class="ph-t">2 · Watch it run</span>
+    <span class="ph-s">Live traffic and failures</span></button>
+  <button role="tab" data-phase="3" aria-selected="false">
+    <span class="ph-t">3 · Results</span>
+    <span class="ph-s">Verdict, numbers, exports</span></button>
+  <button role="tab" data-phase="4" aria-selected="false">
+    <span class="ph-t">4 · Understand the result</span>
+    <span class="ph-s">Deeper insight, stage by stage</span></button>
+</div>
+<div id="restartOverlay" style="display:none;position:fixed;inset:0;z-index:9999;
+     background:rgba(10,6,8,.86);color:#fff;align-items:center;justify-content:center;
+     flex-direction:column;gap:14px;font-size:15px">
+  <div class="spin" style="width:34px;height:34px;border-width:4px"></div>
+  <div id="restartMsg">Restarting engine…</div>
+</div>
+
+<nav>
+  <button data-tab="new" class="active">New Test</button>
+  <button data-tab="saved">Saved Scripts</button>
+  <button data-tab="history">History</button>
+  <button data-tab="projects">Projects</button>
+  <button data-tab="ask">Ask LT Metrics</button>
+</nav>
+
+<main>
+  <!-- NEW TEST -->
+  <section id="tab-new">
+    <div id="savedBanner" class="card hidden" style="border-left:4px solid var(--accent)">
+      💾 <b>Using saved script:</b> <span id="savedName"></span> — no re-crawl needed. Choose a
+      <b>test type</b> below and click <b>Generate &amp; Run Test</b>.
+      <a class="link" style="margin-left:10px" onclick="clearSaved()">✕ Clear</a>
+    </div>
+    <div class="card">
+      <h2>1 · Project &amp; target</h2>
+      <p class="hint">Name your project. The target URL is taken from your recording (you can override it here). Login is driven by the recording; for multi-user load, upload a credentials CSV below with several accounts.</p>
+      <div class="row">
+        <div><label>Project name</label><input id="projectName" placeholder="My Web App" value="My Web App"></div>
+        <div><label>Client / team (optional)</label><input id="client" placeholder="Internal"></div>
+      </div>
+      <label>Target URL</label>
+      <input id="url" placeholder="https://www.example.com">
+    </div>
+
+    <div class="card">
+      <h2>1 · Upload your BlazeMeter recording</h2>
+      <p class="hint">LT Metrics works entirely from your recording — JMeter <code>.jmx</code>,
+        Taurus/BlazeMeter <code>.yaml/.yml</code>, or <code>.har</code>. It reads the journey,
+        auto-correlates dynamic values, and tells you exactly what data to upload.</p>
+      <label>Recording <span class="muted">— .jmx, .yaml/.yml, or .har</span></label>
+      <input type="file" id="upRec" accept=".jmx,.yaml,.yml,.har">
+      <div class="muted" id="sumRec"></div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <input id="enhancePlaywright" type="checkbox" style="width:auto" checked>
+        Also crawl live with Playwright — renders JS and fills gaps the recording might have
+        missed (on by default; requires Playwright installed on the server — falls back
+        automatically to the plain recording analysis if it isn't)
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <input id="includeStatic" type="checkbox" style="width:auto">
+        Include static pages &amp; assets (html / css / js / images) — off by default, so the
+        test runs API calls only. Turn on for a faithful full replay.
+      </label>
+      <div class="btns">
+        <button class="btn" id="btnDiscover">🔎 Analyze recording</button>
+      </div>
+    </div>
+
+    <!-- Hidden per request: standalone Playwright crawl-&-record section. DOM kept
+         intact (display:none) so the core run flow is unaffected; unhide to restore. -->
+    <div class="card" style="display:none">
+      <h2>1b · Or — crawl &amp; record with a headless browser <span class="muted">(no recording needed)</span></h2>
+      <p class="hint">No recording to upload? Give LT Metrics a target URL above and it drives a real
+        headless browser (Playwright) through the site itself — home page, search, login (if you
+        give credentials below), add a product to cart, view the cart — and captures the actual
+        requests it makes along the way, the same way an uploaded recording would. It stops at
+        add-to-cart: checkout and payment forms vary too much across sites to drive blindly, so
+        that part still benefits from an uploaded recording. Requires Playwright on the server
+        (<code>pip install playwright &amp;&amp; playwright install chromium</code>) — otherwise
+        this just tells you so instead of failing silently.</p>
+      <div class="row">
+        <div><label>Username <span class="muted">(optional)</span></label>
+          <input id="pwUsername" placeholder="test@example.com"></div>
+        <div><label>Password <span class="muted">(optional)</span></label>
+          <input id="pwPassword" type="password"></div>
+      </div>
+      <label>Sample search term <span class="muted">(optional — a real product/category word
+        for this site gives better captured data than the default)</span></label>
+      <input id="pwSearchTerm" placeholder="test">
+      <div class="btns">
+        <button class="btn" id="btnCrawlRecord">🌐 Crawl &amp; record with Playwright</button>
+      </div>
+      <div class="muted" id="sumCrawl" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card hidden" id="discoveryCard">
+      <h2>2 · Recording analysis</h2>
+      <div class="grid-k" id="discKpis"></div>
+      <label>Recorded journey</label><div id="discJourneys"></div>
+      <!-- Payment strategy. A hosted card gateway cannot be completed by ANY
+           HTTP-level tool, so LT Metrics silently substitutes an offline method. That
+           surprise is surfaced HERE, in the main flow, rather than only in the
+           collapsed browser-track panel where nobody found it. -->
+      <div id="paymentStrategy" style="margin-top:12px"></div>
+      <div class="chips" id="discTech" style="display:none"></div>
+      <label style="margin-top:14px">Calls going into the script
+        <span class="muted">— LT Metrics auto-selected the real API &amp; REST calls; untick any you don't want in the load test</span></label>
+      <div class="callTools">
+        <button class="btn ghost" type="button" id="callAll">Select all</button>
+        <button class="btn ghost" type="button" id="callNone">Select none</button>
+        <button class="btn ghost" type="button" id="callApiOnly">Only REST + API</button>
+        <span class="muted" id="callCount"></span>
+      </div>
+      <div class="callList" id="anCalls"></div>
+      <div id="callCritWarn" style="margin-top:8px;color:#ffb4b4;font-size:13px;line-height:1.5"></div>
+      <div id="anDropped"></div>
+      <label style="margin-top:12px">Recorded browser actions
+        <span class="muted">— every click/type/wait captured from Selenium, for reference</span></label>
+      <div id="anUiSteps"></div>
+      <label style="margin-top:12px">Auto-correlated dynamic values
+        <span class="muted">— handled for you, no input needed</span></label>
+      <div id="anCorr"></div>
+      <label style="margin-top:12px">Fields to parameterize — upload these values
+        <span class="muted">— "typed in browser" / "submitted request" shows where each value came from</span></label>
+      <div id="anGroups"></div>
+      <div id="anNotes"></div>
+      <div class="btns">
+        <button class="btn" id="btnSampleCsv">⬇ Download sample data CSV</button>
+      </div>
+      <label style="margin-top:14px">Upload your filled data CSV
+        <span class="muted">— all the columns listed above (one row per virtual user)</span></label>
+      <input type="file" id="upData" accept=".csv">
+      <div class="muted" id="sumData"></div>
+      <div id="validateOut"></div>
+      <!-- "Before you run" sits with the validation it is about. It used to
+           live far down the page, beside the run controls, so the file's
+           problems and the file's verdict were nowhere near each other. -->
+      <div id="readiness" style="margin-top:10px"></div>
+      <label style="margin-top:10px">User credentials CSV
+        <span class="muted">— optional if username/password are already in the data CSV</span></label>
+      <input type="file" id="upUsers" accept=".csv">
+      <div class="muted" id="sumUsers"></div>
+      <div class="btns">
+        <button class="btn ghost" onclick="saveScript(false)">💾 Save script</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Choose a test — in plain English</h2>
+      <p class="hint">Pick a test type and LT Metrics sets the users, ramp-up, duration, pacing and pass/fail
+        criteria. Change any of them below.</p>
+
+      <!-- Hidden per request: Performance Test Plan upload/analyze block. DOM kept
+           (display:none) so run defaults are unchanged; unhide to restore. -->
+      <details open style="border:1px solid var(--bd,#2a2a2a);border-radius:8px;padding:10px 12px;margin:4px 0 14px;display:none">
+        <summary style="cursor:pointer;font-weight:600">📄 Start from a Performance Test Plan
+          <span class="muted">— optional (PDF / DOCX / Markdown / text)</span></summary>
+        <p class="hint" style="margin-top:8px">LT Metrics reads the plan and <b>recommends</b> the test types
+          it describes — with users, duration, ramp-up, think time, SLA, objectives and scenarios — then
+          pre-fills the fields below (all editable). It does <b>not</b> auto-run anything. No API key needed.</p>
+        <input id="upPlan" type="file" accept=".pdf,.docx,.md,.markdown,.txt,application/pdf">
+        <div class="sum" id="sumPlan" style="margin-top:6px"></div>
+        <div id="planSummary" style="margin-top:10px"></div>
+        <div id="planTypes" style="margin-top:10px"></div>
+      </details>
+
+      <label style="margin-top:4px">What your recording does, and how often to repeat it</label>
+      <p class="hint" style="margin:2px 0 8px">Each step below is a transaction from your recording.
+        The request count is fixed — it is what the browser actually sent. The slider sets how often
+        that step runs. The two multiply, so a big step at a low percentage can still outweigh a
+        small step at a high one.</p>
+      <div id="anThroughput"><p class="muted">Analyze a recording (Section 1) to see its transaction groups.</p></div>
+
+      <label>Test type</label>
+      <select id="testType"></select>
+      <p class="muted" id="testPurpose"></p>
+      <div class="row3">
+        <div><label>Users</label><input id="ovUsers" type="number" placeholder="auto"></div>
+        <div><label>Duration (seconds)</label><input id="ovDuration" type="number" placeholder="auto"></div>
+        <div><label>Orders per user</label>
+          <input id="ovOrders" type="number" min="0" placeholder="0 = run the duration">
+          <div class="muted" style="font-size:12px;margin-top:4px">Stops each user
+            after this many orders. Use <b>1</b> for a smoke test: one order each,
+            then the run ends — a duration cannot express that, it just loops
+            until the clock runs out.</div>
+        </div>
+        <div><label>&nbsp;</label><button class="btn ghost" id="btnPreview" style="width:100%">Preview plan</button></div>
+      </div>
+      <details>
+        <summary>Advanced options (optional)</summary>
+        <p class="hint">Leave blank to use the test-type defaults.</p>
+        <div class="row3">
+          <div><label>Expected users (normal)</label><input id="expectedUsers" type="number" value="100"></div>
+          <div><label>Peak users</label><input id="peakUsers" type="number" value="500"></div>
+          <div><label>Spawn rate /s</label><input id="ovSpawn" type="number" placeholder="auto"></div>
+        </div>
+        <div class="row3">
+          <div><label>Workers</label><input id="ovWorkers" type="number" min="1" placeholder="1"></div>
+          <div><label>Cart quantity</label><input id="ovCartQty" type="number" min="1" placeholder="1"></div>
+          <div><label>Payment method</label>
+            <!-- A combo box, not a plain select: the list is what the recording
+                 actually used, but a store may accept a method the recording
+                 never exercised, so typing must still work. -->
+            <input id="ovPayMethod" type="text" list="payMethodList" placeholder="recorded" autocomplete="off">
+          <div id="ovPayMethodNote" class="muted" style="font-size:12px;margin-top:4px"></div>
+            <datalist id="payMethodList"></datalist>
+          </div>
+          <div><label>Data sharing (threads)</label>
+            <select id="ovDataSharing">
+              <option value="all_threads">All threads (shared pool, recycle)</option>
+              <option value="unique">Unique per user (distinct account/row)</option>
+            </select>
+          </div>
+        </div>
+        <p class="hint" style="margin-top:8px">Think time &amp; SLA — auto-filled from an uploaded test plan; edit to override.</p>
+        <div class="row3">
+          <div><label>Think min (s)</label><input id="ovThinkMin" type="number" step="0.1" min="0" placeholder="auto"></div>
+          <div><label>Think max (s)</label><input id="ovThinkMax" type="number" step="0.1" min="0" placeholder="auto"></div>
+          <div><label>SLA p95 (ms)</label><input id="ovSlaP95" type="number" min="0" placeholder="auto"></div>
+        </div>
+        <div class="row3">
+          <div><label>SLA max error (%)</label><input id="ovSlaErr" type="number" step="0.1" min="0" placeholder="auto"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input id="ovFaithful" type="checkbox" style="width:auto">
+          Faithful replay (JMeter-style) — play the recording verbatim
+        </label>
+        <p class="hint">Replays the recorded requests exactly as captured, in one session,
+          with the recorded headers/token — no parameterization, correlation, or auto-heal.
+          Behaves like JMeter running the raw recording (good for a quick first pass; brittle
+          across many iterations). Leave off for the robust AI-correlated run.</p>
+        <details id="ovPayDetails" style="margin-top:8px">
+          <summary id="ovPaySummary">Payment token &amp; CAPTCHA (rarely needed)</summary>
+          <label>Payment additional_data — JSON sent with the order</label>
+          <div class="muted" style="font-size:12px;margin:-2px 0 4px">
+            <code>{{column}}</code> reads that column from each user&rsquo;s own row.
+            Add a default after a pipe — <code>{{card_cvv|123}}</code> — for a value
+            that is the same for the whole pool, and you can drop the column entirely.
+            A placeholder with no default and no value stops the run rather than
+            paying by some other method.
+          </div>
+          <!-- The placeholder shows the shape, NOT a key name: the key differs
+               per gateway (card_id, paymentMethodNonce, payment_method,
+               storedPaymentMethodId). Picking a card gateway above fills this
+               in with the right one. -->
+          <input id="ovPayAddl" type="text"
+                 placeholder='filled in when you pick a card payment method'>
+          <div id="ovPayAddlNote" class="muted" style="font-size:12px;margin-top:4px"></div>
+          <label>CAPTCHA bypass / test-key token</label>
+          <input id="ovCaptchaToken" type="text" placeholder="blank if CAPTCHA is disabled on the test env">
+          <input id="ovCaptchaField" type="text" placeholder="token field name (optional)">
+        </details>
+        <details open style="margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:6px 12px">
+          <summary style="font-weight:700;color:var(--accent-hi)">💳 Real-browser payment track (Playwright) — drive real card iframes</summary>
+          <p class="hint">Runs a small pool of REAL browsers alongside the load test to complete a
+            hosted card payment (Stripe / CyberSource) that HTTP replay can't. Requires Playwright
+            (run <code>setup-browser-track.bat</code> once). Leave Browser VUs at 0 to keep it off —
+            the normal HTTP load test is unchanged.</p>
+          <div class="row3">
+            <div><label>Browser VUs</label><input id="ovBrowserVus" type="number" min="0" value="0" placeholder="0 = off"></div>
+            <div><label>Payment gateway <span class="muted">— auto-detected</span></label>
+              <select id="ovBrowserGateway">
+                <option value="">— auto (use detected) —</option>
+              </select>
+            </div>
+            <div><label>Test-card scenario</label>
+              <select id="ovBrowserScenario">
+                <option value="success">success</option>
+                <option value="threeds">3-D Secure</option>
+                <option value="decline">decline</option>
+              </select>
+            </div>
+          </div>
+          <div class="muted" id="gatewayNote" style="margin-top:6px"></div>
+          <label style="margin-top:8px">Pay / Place-order button selector <span class="muted">— optional; LT Metrics auto-detects if blank</span></label>
+          <input id="ovBrowserSubmit" type="text" placeholder="e.g. #place-order  (leave blank — LT Metrics finds the Pay button)">
+          <label style="margin-top:8px">Success URL fragment <span class="muted">— a bit of the order-confirmation URL</span></label>
+          <input id="ovBrowserSuccess" type="text" placeholder="e.g. /checkout/onepage/success">
+        </details>
+      </details>
+
+      <!-- Hidden per request: Intelligent Test Data Generator block. DOM kept
+           (display:none) so the run still uses uploaded/recording data; unhide to restore. -->
+      <div id="dataGenBlock" style="border:1px solid var(--bd,#2a2a2a);border-radius:8px;padding:10px 12px;margin:12px 0;display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <b>🧪 Intelligent Test Data Generator</b>
+          <button class="btn ghost" id="btnGenData" style="width:auto">Generate test data</button>
+        </div>
+        <p class="hint" style="margin-top:6px">Generates realistic, validated data for the selected
+          test — customers, products (distributed so users don't all buy one SKU), addresses, payments
+          and search terms — sized from the plan. The result becomes this run's data set, and
+          throughput / test type / users are set for you. Analyze a recording first (optionally upload
+          a test plan above).</p>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:4px">
+          <input id="genLiveProducts" type="checkbox" style="width:auto">
+          Use the live store to find <b>real in-stock, priced products</b> <span class="muted">(read-only)</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <input id="genRegister" type="checkbox" style="width:auto">
+          <b>Register new customer accounts</b> on the store
+          <span style="color:#e6a700">⚠ creates real accounts — test/staging only</span>
+        </label>
+        <div class="muted" id="sumGenData" style="margin-top:6px"></div>
+        <div id="genDataOut" style="margin-top:8px"></div>
+      </div>
+
+      <div id="planPreview" class="hidden" style="margin-top:14px"></div>
+      <!-- What LT Metrics resolved, so nobody has to hunt for what is missing. -->
+      <div class="btns">
+        <button class="btn" id="btnRun">▶ Generate &amp; Run Test</button>
+      </div>
+      <div id="runGate" style="margin-top:8px;font-size:13px"></div>
+    </div>
+
+    <!-- RUN OUTPUT -->
+    <div class="card hidden" id="reviewCard">
+      <h2>3 · Script review <span class="badge" id="reviewVerdict"></span></h2>
+      <p class="hint" id="reviewScore"></p>
+      <div id="reviewFindings"></div>
+      <details><summary>View generated Locust script</summary><pre class="code" id="scriptPreview"></pre></details>
+    </div>
+
+    <div class="card hidden" id="liveCard">
+      <h2>4 · Live execution <span class="badge b-run" id="liveStatus">running</span>
+        <button class="btn ghost" id="btnStop" style="float:right;padding:6px 14px">⏹ Stop run</button>
+      </h2>
+      <p class="hint" id="livePhase"></p>
+      <div id="liveBrowserTrack" style="display:none;margin:6px 0 2px;padding:9px 12px;border-radius:8px;
+           border:1px solid var(--line);font-size:13px"></div>
+      <div class="bar"><div id="liveBar"></div></div>
+      <div class="grid-k" id="liveKpis"></div>
+      <div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:14px">
+        <canvas id="liveChart" height="120"></canvas>
+      </div>
+      <label style="margin-top:14px">Live API calls
+        <span class="muted">— every request as it happens (click a row for request/response)</span>
+        <span style="float:right">
+          <label style="display:inline;font-weight:400"><input type="checkbox" id="callsErrOnly"> errors only</label>
+          &nbsp;<span class="muted" id="callsCount">0</span>
+        </span>
+      </label>
+      <div id="liveCalls" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel2);font-family:monospace;font-size:12px"></div>
+      <label style="margin-top:14px">Engine log</label>
+      <div class="log" id="liveLog">waiting for output…</div>
+    </div>
+
+    <div class="card hidden" id="healCard">
+      <h2>🤖 AI Auto-heal <span class="badge" id="healBadge"></span></h2>
+      <p class="hint">When a run fails, Claude reads the actual failures, fixes the script
+        (correlation, headers, REST prefix, payment method, address fields…) and regenerates
+        it. Broken-script failures are re-run automatically; a timed run that produced traffic
+        is healed for the next run so it still stops at its duration.</p>
+      <div id="healBody"></div>
+    </div>
+
+    <div class="card hidden" id="timelineCard">
+      <h2>Checkout timeline <span class="badge" id="timelineBadge"></span>
+        <span class="muted" id="timelineMode" style="font-weight:400;font-size:13px"></span></h2>
+      <p class="hint">Each checkout API step (from the recording), in order — with request,
+        status, elapsed time and the response body. Updates live; stops at the first failure.</p>
+      <div id="timelineBody"></div>
+    </div>
+
+    <div class="card hidden" id="resultCard">
+      <h2>5 · Results <span class="badge" id="gateBadge"></span></h2>
+      <div class="grid-k" id="resKpis"></div>
+      <div class="btns">
+        <button class="btn" id="btnReport">📊 Open full report</button>
+        <button class="btn ghost" id="btnReportDl">⬇ Download report (HTML)</button>
+        <button class="btn ghost" id="btnXlsx">⬇ Download Excel</button>
+        <button class="btn ghost" onclick="saveScript(true)">💾 Save script</button>
+      </div>
+      <h2 style="margin-top:22px">AI recommendations</h2>
+      <div id="resRecs"></div>
+      <h2 style="margin-top:22px">Root cause &amp; trend</h2>
+      <div class="rec" id="resRca"></div>
+      <div class="rec" id="resTrend"></div>
+      <div id="jiraWrap" class="hidden">
+        <h2 style="margin-top:22px">Jira ticket (SLA failed)</h2>
+        <pre class="code" id="jiraTxt"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- SAVED SCRIPTS -->
+  <section id="tab-saved" class="hidden">
+    <div class="card">
+      <h2>Saved scripts</h2>
+      <p class="hint">Re-run a saved script directly — no recording or discovery needed.</p>
+      <table><thead><tr><th>Name</th><th>Target</th><th>Type</th><th>Saved</th><th></th></tr></thead>
+        <tbody id="savedRows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-history" class="hidden">
+    <div class="card">
+      <h2>Run history</h2>
+      <p class="hint">Every run is stored in the SQLite ledger for trend comparison.</p>
+      <table><thead><tr><th>Started</th><th>Project</th><th>Type</th>
+        <th class="num">Users</th><th class="num">Reqs</th><th class="num">Err%</th>
+        <th class="num">p95</th><th>Gate</th><th></th></tr></thead>
+        <tbody id="historyRows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody></table>
+    </div>
+  </section>
+
+  <!-- PROJECTS -->
+  <section id="tab-projects" class="hidden">
+    <div class="card">
+      <h2>Saved projects</h2>
+      <p class="hint">Select a project to reuse its configuration.</p>
+      <table><thead><tr><th>Project</th><th>Target</th><th class="num">Runs</th>
+        <th>Last run</th><th></th></tr></thead>
+        <tbody id="projectRows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table>
+    </div>
+  </section>
+
+  <!-- ASK -->
+  <section id="tab-ask" class="hidden">
+    <div class="card">
+      <h2>Ask LT Metrics about your history</h2>
+      <p class="hint">Natural-language queries over past runs. e.g. “show checkout regressions over the last 6 months”.</p>
+      <input id="askText" placeholder="show checkout regressions over the last 6 months">
+      <div class="btns"><button class="btn" id="btnAsk">Ask</button></div>
+      <div id="askResult" style="margin-top:14px"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (path, body) => {
+  const opt = body ? {method:'POST',headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify(body)} : {};
+  const r = await fetch(path, opt);
+  if(!r.ok){ const e = await r.json().catch(()=>({detail:r.statusText}));
+             throw new Error(e.detail || 'error'); }
+  return r.json();
+};
+let currentRun = null, poll = null, currentDiscovery=false;
+const uploads = {users_csv:null, data_csv:null, recording:null, testplan:null};
+
+// file uploads (users CSV / data CSV / recording)
+async function uploadFile(kind, inputId, sumId, field){
+  const el = $('#'+inputId); const f = el.files && el.files[0];
+  const sum = $('#'+sumId);
+  if(!f){ uploads[field]=null; sum.textContent=''; return; }
+  sum.innerHTML='<span class="spin"></span>uploading…';
+  try{
+    const fd = new FormData(); fd.append('kind', kind); fd.append('file', f);
+    const r = await fetch('/api/upload', {method:'POST', body:fd});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.detail||'upload failed');
+    uploads[field] = d.path;
+    const s = d.summary||{};
+    if(s.error) sum.innerHTML = '⚠️ '+s.error;
+    else if(kind==='users') sum.innerHTML = `✅ ${f.name} · ${s.rows||0} credential row(s)`;
+    else if(kind==='data'){
+      sum.innerHTML = `✅ ${f.name} · ${s.keywords||0} keyword(s), ${s.product_ids||0} product id(s)`;
+      // Say it, every time. A file that quietly gains a value nobody typed is
+      // worse than one that is missing it -- the reader has to be able to trust
+      // that what they see is what they supplied.
+      const put = s.restored_tokens || [];
+      // Say what happened, where, and what to do about it. The first version
+      // ended "clear one to capture a fresh token", which would not have
+      // worked: emptying the cell just lets the next upload refill it from
+      // memory. Advice that cannot work is worse than none.
+      if(put.length) sum.innerHTML +=
+        `<div class="muted" style="margin-top:6px;color:#e6a700;line-height:1.5">`
+        + `&#8635; <b>${put.map(_escHtml).join(', ')}</b> had no card token in your `
+        + `file, so LT Metrics used the one it saved when you last fetched. `
+        + `Your file on disk is unchanged.<br>`
+        + `Want ${put.length === 1 ? 'a brand-new token' : 'brand-new tokens'} instead? `
+        + `<a href="#" id="btnForgetTokens">Forget `
+        + `${put.length === 1 ? 'it' : 'them'}</a>, then click Fetch card tokens — `
+        + `which will capture for ${put.map(_escHtml).join(', ')} as well as any `
+        + `account that still has none.</div>`;
+    }
+    else sum.innerHTML = `✅ ${f.name} · ${s.endpoints||0} endpoint(s) from ${s.source||'recording'}`+(s.base_url?` · ${s.base_url}`:'');
+    const fg = $('#btnForgetTokens');
+    if(fg) fg.onclick = async (ev) => {
+      ev.preventDefault();
+      const base = ($('#url') && $('#url').value || '').trim();
+      // Only the accounts this message named. Clearing the whole store would
+      // also drop tokens for accounts that are not in this file, which the
+      // wording does not promise and nobody would expect.
+      const r2 = await api('/api/enrol-cards/forget',
+                           {base_url: base || null, usernames: put});
+      fg.outerHTML = '<b>Forgotten the saved token for '
+        + put.map(_escHtml).join(', ') + '.</b> Re-upload your file, then click '
+        + 'Fetch card tokens to capture '
+        + (put.length === 1 ? 'a fresh one' : 'fresh ones') + '.';
+    };
+  }catch(e){ uploads[field]=null; sum.innerHTML='⚠️ '+e.message; }
+}
+$('#upUsers').onchange=()=>uploadFile('users','upUsers','sumUsers','users_csv');
+$('#upData').onchange=async()=>{ await uploadFile('data','upData','sumData','data_csv'); validateData(); };
+$('#upRec').onchange=()=>uploadFile('recording','upRec','sumRec','recording');
+
+// Performance Test Plan (PDF) — upload, analyze, and render selectable test types.
+if($('#upPlan')) $('#upPlan').onchange = uploadPlan;
+async function uploadPlan(){
+  const f=$('#upPlan').files[0], sum=$('#sumPlan'), box=$('#planTypes'), pan=$('#planSummary');
+  box.innerHTML=''; if(pan) pan.innerHTML='';
+  if(!f){ uploads.testplan=null; sum.textContent=''; return; }
+  sum.innerHTML='<span class="spin"></span>uploading…';
+  try{
+    const fd=new FormData(); fd.append('kind','testplan'); fd.append('file',f);
+    const r=await fetch('/api/upload',{method:'POST',body:fd});
+    const d=await r.json(); if(!r.ok) throw new Error(d.detail||'upload failed');
+    uploads.testplan=d.path;
+    sum.innerHTML='<span class="spin"></span>analyzing test plan…';
+    const plan=await api('/api/analyze-test-plan',{testplan:d.path});
+    renderPlanTypes(plan, sum);
+    applyPlanToType();   // update the "Choose a test" fields for the current type now
+  }catch(e){ uploads.testplan=null; sum.innerHTML='⚠️ '+e.message; }
+}
+
+let _lastTestPlan=null;
+function downloadTestPlan(){
+  if(!_lastTestPlan) return;
+  const blob=new Blob([JSON.stringify(_lastTestPlan,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='test-plan.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+// Prefill the "Choose a test" fields (Users, Duration, think time, SLA) from the
+// uploaded plan for whatever test type is currently selected in the dropdown.
+// Fields stay editable; only values the plan actually specifies are filled.
+function applyPlanToType(){
+  if(!_lastTestPlan) return;
+  const tests=_lastTestPlan.tests||[];
+  const t=tests.find(x=>x.type===$('#testType').value);
+  const tt=_lastTestPlan.think_time||{}, s=_lastTestPlan.sla||{};
+  if(t){
+    if(t.users!=null) $('#ovUsers').value=t.users;
+    if(t.duration_s!=null) $('#ovDuration').value=t.duration_s;
+    if(t.ramp_up!=null && $('#ovSpawn')){ /* ramp shown via plan; spawn left auto */ }
+  }
+  if(tt.min_s!=null && $('#ovThinkMin')) $('#ovThinkMin').value=tt.min_s;
+  if(tt.max_s!=null && $('#ovThinkMax')) $('#ovThinkMax').value=tt.max_s;
+  if(s.p95_ms!=null && $('#ovSlaP95')) $('#ovSlaP95').value=s.p95_ms;
+  if(s.error_rate_pct!=null && $('#ovSlaErr')) $('#ovSlaErr').value=s.error_rate_pct;
+  applyPlanThroughput();   // auto-adjust the transaction mix from the plan
+}
+
+// Parse the plan's business scenarios that carry a percentage, e.g. "Home Page 100%",
+// "2 Navigate to Category 50%" -> {scenario: percent}.
+function _planThroughput(){
+  const out={}; const sc=(_lastTestPlan&&_lastTestPlan.business_scenarios)||[];
+  sc.forEach(s=>{ const m=String(s).match(/^(.*?)\s+(\d{1,3})\s*%\s*$/);
+    if(m){ const name=m[1].replace(/^\d+[\.\)]?\s*/,'').trim(); if(name) out[name]=+m[2]; } });
+  return out;
+}
+// Set each recorded API group's Percent Executions from the plan's scenario mix,
+// matching group names to plan scenarios by fuzzy token overlap. No-op without a plan
+// or without a rendered throughput editor. Groups the plan doesn't mention are left as-is.
+function applyPlanThroughput(){
+  const mix=_planThroughput(); if(!Object.keys(mix).length) return;
+  const nums=document.querySelectorAll('#anThroughput .thrNum'); if(!nums.length) return;
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const entries=Object.entries(mix).map(([k,v])=>[norm(k),v]);
+  nums.forEach(numEl=>{
+    const i=+numEl.dataset.i; const g=norm(_agNames[i]); let pct=null;
+    for(const [sc,v] of entries){
+      if(!g||!sc) continue;
+      if(g===sc || g.includes(sc) || sc.includes(g) ||
+         sc.split(' ').some(t=>t.length>3 && g.includes(t))){ pct=v; break; }
+    }
+    if(pct!=null){
+      numEl.value=pct; apiThroughput[_agNames[i]]=pct;
+      const r=document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]'); if(r) r.value=pct;
+    }
+  });
+  if(typeof renderThroughputCost === 'function') renderThroughputCost();
+}
+function renderPlanTypes(plan, sum){
+  _lastTestPlan=plan;
+  const esc=x=>String(x==null?'':x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const box=$('#planTypes'); const panel=$('#planSummary'); const tests=(plan&&plan.tests)||[];
+  const src = plan.source==='ai' ? 'AI-extracted' : (plan.source==='heuristic' ? 'keyword-extracted' : 'defaults');
+  const s=plan.sla||{}, tt=plan.think_time||{}; const slaBits=[];
+  if(s.p95_ms!=null) slaBits.push('p95 '+s.p95_ms+'ms');
+  if(s.error_rate_pct!=null) slaBits.push('err ≤'+s.error_rate_pct+'%');
+  if(s.throughput_rps!=null) slaBits.push(s.throughput_rps+' rps');
+  sum.innerHTML='✓ '+tests.length+' test type(s) '+src+(slaBits.length?' · SLA: '+slaBits.join(', '):'')
+    +(plan.notes?' · '+esc(plan.notes):'')
+    +' · <a class="link" style="cursor:pointer" onclick="downloadTestPlan()">⬇ test-plan.json</a>';
+
+  // Summary panel — objectives, environment, scenarios, think time, coverage.
+  const parts=[];
+  if(plan.target_environment) parts.push(`<div style="font-size:13px"><b>Environment:</b> <code>${esc(plan.target_environment)}</code></div>`);
+  if(tt.min_s!=null) parts.push(`<div style="font-size:13px"><b>Think time:</b> ${tt.min_s}${tt.max_s!=null&&tt.max_s!==tt.min_s?'–'+tt.max_s:''}s</div>`);
+  if((plan.objectives||[]).length) parts.push(`<div style="font-size:13px;margin-top:4px"><b>Objectives</b><ul style="margin:2px 0 0 16px;color:var(--mut)">${plan.objectives.slice(0,5).map(o=>`<li>${esc(o)}</li>`).join('')}</ul></div>`);
+  if((plan.business_scenarios||[]).length) parts.push(`<div style="font-size:13px;margin-top:4px"><b>Business scenarios:</b> <span class="muted">${plan.business_scenarios.slice(0,8).map(esc).join(' · ')}</span></div>`);
+  if((plan.pass_criteria||[]).length) parts.push(`<div style="font-size:13px;margin-top:4px"><b>Pass criteria</b><ul style="margin:2px 0 0 16px;color:var(--mut)">${plan.pass_criteria.slice(0,4).map(o=>`<li>${esc(o)}</li>`).join('')}</ul></div>`);
+  const cov=plan.coverage||{};
+  const covBadges=Object.keys(cov).map(k=>`<span style="font-size:11px;padding:1px 6px;border-radius:8px;margin-right:4px;background:${cov[k]?'#173':'#333'};color:${cov[k]?'#3ddc97':'#888'}">${cov[k]?'✓':'–'} ${k.replace(/_/g,' ')}</span>`).join('');
+  if(covBadges) parts.push(`<div style="margin-top:6px">${covBadges}</div>`);
+  panel.innerHTML = parts.length ? `<div style="border-left:2px solid var(--accent,#4f8cff);padding:6px 10px;background:rgba(255,255,255,0.02)">${parts.join('')}</div>` : '';
+
+  if(!tests.length){ box.innerHTML=''; return; }
+  const rows=tests.map((t,i)=>{
+    const cfg=[]; if(t.users!=null) cfg.push(t.users+' users');
+    if(t.duration) cfg.push(esc(t.duration)); else if(t.duration_s) cfg.push(t.duration_s+'s');
+    if(t.ramp_up) cfg.push('ramp↑ '+esc(t.ramp_up));
+    if(t.ramp_down) cfg.push('ramp↓ '+esc(t.ramp_down));
+    const meta=cfg.length?` <span class="muted">(${cfg.join(' · ')})</span>`:'';
+    return `<label style="display:flex;align-items:center;gap:8px;margin:4px 0">
+      <input type="radio" name="planType" value="${esc(t.type)}" data-i="${i}" style="width:auto">
+      <b>${esc(t.name||t.type)}</b>${meta}</label>`;
+  }).join('');
+  box.innerHTML='<div style="font-size:13px;margin-bottom:4px"><b>Available test types</b> — pick one to run:</div>'+rows;
+  box.querySelectorAll('input[name=planType]').forEach(el=>{
+    el.onchange=()=>{
+      const t=tests[+el.dataset.i]||{};
+      // this selection becomes the execution profile — point the dropdown at it and
+      // let its onchange prefill Users/Duration/think/SLA from the plan.
+      const opt=[...$('#testType').options].find(o=>o.value===t.type);
+      if(opt) $('#testType').value=t.type;
+      if($('#testType').onchange) $('#testType').onchange();
+    };
+  });
+}
+
+// ---- phases -------------------------------------------------------------
+// Which phase owns which card, matched on the card's own heading so no markup
+// has to be edited and a renamed card degrades to phase 1 rather than vanishing.
+const PHASE_RULES = [
+  [/live execution|auto-heal/i, '2'],
+  [/^\s*5\s*·\s*results|^\s*results\b/i, '3'],
+  [/checkout timeline/i, '4'],
+];
+
+function tagPhases(){
+  document.querySelectorAll('#tab-new > .card').forEach(c=>{
+    const h = c.querySelector('h2');
+    const t = (h ? h.textContent : '').trim();
+    let ph = '1';
+    for(const [re, n] of PHASE_RULES){ if(re.test(t)){ ph = n; break; } }
+    c.dataset.phase = ph;
+  });
+}
+
+let CURRENT_PHASE = '1';
+function showPhase(n){
+  n = String(n);
+  CURRENT_PHASE = n;
+  PHASE_MUTING = true;                 // our own edits are not app reveals
+  document.querySelectorAll('#phases button').forEach(b=>{
+    const on = b.dataset.phase === n;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('#tab-new > .card[data-phase]').forEach(c=>{
+    c.classList.toggle('phase-off', c.dataset.phase !== n);
+  });
+  // Released on the next tick, after the observer has drained our own batch.
+  setTimeout(()=>{ PHASE_MUTING = false; }, 0);
+}
+
+document.querySelectorAll('#phases button').forEach(b=>{
+  b.onclick = ()=>{
+    // The phase bar belongs to the run flow, so make sure that tab is showing.
+    const navNew = document.querySelector('nav button[data-tab="new"]');
+    if(navNew && !navNew.classList.contains('active')) navNew.click();
+    showPhase(b.dataset.phase);
+    window.scrollTo({top:0, behavior:'smooth'});
+  };
+});
+
+// Follow the app. It reveals the live-run and results cards by dropping their
+// `hidden` class; without this, starting a run would look like nothing happened.
+//
+// Two things this has to get right. showPhase() edits `phase-off` on every
+// card, which fires this same observer -- without the guard it switched to a
+// phase, saw the cards it had just hidden, and switched straight back. And a
+// card merely being visible is not news: only the moment `hidden` goes away
+// counts, so the previous state is remembered per card.
+let PHASE_MUTING = false;
+function watchPhaseReveals(){
+  const wasHidden = new WeakMap();
+  const cards = document.querySelectorAll('#tab-new > .card[data-phase]');
+  cards.forEach(c=> wasHidden.set(c, c.classList.contains('hidden')));
+
+  const obs = new MutationObserver(ms=>{
+    if(PHASE_MUTING) return;
+    for(const m of ms){
+      const c = m.target;
+      if(!(c instanceof Element) || !c.dataset || !c.dataset.phase) continue;
+      const nowHidden = c.classList.contains('hidden');
+      const before = wasHidden.get(c);
+      wasHidden.set(c, nowHidden);
+      if(before === true && nowHidden === false
+         && c.dataset.phase !== CURRENT_PHASE){
+        showPhase(c.dataset.phase);
+        return;
+      }
+    }
+  });
+  cards.forEach(c=> obs.observe(c, {attributes:true, attributeFilter:['class']}));
+}
+
+// ---- light / dark --------------------------------------------------------
+// The approved design is light. The previous palette is kept whole under
+// [data-theme="dark"], so nothing was thrown away to get here.
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  const b = $('#btnTheme');
+  if(b) b.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+  try{ localStorage.setItem('ltm-theme', t); }catch(e){}
+}
+(function initTheme(){
+  let t = 'light';
+  try{ t = localStorage.getItem('ltm-theme') || 'light'; }catch(e){}
+  applyTheme(t);
+  const b = $('#btnTheme');
+  if(b) b.onclick = ()=> applyTheme(
+    document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+})();
+
+tagPhases();
+watchPhaseReveals();
+showPhase('1');
+
+// tabs
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['new','saved','history','projects','ask'].forEach(t=>
+    $('#tab-'+t).classList.toggle('hidden', t!==b.dataset.tab));
+  // The phases describe a run; they mean nothing on the library tabs.
+  const ph = $('#phases');
+  if(ph) ph.style.display = (b.dataset.tab === 'new') ? '' : 'none';
+  if(b.dataset.tab==='history') loadHistory();
+  if(b.dataset.tab==='projects') loadProjects();
+  if(b.dataset.tab==='saved') loadSaved();
+});
+
+// health + test types
+(async()=>{
+  try{ const h = await api('/api/health');
+    $('#healthPill').innerHTML = h.locust
+      ? 'engine: <b>Locust ready</b>' : 'engine: Locust NOT installed';
+  }catch(e){ $('#healthPill').textContent='engine offline'; }
+  try{ const ai = await api('/api/ai-status'); renderAiPill(ai); }
+  catch(e){ $('#aiPill').textContent='AI: off'; }
+  const types = await api('/api/test-types');
+  $('#testType').innerHTML = types.map(t=>`<option value="${t.key}">${t.label}</option>`).join('');
+  const setPurpose=()=>{ const t=types.find(x=>x.key===$('#testType').value);
+    $('#testPurpose').textContent = t? t.purpose : ''; };
+  // On type change, refresh the purpose text AND prefill Users/Duration/think/SLA
+  // from an uploaded test plan (no-op when no plan is loaded).
+  $('#testType').onchange = ()=>{ setPurpose(); applyPlanToType(); };
+  setPurpose();
+})();
+
+// Kill running tests + restart the engine, then wait for it to come back.
+$('#btnRestart').onclick = async () => {
+  if(!confirm('Kill any running test and restart the engine? This starts a fresh session (and reloads code changes).')) return;
+  const ov=$('#restartOverlay'), msg=$('#restartMsg');
+  ov.style.display='flex';
+  try{ await fetch('/api/restart',{method:'POST'}); }catch(e){}
+  // Wait for the old process to drop, then poll until the new one answers.
+  let tries=0;
+  const check=async()=>{
+    tries++;
+    try{
+      const r=await fetch('/api/health',{cache:'no-store'});
+      if(r.ok){ msg.textContent='Back up — reloading…'; setTimeout(()=>location.reload(), 700); return; }
+    }catch(e){}
+    msg.textContent='Restarting engine… ('+tries+')';
+    if(tries>60){ msg.textContent='Still restarting — reload manually if this persists.'; }
+    setTimeout(check, 1000);
+  };
+  setTimeout(check, 2500);
+};
+
+// discover
+let currentAnalysis=null;
+let apiThroughput={};          // {group name: percent executions} from the throughput editor
+let _agNames=[];               // recorded API-group names, aligned with the editor rows
+let callsCursor=0, callsAll=[]; // live API-call feed cursor + buffer
+$('#btnDiscover').onclick = analyzeRecording;
+if($('#includeStatic')) $('#includeStatic').onchange = ()=>{ if(uploads.recording) analyzeRecording(); };
+// Live progress loader — spinner + elapsed timer + a stepped read-out of the
+// pipeline phases. The phases describe what the analysis actually performs and
+// advance on estimated timing; the elapsed timer is real. stop() ends it.
+function startProgress(el, phases, opts){
+  if(!el) return {stop(){}};
+  opts = opts || {};
+  const t0 = Date.now();
+  let idx = 0; const done = [];
+  const fmt = ms => { const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
+  function render(){
+    const cur = phases[Math.min(idx, phases.length-1)] || 'Working';
+    const list = done.map(p=>`<div style="color:#3ddc97;font-size:12px">✓ ${p}</div>`).join('');
+    el.innerHTML = `<div style="display:flex;align-items:center;gap:8px">
+        <span class="spin"></span>
+        <span>${cur} <span class="muted">· ${fmt(Date.now()-t0)}</span></span></div>${list}`;
+  }
+  render();
+  const tick = setInterval(render, 500);                         // live timer
+  const adv  = setInterval(()=>{                                 // advance phases (last holds)
+    if(idx < phases.length-1){ done.push(phases[idx]); idx++; render(); }
+  }, opts.stepMs || 2500);
+  return { stop(msg){
+    clearInterval(tick); clearInterval(adv);
+    el.innerHTML = (msg || '✓ done') + ` <span class="muted">· ${fmt(Date.now()-t0)}</span>`;
+  }};
+}
+
+async function analyzeRecording(){
+  clearSaved();   // a fresh analysis replaces any loaded saved script
+  if(!uploads.recording){ alert('Upload a BlazeMeter recording first (.jmx / .yaml / .har).'); return; }
+  const btn=$('#btnDiscover'); btn.disabled=true; btn.innerHTML='<span class="spin"></span>Analyzing…';
+  const enhance = $('#enhancePlaywright').checked;
+  const phases = enhance
+    ? ['Parsing recording','Launching headless browser (Playwright)','Detecting platform & tech',
+       'Crawling pages & capturing APIs','Filtering static noise','Correlating dynamic values',
+       'Mapping user journeys','Building business flow']
+    : ['Parsing recording','Detecting platform & tech','Extracting REST / API calls',
+       'Filtering static noise','Correlating dynamic values','Mapping user journeys','Building business flow'];
+  const prog = startProgress($('#sumRec'), phases, {stepMs: enhance?4000:1800});
+  try{
+    const inclStatic = $('#includeStatic') && $('#includeStatic').checked;
+    const a = enhance
+      ? await api('/api/crawl-record', {url:$('#url').value.trim(), recording:uploads.recording, include_static:inclStatic})
+      : await api('/api/analyze-recording', {recording:uploads.recording, include_static:inclStatic});
+    prog.stop('✓ Analysis complete');
+    currentAnalysis=a;
+    renderAnalysis(a);
+    if(a.base_url && !$('#url').value.trim()) $('#url').value=a.base_url;   // target from recording
+  }catch(e){ prog.stop('⚠️ '+e.message); alert('Analysis failed: '+e.message); }
+  btn.disabled=false; btn.innerHTML='🔎 Analyze recording';
+}
+
+// crawl & record (no upload — Playwright drives the site directly)
+$('#btnCrawlRecord').onclick = crawlAndRecord;
+async function crawlAndRecord(){
+  const url = $('#url').value.trim();
+  if(!url){ alert('Enter a target URL above first.'); return; }
+  clearSaved();   // a fresh crawl replaces any loaded saved script
+  const btn=$('#btnCrawlRecord'); btn.disabled=true; btn.innerHTML='<span class="spin"></span>Crawling…';
+  const phases = ['Launching headless browser','Loading home page','Detecting platform & tech',
+                  'Searching for a product','Opening a product page','Logging in (if credentials given)',
+                  'Adding to cart','Capturing network / APIs','Mapping the journey'];
+  const prog = startProgress($('#sumCrawl'), phases, {stepMs: 3500});
+  try{
+    const body = {
+      url,
+      username: $('#pwUsername').value.trim() || null,
+      password: $('#pwPassword').value || null,
+      search_term: $('#pwSearchTerm').value.trim() || null,
+    };
+    const a = await api('/api/crawl-record', body);
+    prog.stop('✓ Crawl & record complete');
+    currentAnalysis=a;
+    renderAnalysis(a);
+    if(a.base_url && !$('#url').value.trim()) $('#url').value=a.base_url;
+  }catch(e){ prog.stop('⚠️ '+e.message); alert('Crawl & record failed: '+e.message); }
+  btn.disabled=false; btn.innerHTML='🌐 Crawl & record with Playwright';
+}
+
+// ---- Intelligent Test Data Generator ----
+function _dlCsv(name, text){
+  const blob=new Blob([text||''],{type:'text/csv'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=name; a.click(); URL.revokeObjectURL(a.href);
+}
+if($('#btnGenData')) $('#btnGenData').onclick = generateTestData;
+async function generateTestData(){
+  if(!uploads.recording){ alert('Analyze a recording first (Section 1) so LT Metrics knows the application.'); return; }
+  const out=$('#genDataOut'); out.innerHTML='';
+  const phases=['Reading application knowledge','Sizing from the test plan','Selecting saleable products',
+    'Distributing products across users','Generating customers & addresses','Applying payment intelligence',
+    'Validating business dependencies','Writing CSVs'];
+  const prog=startProgress($('#sumGenData'), phases, {stepMs:1200});
+  try{
+    const r=await api('/api/generate-test-data',{
+      recording:uploads.recording, testplan:uploads.testplan||null,
+      test_type:$('#testType').value,
+      users:(+($('#ovUsers').value)|| +($('#expectedUsers').value) || null),
+      data_csv:uploads.data_csv||null,
+      customer_mode:'existing',
+      live_products: !!($('#genLiveProducts') && $('#genLiveProducts').checked),
+      register_customers: !!($('#genRegister') && $('#genRegister').checked)});
+    prog.stop('✓ '+ (r.summary||'test data ready'));
+    // the generated data becomes this run's data set — but ONLY if it passed
+    // validation (don't silently hand the run accounts that can't authenticate, etc.)
+    const _vok = !(r.validation && r.validation.ok===false);
+    if(r.testdata_path && _vok){ uploads.data_csv=r.testdata_path; dataValid=true; if(typeof syncRunGate==='function') syncRunGate(); }
+    // auto-apply the suggested config: throughput, test type, users, duration
+    const sc=r.suggested_config||{};
+    if(sc.group_throughput && Object.keys(sc.group_throughput).length) apiThroughput=sc.group_throughput;
+    if(sc.test_type){ const o=[...$('#testType').options].find(x=>x.value===sc.test_type);
+      if(o){ $('#testType').value=sc.test_type; if($('#testType').onchange) $('#testType').onchange(); } }
+    if(sc.users!=null && $('#ovUsers')) $('#ovUsers').value=sc.users;
+    if(sc.duration_s!=null && $('#ovDuration')) $('#ovDuration').value=sc.duration_s;
+    // render validation + downloads
+    const esc=x=>String(x==null?'':x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    const v=r.validation||{}; const errs=(v.errors||[]);
+    const vHtml = errs.length
+      ? `<div style="color:#ff6b9a;font-size:13px">⚠ Validation: ${errs.map(esc).join(' · ')}</div>`
+      : `<div style="color:#3ddc97;font-size:13px">✓ Validation gate: ${esc(v.status||'ok')}</div>`;
+    const pay=r.payment||{};
+    const meta=`<div style="font-size:13px">${r.rows||0} rows · ${r.unique_customers||0} customers · ${r.unique_skus||0} SKUs · payment <b>${esc(pay.method||'')}</b>${pay.is_card?' (sandbox test card)':''} <span class="muted">— ${esc(pay.note||'')}</span></div>`;
+    const lv=r.live||{}; let liveHtml='';
+    if(lv.products_found!=null) liveHtml+=`<div style="font-size:13px">🛒 Live products: <b>${lv.products_found}</b> real in-stock, priced SKU(s) <span class="muted">(${esc(lv.products_source||'')})</span></div>`;
+    if(lv.registered!=null) liveHtml+=`<div style="font-size:13px">👤 Registered: <b>${lv.registered}</b> account(s) on the store <span class="muted">${esc(lv.registration_note||'')}</span></div>`;
+    const files=r.csv_files||{};
+    const dls=Object.keys(files).map(n=>`<a class="link" style="cursor:pointer;margin-right:10px" data-n="${n}">⬇ ${n}.csv</a>`).join('');
+    out.innerHTML = meta + liveHtml + vHtml
+      + `<div style="margin-top:6px">${dls}</div>`
+      + (r.preview_csv?`<pre style="margin-top:6px;max-height:140px;overflow:auto;font-size:11px;background:rgba(255,255,255,0.03);padding:6px;border-radius:6px">${esc(r.preview_csv)}</pre>`:'')
+      + (_vok
+          ? `<p class="hint" style="margin-top:4px">This data set is now applied to the run below (throughput, test type and users were set from the plan).</p>`
+          : `<p class="hint" style="margin-top:4px;color:#ff6b9a">⚠ Not applied to the run — fix the validation issue above (e.g. provide accounts that can authenticate), then regenerate.</p>`);
+    out.querySelectorAll('a[data-n]').forEach(a=>a.onclick=()=>_dlCsv(a.dataset.n+'.csv', files[a.dataset.n]));
+  }catch(e){ prog.stop('⚠️ '+e.message); }
+}
+
+function _escHtml(s){ return String(s==null?'':s).replace(/</g,'&lt;'); }
+function _escAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// ---- AI master toggle (cap API spend without unsetting the key) ----
+function renderAiPill(ai){
+  const p=$('#aiPill'); if(!p) return;
+  if(!ai || !ai.key_present){
+    p.innerHTML='AI: <b>no API key</b>';
+    p.title='Set ANTHROPIC_API_KEY to enable the agentic layer';
+    p.style.cursor='default'; p.onclick=null;
+    return;
+  }
+  const on = !!ai.ai_on;
+  p.innerHTML = on ? 'AI: <b>Claude ON</b> · click to disable'
+                   : 'AI: <b>OFF</b> · click to enable';
+  p.style.cursor='pointer';
+  p.title = on ? 'Click to STOP all Claude calls (caps API spend). The key stays configured.'
+               : 'Click to resume AI enhancements.';
+  p.onclick = ()=>toggleAi(!on);
+}
+async function toggleAi(enable){
+  try{ renderAiPill(await api('/api/ai-toggle', {enabled: enable})); }
+  catch(e){}
+}
+
+// ---- call selector (which recorded calls go into the generated script) ----
+// Which calls must not be dropped is decided by the SERVER, from
+// knowledge/rules/platform_rules.yaml, and arrives on each call as `critical`
+// ('cart_add' | 'login' | ''). The browser deliberately keeps no copy of that
+// rule: two copies drift apart, and this failure mode is silent — the run still
+// reports 200 everywhere while the orders it creates are wrong.
+const CRITICAL_WHY = {
+  cart_add: 'Runs the pricing the store itself applies. Without it the order can be created at price 0 — shipping and tax only.',
+  login: 'Authenticates the storefront session. Without it these calls run as a guest and land in a guest cart.'
+};
+function isPricingCritical(c){ return !!(c && c.critical); }
+function renderCallSelector(calls, dropped){
+  calls = calls || []; dropped = dropped || [];
+  const box = $('#anCalls');
+  if(!box) return;
+  if(!calls.length){
+    box.innerHTML = '<p class="muted" style="padding:12px">No API/REST calls were parsed from this recording.</p>';
+  } else {
+    box.innerHTML = calls.map(c=>{
+      const k = String(c.kind||'GET').toUpperCase();
+      const grp = c.group ? `<span class="muted">${_escHtml(c.group)}</span>` : '';
+      const crit = isPricingCritical(c);
+      const why = crit ? (CRITICAL_WHY[c.critical] || 'Business critical.') : '';
+      const flag = crit ? `<span class="kind REST" style="background:#3d1b1b;color:#ff9a9a" title="${_escAttr(why)}">KEEP</span>` : '';
+      return `<label class="callItem">
+        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${_escAttr(c.critical||'')}" ${c.selected!==false?'checked':''}>
+        <span class="m">${_escHtml(c.method)}</span>
+        <span class="kind ${k}">${_escHtml(k)}</span>
+        <span class="p">${_escHtml(c.path)}</span>${grp}${flag}
+      </label>`;
+    }).join('');
+  }
+  document.querySelectorAll('#anCalls .callChk').forEach(el=> el.onchange=updateCallCount);
+  const nd = $('#anDropped');
+  if(nd){
+    nd.innerHTML = dropped.length
+      ? `<details style="margin-top:10px"><summary>Filtered out as noise — ${dropped.length} request${dropped.length==1?'':'s'} (static assets, page shells, trackers — not load-tested)</summary>`
+        + '<div class="callList" style="margin-top:8px">'
+        + dropped.map(d=>`<div class="noiseItem"><span class="m">${_escHtml(d.method||'GET')}</span><span class="p">${_escHtml(d.path||'')}</span><span>${_escHtml(d.reason||'')}</span></div>`).join('')
+        + '</div></details>'
+      : '';
+  }
+  const bAll=$('#callAll'), bNone=$('#callNone'), bApi=$('#callApiOnly');
+  if(bAll) bAll.onclick=()=>setAllCalls(true);
+  if(bNone) bNone.onclick=()=>setAllCalls(false);
+  if(bApi) bApi.onclick=()=>{ document.querySelectorAll('#anCalls .callChk').forEach(el=>{
+      const k=el.dataset.kind;
+      // Keep pricing-critical storefront calls: unticking them silently
+      // produces 0-value orders that still report as a pass.
+      el.checked=(k==='REST'||k==='API'||!!el.dataset.critical); });
+    updateCallCount(); };
+  updateCallCount();
+}
+function setAllCalls(v){ document.querySelectorAll('#anCalls .callChk').forEach(el=>el.checked=v); updateCallCount(); }
+function updateCallCount(){
+  const all=document.querySelectorAll('#anCalls .callChk').length;
+  const on=document.querySelectorAll('#anCalls .callChk:checked').length;
+  const el=$('#callCount'); if(el) el.textContent = all ? `${on} of ${all} selected` : '';
+  const missed=Array.from(document.querySelectorAll('#anCalls .callChk'))
+    .filter(x=>x.dataset.critical && !x.checked);
+  const w=$('#callCritWarn');
+  if(w) w.innerHTML = missed.length
+    ? missed.map(x=>{
+        const kind = x.dataset.critical;
+        const path = x.closest('.callItem').querySelector('.p').textContent;
+        const label = kind === 'login' ? 'The storefront sign-in is unticked.'
+                                       : 'The call that prices the cart is unticked.';
+        return '⚠️ <b>' + label + '</b> <code>' + _escHtml(path) + '</code> — '
+             + (CRITICAL_WHY[kind] || '')
+             + ' The run would still report 200 everywhere.';
+      }).join('<br>')
+    : '';
+}
+function selectedCallSigs(){
+  return Array.from(document.querySelectorAll('#anCalls .callChk:checked')).map(el=>el.dataset.sig);
+}
+
+// ---- readiness panel -----------------------------------------------------
+// Shows what LT Metrics RESOLVED, rather than making someone hunt for what is
+// missing. Deliberately shows warnings without blocking: only a genuinely
+// unusable data file blocks the run (syncRunGate owns that). Everything here is
+// "this is what will happen" -- the point is that nothing surprises you at the
+// end of a three-minute run.
+let ACCOUNTS = null;      // set by validateData() from /api/validate-data
+function renderReadiness(){
+  const el = $('#readiness'); if(!el) return;
+  if(!ACCOUNTS){ el.innerHTML = ''; return; }
+  const a = ACCOUNTS;
+  const asked = +($('#ovUsers') && $('#ovUsers').value) || 0;
+  const method = (($('#ovPayMethod') && $('#ovPayMethod').value) || '').trim();
+  const wantsCard = !!(PAY_TEMPLATES && PAY_TEMPLATES[method]);
+  const rows = [];
+  const line = (ok, text) =>
+    rows.push(`<div style="margin:3px 0">${ok === true ? '<span style="color:#2ecc71">✓</span>'
+                        : ok === false ? '<span style="color:#e11627">✗</span>'
+                        : '<span style="color:#e6a700">⚠</span>'} ${text}</div>`);
+
+  // --- accounts ---
+  if(asked && asked > a.unique_logins){
+    line(false, `<b>${asked} users but only ${a.unique_logins} `
+      + `account${a.unique_logins === 1 ? '' : 's'}.</b> Users sharing an account `
+      + `share one basket and fight over it — the store rejects the second `
+      + `with "the quote can't be created". Set Users to ${a.unique_logins}, or add more logins.`);
+  } else {
+    line(true, `${a.unique_logins} account${a.unique_logins === 1 ? '' : 's'}`
+      + (asked ? ` for ${asked} user${asked === 1 ? '' : 's'}` : '')
+      + ` — no sharing` + (a.rows > a.unique_logins
+          ? ` (${a.rows} rows, ${a.products} product${a.products === 1 ? '' : 's'})` : ''));
+  }
+
+  // --- the file says one thing, the run is set to another ---
+  // A fixed method in the payment box overrides every row. When the file
+  // declares an offline payer and the box forces a card, that row is reported
+  // as "no card" -- true, and deeply misleading, because the file never asked
+  // for one. Name the override instead of blaming the data.
+  if(ACCOUNTS && method && method.indexOf('{{') === -1){
+    const off = (ACCOUNTS.offline_logins || []);
+    const declared = (ACCOUNTS.declared_methods || []);
+    const overridden = off.filter(u =>
+      (ACCOUNTS.method_by_login || {})[u] &&
+      (ACCOUNTS.method_by_login || {})[u] !== method.toLowerCase());
+    if(overridden.length && declared.length > 1){
+      // A warning that only describes the fix leaves the reader to apply it by
+      // hand, in a field they already filled in wrongly once. The button does
+      // what the sentence says -- and exists because the auto-fill deliberately
+      // will not overwrite a hand-typed value, which is right, but leaves this
+      // exact case stuck until someone acts.
+      line(null, `<b>Your data file asks for more than one payment method `
+        + `(${declared.map(_escHtml).join(', ')}), but the run is set to `
+        + `<code>${_escHtml(method)}</code> for everyone.</b> That overrides `
+        + `${overridden.length} row${overridden.length === 1 ? '' : 's'} — `
+        + `${overridden.map(_escHtml).join(', ')} — and is why `
+        + `${overridden.length === 1 ? 'it is' : 'they are'} reported below as `
+        + `having no card. `
+        + `<button id="btnUseFileMethod" class="btn" style="margin-left:4px;`
+        + `padding:3px 10px;font-size:12px">Use the file&rsquo;s methods</button>`);
+    }
+  }
+
+  // --- payment ---
+  // A card method is only actually DECLARED when the additional_data carries
+  // the token reference. Method-without-details and method-with-details fail
+  // differently, and saying the wrong one sends someone down the wrong path.
+  const addl = (($('#ovPayAddl') && $('#ovPayAddl').value) || '');
+  const cardDeclared = wantsCard && addl.indexOf('{{') > -1;
+  // A per-row method names a COLUMN, so the pool pays several ways at once.
+  // Without this branch the panel fell through to "no card needed", which is
+  // false for the card rows and exactly the kind of quiet wrong answer that
+  // sends someone into a run that half-fails.
+  const perRow = method.indexOf('{{') > -1;
+  if(perRow){
+    line(true, `payment method is read per row from `
+      + `<code>${_escHtml(method)}</code> — this pool pays several ways, which is `
+      + `what a real B2B population looks like`);
+    if(a.with_token.length) line(true,
+      `${a.with_token.length} account${a.with_token.length === 1 ? '' : 's'} `
+      + `carr${a.with_token.length === 1 ? 'ies' : 'y'} a card token: `
+      + a.with_token.map(_escHtml).join(', '));
+    if(a.without_token.length) line(null,
+      `${a.without_token.map(_escHtml).join(', ')} `
+      + `${a.without_token.length === 1 ? 'has' : 'have'} no card token. That is `
+      + `fine for a row paying by an offline method, and a FAILURE for a row `
+      + `naming a card gateway — check the payment_method column for `
+      + `${a.without_token.length === 1 ? 'that account' : 'those accounts'}.`);
+  } else if(cardDeclared){
+    if(a.with_token.length) line(true,
+      `card resolved for ${a.with_token.length} of ${a.unique_logins}: `
+      + a.with_token.map(_escHtml).join(', '));
+    // Rows the FILE gave an offline method are already explained by the
+    // override warning above. Repeating "no card" for them reads as a second,
+    // separate fault and points at the data, which is not where the problem is.
+    const _overridden = new Set(
+      method && method.indexOf('{{') === -1 ? (ACCOUNTS.offline_logins || []) : []);
+    const _reallyMissing = a.without_token.filter(u => !_overridden.has(u));
+    if(_reallyMissing.length) line(false,
+      `<b>no card for ${_reallyMissing.map(_escHtml).join(', ')}.</b> `
+      + `You asked for <code>${_escHtml(method)}</code>, so the run will FAIL for `
+      + `${_reallyMissing.length === 1 ? 'that account' : 'those accounts'} rather than `
+      + `quietly billing on account. Either add a <code>payment_token</code> for `
+      + `${_reallyMissing.length === 1 ? 'it' : 'them'}, or ` + offlineHint() + `.`);
+  } else if(wantsCard){
+    line(null, `<code>${_escHtml(method)}</code> is a card method but no card `
+      + `details are set, and no account in your CSV has a `
+      + `<code>payment_token</code>. The store will reject a card order with no `
+      + `card. Either add tokens, or ` + offlineHint() + `.`);
+  } else if(method){
+    line(true, `paying by <code>${_escHtml(method)}</code> — no card needed`);
+  } else {
+    line(null, 'no payment method chosen — the recorded one will be used');
+  }
+
+  // --- the calls that decide whether an order is real ---
+  const crit = Array.from(document.querySelectorAll('#anCalls .callChk'))
+                 .filter(x => x.dataset.critical);
+  if(crit.length){
+    const off = crit.filter(x => !x.checked);
+    if(off.length) line(false,
+      `<b>${off.length} business-critical call${off.length === 1 ? '' : 's'} unticked.</b> `
+      + `See the warning under the call list.`);
+    else line(true, `${crit.length} business-critical call${crit.length === 1 ? '' : 's'} kept`);
+  }
+
+  // A warning is still something to read before running, so it must not sit
+  // under a heading that says everything is fine.
+  const bad  = rows.filter(r => r.indexOf('#e11627') > -1).length;
+  const warn = rows.filter(r => r.indexOf('#e6a700') > -1).length;
+  el.innerHTML = `<div class="rec" style="border-left-color:${bad ? '#e11627' : warn ? '#e6a700' : '#2ecc71'}">`
+    + `<b>${(bad || warn) ? 'Before you run' : 'Ready to run'}</b>`
+    + `<div class="d" style="margin-top:6px">${rows.join('')}</div></div>`;
+
+  // Wired AFTER the panel is written -- the button does not exist until then.
+  const useFile = $('#btnUseFileMethod');
+  if(useFile) useFile.onclick = () => {
+    const pm = $('#ovPayMethod');
+    if(!pm) return;
+    pm.value = '{{payment_method}}';
+    pm.dataset.fromData = '{{payment_method}}';
+    const n = $('#ovPayMethodNote');
+    if(n) n.innerHTML = 'Set to <code>{{payment_method}}</code> — each account now '
+      + 'pays the way its own row says.';
+    applyPayTemplate();
+    renderReadiness();
+  };
+}
+
+// ---- payment method picker + additional_data template --------------------
+// The methods come from the recording and the token key from the knowledge
+// base, so nobody has to remember that CyberSource wants `card_id` while
+// Braintree wants `paymentMethodNonce`. The field is FILLED IN, never locked:
+// a store may need an extra value (a 3-D Secure session id, an agreement id)
+// and locking it would make that case impossible.
+let PAY_TEMPLATES = {};
+let PAY_METHODS = [];      // every method the recording used
+// Methods that need no card gateway -- the store settles them itself
+// (invoice, bank transfer, purchase order). Naming the real ones beats
+// telling somebody to 'use an offline method' and leaving them to guess.
+let PAY_OFFLINE_PREF = [];   // ranked by the KB: real-money methods first
+function offlineMethodNames(){
+  const cand = PAY_METHODS.filter(m => m.kind !== 'hosted');
+  const rank = (m) => {
+    const c = String(m.code || '').toLowerCase();
+    const i = PAY_OFFLINE_PREF.findIndex(p => c.indexOf(p) > -1);
+    return i === -1 ? 999 : i;      // unranked (e.g. "free") goes last
+  };
+  return cand.sort((a,b) => rank(a) - rank(b)).map(m => (m.title || m.code));
+}
+function offlineHint(){
+  const n = offlineMethodNames().slice(0, 2);
+  if(!n.length) return 'switch to a payment method that does not use a card';
+  const list = n.length === 1 ? _escHtml(n[0])
+             : _escHtml(n[0]) + ' or ' + _escHtml(n[1]);
+  return 'set Payment method to ' + list;
+}
+function renderPaymentMethods(pay){
+  PAY_TEMPLATES = (pay && pay.templates) || {};
+  const methods = (pay && pay.methods) || [];
+  PAY_METHODS = methods;
+  PAY_OFFLINE_PREF = (pay && pay.offline_preference) || [];
+  // Wire HERE, not in the analyse path: the picker can be populated more than
+  // once, and the listeners must exist as soon as it does.
+  const pmEl = $('#ovPayMethod'), paEl = $('#ovPayAddl');
+  if(pmEl && !pmEl.dataset.wired){ pmEl.dataset.wired = '1';
+    pmEl.addEventListener('change', applyPayTemplate);
+    pmEl.addEventListener('input', applyPayTemplate); }
+  if(paEl && !paEl.dataset.wired){ paEl.dataset.wired = '1';
+    paEl.addEventListener('input', applyPayTemplate); }
+  // Preselect the method the recording actually used, when there is only one.
+  // Blank used to mean "whatever the recording did", which is the same thing --
+  // but stating it makes the intent explicit, which is what lets a declared card
+  // payment fail loudly instead of silently becoming an invoice.
+  if(pmEl && !pmEl.value && !pmEl.dataset.userSet && methods.length === 1){
+    pmEl.value = methods[0].code;
+    pmEl.dataset.suggested = methods[0].code;
+  }
+  if(pmEl && !pmEl.dataset.userSet){
+    pmEl.addEventListener('input', ()=>{
+      if(pmEl.value !== pmEl.dataset.suggested) pmEl.dataset.userSet = '1';
+    }, {once:false});
+  }
+  const dl = $('#payMethodList');
+  if(dl) dl.innerHTML = methods.map(m =>
+    `<option value="${_escAttr(m.code)}">${_escHtml(m.title || m.code)}`
+    + `${m.kind === 'hosted' ? ' — card' : ''}</option>`).join('');
+  applyPayTemplate();
+  renderReadiness();
+}
+// The data file already says how each row pays. Reading that off the file and
+// setting the box to match removes the trap this replaced: a fixed method in
+// the box silently overrides every row, and the run then reports the FILE as
+// wrong -- "no card for testbinitha6" for an account whose row says netterms.
+function applyMethodFromData(){
+  const el = $('#ovPayMethod');
+  if(!el || !ACCOUNTS) return;
+  const declared = (ACCOUNTS.declared_methods || []).filter(Boolean);
+  if(!declared.length) return;
+  const cur = (el.value || '').trim();
+  // Overwrite only what WE put there -- and the recording's own suggestion
+  // counts as ours. renderPaymentMethods fills this box when the recording used
+  // exactly one method, and it marks that value `suggested`; only a value the
+  // operator actually changed gets `userSet`. Treating the suggestion as
+  // untouchable is why the box stayed on paradoxlabs_cybersource for a file
+  // that asks for two methods.
+  const ourValue = !cur
+    || cur === el.dataset.fromData
+    || (cur === el.dataset.suggested && !el.dataset.userSet);
+  if(!ourValue) return;
+  // Several methods in the file -> read it per row. One method -> use it, which
+  // is the same thing and reads more plainly in the box.
+  const want = declared.length > 1 ? '{{payment_method}}' : declared[0];
+  if(cur === want) return;
+  el.value = want;
+  el.dataset.fromData = want;
+  const note = $('#ovPayMethodNote');
+  if(note){
+    note.innerHTML = declared.length > 1
+      ? 'Set from your data file, which asks for '
+        + declared.map(_escHtml).join(' and ')
+        + '. <code>{{payment_method}}</code> makes each account pay the way its own row says.'
+      : 'Set from your data file — every row asks for <code>'
+        + _escHtml(declared[0]) + '</code>.';
+  }
+}
+
+function applyPayTemplate(){
+  const codeEl = $('#ovPayMethod'), addlEl = $('#ovPayAddl');
+  if(!codeEl || !addlEl) return;
+  const code = (codeEl.value || '').trim();
+  // {{payment_method}} is not a gateway name, so a direct lookup finds nothing
+  // and the details box is left empty -- which silently removes the card
+  // details from a run that still has card rows in it. When the method is read
+  // per row, take the template from the card gateway the FILE names.
+  let tpl = PAY_TEMPLATES[code];
+  if(!tpl && code.indexOf('{{') > -1 && ACCOUNTS){
+    const fromFile = (ACCOUNTS.declared_methods || []).find(m => PAY_TEMPLATES[m]);
+    if(fromFile) tpl = PAY_TEMPLATES[fromFile];
+  }
+  const note = $('#ovPayAddlNote');
+  const cur = (addlEl.value || '').trim();
+  // Overwrite only what WE put there. A hand-typed value is never clobbered.
+  const ours = !cur || cur === addlEl.dataset.filled;
+  // Only offer the card template when the data file can actually honour it.
+  // Filling it in when NO account has a token would declare a card payment that
+  // must then fail for every user -- helpful-looking, and a guaranteed failure.
+  const dataHasToken = !ACCOUNTS || (ACCOUNTS.with_token || []).length > 0;
+  if(tpl && ours && !dataHasToken){
+    addlEl.value = '';
+    delete addlEl.dataset.filled;
+    if(note) note.innerHTML = 'Not filled in: no account in your data CSV has a '
+      + '<code>payment_token</code>, so a card payment would fail for every user. '
+      + 'Add tokens (see <code>extract_card_tokens.py</code>), or ' + offlineHint() + '.';
+    renderReadiness();
+    return;
+  }
+  if(tpl && ours){
+    addlEl.value = tpl;
+    addlEl.dataset.filled = tpl;
+    if(note && code.indexOf('{{') > -1 && ACCOUNTS){
+      const fromFile = (ACCOUNTS.declared_methods || []).find(m => PAY_TEMPLATES[m]);
+      if(fromFile) note.innerHTML = 'Filled in for <b>' + _escHtml(fromFile)
+        + '</b> — the card gateway your data file names. Rows that pay another '
+        + 'way ignore these details.';
+    }
+    const d = $('#ovPayDetails'); if(d) d.open = true;
+    const s = $('#ovPaySummary');
+    if(s) s.textContent = 'Payment token & CAPTCHA — needed for this card method';
+  } else if(!tpl && ours){
+    addlEl.value = '';
+    delete addlEl.dataset.filled;
+    const s = $('#ovPaySummary');
+    if(s) s.textContent = 'Payment token & CAPTCHA (rarely needed)';
+  }
+  if(note){
+    if(tpl && addlEl.value === tpl){
+      note.innerHTML = 'Filled in for <b>' + _escHtml(code) + '</b>. '
+        + '<code>{{payment_token}}</code> and <code>{{card_cvv}}</code> are read '
+        + 'from the matching column in each row of your data CSV. '
+        + 'Edit if your store needs more.';
+    } else if(tpl){
+      note.innerHTML = 'You have edited this. '
+        + '<a href="#" id="ovPayAddlReset">Reset to the default for ' + _escHtml(code) + '</a>';
+      const r = $('#ovPayAddlReset');
+      if(r) r.onclick = (e)=>{ e.preventDefault(); addlEl.value = tpl;
+                               addlEl.dataset.filled = tpl; applyPayTemplate(); };
+    } else {
+      note.textContent = '';
+    }
+  }
+  renderReadiness();
+}
+
+// ---- dynamic payment-gateway picker (driven by Claude's detection) ----
+const GATEWAY_LABELS = {
+  stripe: "Stripe",
+  paradoxlabs_cybersource: "CyberSource (ParadoxLabs)",
+  adyen: "Adyen",
+  braintree: "Braintree",
+  paypal: "PayPal",
+};
+function populateGateways(detected){
+  const sel = $('#ovBrowserGateway'); if(!sel) return;
+  let html = '<option value="">— auto (use detected) —</option>';
+  Object.keys(GATEWAY_LABELS).forEach(k=>{
+    const isDet = (k === detected);
+    html += `<option value="${k}"${isDet?' selected':''}>${GATEWAY_LABELS[k]}${isDet?' — detected':''}</option>`;
+  });
+  sel.innerHTML = html;
+  const note = $('#gatewayNote');
+  if(note) note.innerHTML = detected
+    ? `🤖 Claude detected a hosted card gateway in this recording: <b>${GATEWAY_LABELS[detected]||detected}</b>. Leave the picker on “auto” to use it.`
+    : `No hosted card gateway detected in this recording — the browser track will just navigate. (Set Browser VUs to 0 to skip it.)`;
+}
+
+// What an HTTP-level tool can do with a hosted card gateway depends on WHICH
+// card journey is being replayed, and the difference is not obvious:
+//   first-time entry  the PAN goes straight into the gateway iframe. No HTTP
+//                     tool can supply it. A real browser is the only option.
+//   saved card        the store refers to the card by a token it already holds.
+//                     That token is an ordinary correlated value and replays fine.
+// Validated 2026-08-25 against CyberSource (ParadoxLabs) on a live Magento store:
+// one saved card_id placed 5 card orders over plain HTTP, no browser involved,
+// confirmed as "Credit / Debit Card - Visa" on the order in the storefront.
+// Stating this up front stops the saved-card path being written off as impossible.
+function renderPaymentStrategy(detected){
+  const el = $('#paymentStrategy'); if(!el) return;
+  if(!detected){ el.innerHTML = ''; return; }
+  const name = GATEWAY_LABELS[detected] || detected;
+  el.innerHTML =
+    '<div style="border-left:4px solid #e6a700;background:#161618;border-radius:8px;padding:12px 14px">'
+    + '<b>&#128179; Card payment at load &mdash; pick the approach that fits</b>'
+    + '<div class="muted" style="margin-top:6px;font-size:13px">'
+    + 'This recording pays with <b>' + name + '</b>, a hosted card gateway. What is '
+    + 'possible depends on whether the card is being <b>entered for the first time</b> '
+    + 'or <b>reused from the account</b>:'
+    + '<ol style="margin:8px 0 0 18px">'
+    + '<li><b>Reuse a card token &mdash; works over plain HTTP.</b> Every card checkout '
+    + 'produces a token that stands in for the card, and a token replays like any other '
+    + 'value. Put the payment method and token in Advanced options below. '
+    + '<b>You do not need a "save this card" option.</b> Many stores do not offer one and '
+    + 'mint a fresh token on every checkout, which stays reusable afterwards &mdash; so an '
+    + 'empty saved-card list does not mean this approach is unavailable. '
+    + 'To capture a token: pay once by hand with the browser Network tab recording, save '
+    + 'the HAR, then run <code>extract_card_tokens.py &lt;file.har&gt;</code>, which writes '
+    + 'the CSV columns for you. Reading DevTools by hand is not necessary. '
+    + '<i>Verified against CyberSource: one token placed repeated card orders with no '
+    + 'browser in the loop.</i></li>'
+    + '<li><b>Offline method for volume</b> <i>(default when no token is supplied)</i>. '
+    + 'LT Metrics uses an offline method such as net terms or bank transfer. Everything except '
+    + 'the gateway hop is tested, and the report states which method it actually used.</li>'
+    + '<li><b>First-time card entry needs a real browser.</b> Typing a card number is the '
+    + 'one step no HTTP tool can perform &mdash; the number goes directly into the gateway '
+    + 'iframe, never through the store. Set <b>Browser VUs</b> to 2&ndash;5 so a few real '
+    + 'browsers drive the card form alongside the HTTP load. This is how LoadRunner and '
+    + 'NeoLoad do it; browsers are too heavy to run in bulk.</li>'
+    + '<li><b>Virtualise the gateway</b> &mdash; point the test environment at a mock that '
+    + 'returns a token with realistic delay. Give it the delay the real gateway has, or the '
+    + 'test proves only that you are fast when your dependencies are instant.</li>'
+    + '</ol></div></div>';
+}
+
+function _evidenceLabel(ev){
+  if(ev==='typed') return 'typed in browser';
+  if(ev==='ai-detected') return 'AI-detected';
+  return 'submitted request';
+}
+
+function renderUiSteps(steps){
+  if(!steps || !steps.length)
+    return '<p class="muted">No recorded browser (Selenium) actions in this file.</p>';
+  const order=[], byGroup={};
+  steps.forEach(s=>{
+    const g = s.group || 'UI';
+    if(!byGroup[g]){ byGroup[g]=[]; order.push(g); }
+    byGroup[g].push(s);
+  });
+  return order.map(g=>{
+    const items = byGroup[g].map(s=>{
+      const label = _escHtml(s.step_label || s.verb || 'action');
+      return (s.value!=null && s.value!=='')
+        ? `${label}: <span class="muted">${_escHtml(s.value)}</span>`
+        : label;
+    }).join(' → ');
+    return `<div class="journey"><b>${_escHtml(g)}</b><br>${items}</div>`;
+  }).join('');
+}
+
+function renderAnalysis(a){
+  if(!a) return;
+  $('#discoveryCard').classList.remove('hidden');
+  $('#discKpis').innerHTML=[
+    ['Source', (a.source||'?').toString().toUpperCase()],
+    ['Target', a.base_url||'—'],
+    ['Steps', a.steps||0],
+    ['Static dropped', a.static_dropped||0],
+    ['UI actions', (a.ui_steps||[]).length],
+    ['Correlations', (a.correlations||[]).length],
+  ].map(([l,v])=>`<div class="k"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+  const j=a.journey||{};
+  $('#discJourneys').innerHTML = `<div class="journey"><b>${j.name||'Recorded Journey'}</b><br>${(j.steps||[]).join(' → ')||'—'}</div>`;
+  if(a.error) $('#discJourneys').innerHTML += `<p class="muted" style="color:#e11627">Parse note: ${a.error}</p>`;
+  renderCallSelector(a.calls, a.dropped);
+  populateGateways(a.detected_gateway);
+  renderPaymentMethods(a.payment);
+  renderPaymentStrategy(a.detected_gateway);
+  $('#anUiSteps').innerHTML = renderUiSteps(a.ui_steps);
+  $('#anCorr').innerHTML = (a.correlations||[]).length
+    ? a.correlations.map(c=>`<div class="rec">🔗 <b>${c.value}</b> <span class="muted">(from ${c.field})</span><div class="d">${c.handling}</div></div>`).join('')
+    : '<p class="muted">No dynamic values needing correlation were detected.</p>';
+  $('#anGroups').innerHTML = (a.groups||[]).length
+    ? a.groups.map(g=>{
+        const cols = (g.fields||[]).map(f=>{
+          const req = f.required
+            ? ' <span class="badge b-bad">required</span>'
+            : ' <span class="badge b-ok">optional</span>';
+          const val = (f.source==='recorded' && f.sample)
+            ? ` <span class="muted">= ${_escHtml(f.sample)}</span>`
+            : ` <span class="muted" style="color:#e6a700">needs input</span>`;
+          return `${_escHtml(f.column)}${req}${val} <span class="muted">(${_evidenceLabel(f.evidence)})</span>`;
+        }).join('<br>');
+        return `<div class="rec">📋 <b>${g.group}</b> <span class="muted">— ${g.why}</span><div class="d">${cols}</div></div>`;
+      }).join('')
+      + `<p class="muted" style="margin-top:8px">Sample values are taken from your recording. In the downloadable sample CSV, cells the recording didn't supply are marked <code>&lt;&lt;FILL: … — required&gt;&gt;</code> where a value is required (blank cells are optional — LT Metrics fills them at runtime). Replace every <code>&lt;&lt;FILL: …&gt;&gt;</code> before running.</p>`
+    : '<p class="muted">No input fields need parameterization — the recording is self-contained.</p>';
+  // API call groups + per-group throughput (Percent Executions) editor
+  apiThroughput = {};
+  const ag = a.api_groups || [];
+  _agNames = ag.map(g=>g.name);
+  window._agCounts = ag;
+  $('#anThroughput').innerHTML = ag.length
+    ? ag.map((g,i)=>{ apiThroughput[g.name]=100; return `
+        <div class="rec" style="display:flex;align-items:center;gap:10px">
+          <b style="flex:1">${_escHtml(g.name)}</b>
+          <span class="muted">${g.count} request${g.count==1?'':'s'}</span>
+          <input type="range" min="0" max="100" step="5" value="100" data-i="${i}" class="thrRange" style="width:130px">
+          <input type="number" min="0" max="100" value="100" data-i="${i}" class="thrNum" style="width:60px"> %
+          <span class="muted thrEach" data-i="${i}" style="width:74px;text-align:right"></span>
+        </div>`; }).join('')
+    : '<p class="muted">No transaction groups recorded — all requests run as one flow.</p>';
+  if(ag.length) $('#anThroughput').innerHTML +=
+    '<p class="muted" id="thrTotal" style="margin-top:10px"></p>';
+  document.querySelectorAll('#anThroughput .thrRange').forEach(el=>{
+    el.oninput=()=>{ const i=+el.dataset.i; apiThroughput[_agNames[i]]=+el.value;
+      const n=document.querySelector('#anThroughput .thrNum[data-i="'+i+'"]'); if(n) n.value=el.value;
+      renderThroughputCost(); };
+  });
+  document.querySelectorAll('#anThroughput .thrNum').forEach(el=>{
+    el.onchange=()=>{ let v=Math.max(0,Math.min(100,+el.value||0)); el.value=v;
+      const i=+el.dataset.i; apiThroughput[_agNames[i]]=v;
+      const r=document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]'); if(r) r.value=v;
+      renderThroughputCost(); };
+  });
+  if(_lastTestPlan) applyPlanThroughput();   // auto-adjust from an already-loaded plan
+  renderThroughputCost();                    // paint the costs before anything is touched
+
+  const aa = a.ai_analysis || {};
+  const esc = s => String(s).replace(/</g,'&lt;');
+  let notesHtml = '';
+  const note = aa.notes || a.notes;
+  if(note)
+    notesHtml += `<div class="rec" style="border-left-color:#4f8cff;white-space:pre-wrap">🤖 <b>AI analysis (Claude):</b> ${esc(note)}`
+      + (aa.platform?` <span class="muted">· platform: ${esc(aa.platform)}</span>`:'')
+      + ((aa.journey||[]).length?`<div class="d">journey: ${aa.journey.map(esc).join(' → ')}</div>`:'')
+      + `</div>`;
+  if((aa.warnings||[]).length)
+    notesHtml += `<div class="rec" style="border-left-color:#e6a700">⚠ <b>Warnings that could affect scripting:</b>`
+      + aa.warnings.map(w=>`<div class="d">• ${esc(w)}</div>`).join('') + `</div>`;
+  if(!notesHtml && a.ai_enabled===false)
+    notesHtml = `<p class="muted">💡 Set <b>ANTHROPIC_API_KEY</b> to let Claude analyze the recording (journey, typed inputs, risks) — currently using built-in rules.</p>`;
+  $('#anNotes').innerHTML = notesHtml;
+  currentDiscovery=true;
+}
+
+$('#btnSampleCsv').onclick=()=>{
+  const csv=(currentAnalysis&&currentAnalysis.sample_csv)||'';
+  if(!csv){ alert('Analyze a recording first.'); return; }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='ltm_sample_data.csv'; a.click(); URL.revokeObjectURL(a.href);
+};
+
+// ---- card enrolment, from this page ---------------------------------------
+// The tokens this offers to fetch are the same values the panel above is
+// validating. Sending someone to a terminal to produce them, then back here to
+// re-upload, is the step most likely to be skipped -- and skipping it is what
+// makes a card run fail for every user.
+// The last enrolment job, so the updated data file stays reachable. It used
+// to be appended to the panel after a fetch -- and validateData(), called
+// on the next line, re-rendered that same panel and destroyed it. The
+// button existed for about a second and nobody could ever click it.
+let ENROL_JOB = null;
+
+function enrolPanel(){
+  if(!ACCOUNTS) return '';
+  // Only accounts that DECLARED a card. Counting every empty token cell said
+  // "10 accounts still need a card token" for a pool where 8 pay by invoice
+  // and need nothing -- alarming, and wrong.
+  const need = (ACCOUNTS.card_without_token || ACCOUNTS.without_token || []);
+  const have = (ACCOUNTS.with_token || []);
+  const method = (($('#ovPayMethod') && $('#ovPayMethod').value) || '').trim();
+  // Only meaningful when a card gateway is actually in play.
+  const wantsCard = /cybersource|paradoxlabs|stripe|braintree|adyen|authorizenet/i
+                      .test(method) || /\{\{/.test(method);
+  if(!wantsCard) return '';
+  // Vanishing on success reads as a glitch: the operator watched two tokens
+  // arrive and then the whole panel went. Stay, and say what happened -- the
+  // disappearance WAS the confirmation, which is no way to confirm anything.
+  if(!need.length){
+    if(!have.length) return '';
+    return '<div class="rec" id="enrolBox" style="border-left-color:#2ecc71">'
+      + '<b>&#10003; Card tokens ready for ' + have.length + ' account'
+      + (have.length === 1 ? '' : 's') + '</b>'
+      + '<div class="d" style="margin-top:6px">' + have.map(_escHtml).join(', ')
+      + '. Nothing to fetch — these rows can pay by card.'
+      + (ENROL_JOB ? '' : ' Your file already carries these tokens, so there '
+          + 'is nothing to download — the button below appears only after a '
+          + 'fetch, to hand back a file LT Metrics has changed.')
+      // Until now there was no way to force a fresh token once the file
+      // carried one: forgetting the memory left the cell, and clearing the
+      // cell let the memory refill it. This does both.
+      + '<br><a href="#" id="btnFreshTokens">Capture fresh tokens instead</a>'
+      + ' — forgets these and empties the cells, so the next fetch starts clean.'
+      + '</div>'
+      + enrolDownload()
+      + '</div>';
+  }
+  return '<div class="rec" id="enrolBox" style="border-left-color:#e6a700">'
+    + '<b>&#128179; ' + need.length + ' account'
+    + (need.length === 1 ? '' : 's') + ' still need a card token</b>'
+    + '<div class="d" style="margin-top:6px">'
+    + 'LT Metrics can fetch them: it signs in as each one, checks out with the sandbox '
+    + 'test card, and writes the token straight into this file. A browser opens so '
+    + 'you can watch. One real order is placed per account.'
+    + (have.length ? ' Accounts that already have a token are skipped.' : '')
+    + '</div>'
+    + '<div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-top:12px">'
+    + '<button id="btnEnrol" class="btn">&#9654; Fetch card tokens</button>'
+    // An unlabelled box pre-filled with text reads as a caption, not a field.
+    // This one is typed into the checkout's required Company field, so say so.
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:12px;'
+    +   'padding-bottom:6px">'
+    +   '<input id="enrolHeaded" type="checkbox" checked> Show the browser</label>'
+    + '</div>'
+
+    + '<pre id="enrolLog" style="display:none;margin-top:10px;max-height:220px;'
+    +   'overflow:auto;font-size:12px;background:#0b1220;padding:10px;'
+    +   'border-radius:6px;white-space:pre-wrap"></pre>'
+    + '</div>';
+}
+
+function enrolDownload(){
+  // Only after a fetch in this session -- the job record holds the path, and
+  // without one there is no updated file to hand back.
+  if(!ENROL_JOB) return '';
+  return '<div style="margin-top:10px">'
+    + '<b>Your data file on disk does not have these tokens.</b> '
+    + 'LT Metrics wrote them into its own copy. Save the updated file over yours so '
+    + 'the next upload carries them: '
+    + '<a id="enrolDl" class="btn" style="padding:5px 12px;font-size:12px;'
+    +   'text-decoration:none;display:inline-block;margin-left:6px;'
+    +   'background:#e11627;color:#fff;font-weight:700;border-radius:8px" '
+    +   'href="/api/enrol-cards/csv?job=' + encodeURIComponent(ENROL_JOB) + '">'
+    +   '&#8595; Download updated CSV</a>'
+    + '</div>';
+}
+
+function renderThroughputCost(){
+  // What each step costs per iteration, and the total. Without this the
+  // request count sits frozen beside a moving slider and reads as a bug --
+  // the multiplication was left for the operator to do in their head.
+  const ag = (window._agCounts || []);
+  if(!ag.length) return;
+  let total = 0, checkout = null;
+  ag.forEach((g,i)=>{
+    const pct = +(apiThroughput[g.name] || 0);
+    const each = g.count * pct / 100;
+    total += each;
+    if(/checkout|order|payment/i.test(g.name)) checkout = pct;
+    const el = document.querySelector('#anThroughput .thrEach[data-i="'+i+'"]');
+    if(el) el.textContent = '→ ' + each.toFixed(1);
+  });
+  const foot = $('#thrTotal');
+  if(!foot) return;
+  let note = '';
+  if(checkout === 0)
+    note = ' Checkout never runs, so no orders are placed.';
+  else if(checkout !== null && checkout < 50)
+    note = ' Checkout runs about 1 iteration in ' + Math.round(100/checkout)
+         + ', so a user needs roughly that many iterations before it places an order.';
+  foot.innerHTML = '<b>' + total.toFixed(1) + ' requests</b> per full pass of the '
+                 + 'recorded journey. The generated test replays the calls ticked '
+                 + 'above plus the REST calls it correlates itself, so the run '
+                 + 'usually sends fewer than this.'
+                 + _escHtml(note);
+}
+
+function wireFresh(){
+  const a = $('#btnFreshTokens'); if(!a) return;
+  a.onclick = async (e) => {
+    e.preventDefault();
+    const have = (ACCOUNTS && ACCOUNTS.with_token) || [];
+    if(!have.length) return;
+    a.textContent = 'Clearing…';
+    try{
+      const r = await api('/api/enrol-cards/forget', {
+        base_url: ($('#url') && $('#url').value || '').trim() || null,
+        usernames: have,
+        data_csv: uploads.data_csv || null,
+      });
+      // Re-validating redraws the panel, which will now show the Fetch button
+      // because those accounts no longer have a token anywhere.
+      await validateData();
+      const box = $('#enrolBox');
+      if(box) box.insertAdjacentHTML('beforeend',
+        '<div class="muted" style="margin-top:8px;color:#e6a700">Cleared '
+        + (r.cleared || 0) + ' token cell(s) and forgot ' + (r.forgotten || 0)
+        + ' saved token(s). Click Fetch card tokens to capture fresh ones.</div>');
+    }catch(err){
+      a.textContent = String(err.message || err);
+    }
+  };
+}
+
+function wireEnrol(){
+  wireFresh();
+  const btn = $('#btnEnrol'); if(!btn) return;
+  btn.onclick = async () => {
+    const base = ($('#url') && $('#url').value || '').trim();
+    if(!base){ alert('Set the target URL first — enrolment needs to know the store.'); return; }
+    const log = $('#enrolLog');
+    log.style.display = 'block';
+    log.textContent = 'starting…\n';
+    btn.disabled = true;
+    btn.textContent = 'Fetching…';
+    try{
+      const r = await api('/api/enrol-cards', {
+        data_csv: uploads.data_csv,
+        base_url: base,
+        // Company comes from the data file's own column now, so there is no
+        // field to read. The server default only covers a file without one.
+        company: 'LT Metrics Load Test',
+        headed: !!($('#enrolHeaded') && $('#enrolHeaded').checked)
+      });
+      if(r.error){ log.textContent = r.error; btn.disabled = false;
+                   btn.textContent = '\u25B6 Fetch card tokens'; return; }
+      log.textContent = '';
+      let since = 0;
+      // Poll rather than stream: this runs for minutes and a dropped
+      // EventSource mid-run would lose the only record of what happened.
+      const tick = async () => {
+        const st = await fetch('/api/enrol-cards/status?job=' + r.job + '&since=' + since)
+                           .then(x => x.json());
+        (st.lines || []).forEach(l => { log.textContent += l + '\n'; });
+        log.scrollTop = log.scrollHeight;
+        since = st.next != null ? st.next : since;
+        if(!st.done){ setTimeout(tick, 1500); return; }
+        btn.disabled = false;
+        btn.textContent = '\u25B6 Fetch card tokens';
+        log.textContent += '\n— done —\n';
+        // The file on disk is now out of date. Remember the job so the panel
+        // renders the offer of the updated one every time it draws, including
+        // the re-render that validateData() is about to do.
+        ENROL_JOB = r.job;
+        // The script edited the CSV in place, so re-validating the file we
+        // already have is enough; nothing needs re-uploading.
+        await validateData();
+      };
+      tick();
+    }catch(e){
+      log.textContent = String(e.message || e);
+      btn.disabled = false;
+      btn.textContent = '\u25B6 Fetch card tokens';
+    }
+  };
+}
+
+let dataValid = true;   // gates test generation when a data CSV fails validation
+
+(function wireUsers(){
+  const u = $('#ovUsers');
+  if(u && !u.dataset.wired){
+    u.dataset.wired = '1';
+    u.addEventListener('input', ()=>{
+      if(u.value !== u.dataset.suggested) u.dataset.userSet = '1';
+      renderReadiness();
+    });
+  }
+})();
+function syncRunGate(){
+  const btn=$('#btnRun'); if(!btn) return;
+  const blocked = !!(uploads.data_csv && !dataValid);
+  btn.disabled = blocked;
+  btn.style.opacity = blocked ? '0.5' : '';
+  btn.title = blocked ? 'Fix the data CSV validation issues before generating the test' : '';
+  const g=$('#runGate');
+  if(g) g.innerHTML = blocked
+    ? '⛔ <b style="color:#e11627">Data CSV has blocking issues</b> — fix them above (or re-download the sample) before generating the test.'
+    : '';
+}
+
+async function validateData(){
+  if(!uploads.data_csv){ dataValid = true; syncRunGate(); return; }
+  const out=$('#validateOut'); if(out) out.innerHTML='<p class="muted">Validating…</p>';
+  dataValid = false; syncRunGate();          // block until it validates clean
+  try{
+    const r=await api('/api/validate-data',{data_csv:uploads.data_csv, recording:uploads.recording||null});
+    dataValid = !!r.ok;
+    ACCOUNTS = r.accounts || null;
+    // Suggest the safe user count: distinct logins, because two users on one
+    // account share a basket. Only when the field is untouched -- an explicit
+    // choice is never overwritten, it is warned about in the readiness panel.
+    const uEl = $('#ovUsers');
+    if(ACCOUNTS && uEl && !uEl.value && !uEl.dataset.userSet && ACCOUNTS.unique_logins){
+      uEl.value = ACCOUNTS.unique_logins;
+      uEl.dataset.suggested = String(ACCOUNTS.unique_logins);
+    }
+    out.innerHTML=`<div class="rec" style="border-left-color:${r.ok?'#2ecc71':'#e11627'}">`
+      +`<b>Validation:</b> <span class="badge ${r.ok?'b-ok':'b-bad'}">${r.ok?'PASS':'BLOCKED'}</span>`
+      +`<div class="d">${(r.messages||[]).join('<br>')}</div></div>`
+      + enrolPanel();
+    wireEnrol();
+    applyMethodFromData();     // the file decides the method, before the template
+    applyPayTemplate();
+    renderReadiness();
+  }catch(e){ dataValid=false; if(out) out.innerHTML='<p class="muted">'+e.message+'</p>'; }
+  syncRunGate();
+}
+
+// (Browser crawl / manual-record removed — LT Metrics is now recording-first.)
+
+// preview plan — recomputes live from the current inputs (test type, users, overrides)
+async function refreshPlan(alertOnErr){
+  try{
+    const body={test_type:$('#testType').value,
+      expected_users:+$('#expectedUsers').value||0, peak_users:+$('#peakUsers').value||0};
+    if($('#ovUsers').value) body.users=+$('#ovUsers').value;
+    if($('#ovOrders') && $('#ovOrders').value !== '') body.orders_per_user=+$('#ovOrders').value;
+    if($('#ovDuration').value) body.duration_s=+$('#ovDuration').value;
+    if($('#ovSpawn').value) body.spawn_rate=+$('#ovSpawn').value;
+    if(uploads.testplan) body.testplan=uploads.testplan;   // Phase 2: drive SLA/think/load from the test plan
+    if($('#ovThinkMin') && $('#ovThinkMin').value) body.think_min=+$('#ovThinkMin').value;
+    if($('#ovThinkMax') && $('#ovThinkMax').value) body.think_max=+$('#ovThinkMax').value;
+    if($('#ovSlaP95') && $('#ovSlaP95').value) body.sla_p95_ms=+$('#ovSlaP95').value;
+    if($('#ovSlaErr') && $('#ovSlaErr').value) body.sla_error_pct=+$('#ovSlaErr').value;
+    const p = await api('/api/plan', body);
+    $('#planPreview').classList.remove('hidden');
+    $('#planPreview').innerHTML =
+      `<div class="grid-k">
+        <div class="k"><div class="l">Users</div><div class="v">${p.users}</div></div>
+        <div class="k"><div class="l">Ramp-up</div><div class="v">${p.ramp_up_human||('~'+(p.ramp_window_s||0)+'s')}</div></div>
+        <div class="k"><div class="l">Spawn /s</div><div class="v">${p.spawn_rate}</div></div>
+        <div class="k"><div class="l">Duration</div><div class="v">${p.duration_human}</div></div>
+        <div class="k"><div class="l">Run time</div><div class="v">${p.run_time_human||p.duration_human}</div></div>
+        <div class="k"><div class="l">Think time</div><div class="v">${p.think_time[0]}-${p.think_time[1]}s</div></div>
+        <div class="k"><div class="l">Pacing</div><div class="v">${p.pacing_s!=null?('~'+p.pacing_s+'s'):'—'}</div></div>
+        <div class="k"><div class="l">Exp. TPS</div><div class="v">${p.expected_tps}</div></div>
+        <div class="k"><div class="l">Arrival /s</div><div class="v">${p.arrival_rate_per_s!=null?p.arrival_rate_per_s:'—'}</div></div>
+        <div class="k"><div class="l">Max err%</div><div class="v">${p.exit_criteria.max_error_rate_pct}</div></div>
+        <div class="k"><div class="l">Max p95</div><div class="v">${p.exit_criteria.max_p95_ms}ms</div></div>
+      </div><p class="muted" style="margin-top:10px">${p.summary}</p>
+      <div class="btns" style="margin-top:8px"><button class="btn ghost" id="btnAiPlan">🤖 AI suggest plan</button></div>
+      <div id="aiPlanOut"></div>`;
+    const ab=$('#btnAiPlan'); if(ab) ab.onclick=aiSuggestPlan;
+  }catch(e){ if(alertOnErr) alert(e.message); }
+}
+$('#btnPreview').onclick = ()=>refreshPlan(true);
+
+async function aiSuggestPlan(){
+  const out=$('#aiPlanOut'); if(out) out.innerHTML='<p class="muted">Asking Claude…</p>';
+  try{
+    const body={test_type:$('#testType').value, url:$('#url').value.trim()||null,
+      expected_users:+$('#expectedUsers').value||100};
+    if($('#peakUsers').value) body.peak_users=+$('#peakUsers').value;
+    const r=await api('/api/plan/ai-suggest', body);
+    if(!r.ai_enabled){ out.innerHTML='<p class="muted">Set ANTHROPIC_API_KEY to enable AI plan tuning.</p>'; return; }
+    let html='';
+    if(r.notes) html+=`<div class="rec" style="border-left-color:#4f8cff;white-space:pre-wrap">🤖 ${r.notes.replace(/</g,'&lt;')}</div>`;
+    const s=r.suggested||{};
+    if(Object.keys(s).length){
+      html+='<p class="muted" style="margin-top:8px">Suggested: '
+        +Object.entries(s).map(([k,v])=>`${k}=${v}`).join(', ')
+        +` <button class="btn ghost" id="btnApplyAi">Apply to overrides</button></p>`;
+    }
+    if(r.plan_sequence && r.plan_sequence.length){
+      html+='<p class="muted" style="margin-top:8px"><b>Recommended suite:</b></p>';
+      html+=r.plan_sequence.map(t=>`<div class="rec">▶ <b>${t.test_type||''}</b> · ${t.users||'?'} users · ${t.duration_s||'?'}s<div class="d">${(t.why||'').replace(/</g,'&lt;')}</div></div>`).join('');
+    }
+    out.innerHTML=html||'<p class="muted">No suggestions returned.</p>';
+    const ap=$('#btnApplyAi'); if(ap) ap.onclick=()=>{
+      if(s.users!=null) $('#ovUsers').value=s.users;
+      if(s.duration_s!=null) $('#ovDuration').value=s.duration_s;
+      if(s.spawn_rate!=null) $('#ovSpawn').value=s.spawn_rate;
+      refreshPlan(false);
+    };
+  }catch(e){ if(out) out.innerHTML='<p class="muted">'+e.message+'</p>'; }
+}
+// live-update the preview whenever any relevant field changes
+['testType','expectedUsers','peakUsers','ovUsers','ovDuration','ovSpawn'].forEach(id=>{
+  const el=$('#'+id); if(!el) return;
+  el.addEventListener('input', ()=>refreshPlan(false));
+  el.addEventListener('change', ()=>refreshPlan(false));
+});
+
+// run
+$('#btnRun').onclick = async ()=>{
+  if(uploads.data_csv && !dataValid){
+    alert('The uploaded data CSV has blocking validation issues. Fix them (or re-download the sample) before generating the test.');
+    return;
+  }
+  if(loadedSaved){ return runSavedConfigured(); }
+  const url=$('#url').value.trim(), name=$('#projectName').value.trim();
+  if(!url||!name){ alert('Project name and URL are required'); return; }
+  const btn=$('#btnRun'); btn.disabled=true; btn.innerHTML='<span class="spin"></span>Generating…';
+  try{
+    const body={project_name:name, url, client:$('#client').value||'',
+      test_type:$('#testType').value, expected_users:+$('#expectedUsers').value,
+      peak_users:+$('#peakUsers').value};
+    if($('#ovUsers').value) body.users=+$('#ovUsers').value;
+    if($('#ovDuration').value) body.duration_s=+$('#ovDuration').value;
+    if($('#ovSpawn').value) body.spawn_rate=+$('#ovSpawn').value;
+    // Sent here as well as to the plan preview. It was only ever sent to the
+    // preview, so the generated script always got 0 and the cap never fired --
+    // "1 order per user" produced 8 orders and looked like a broken feature.
+    if($('#ovOrders') && $('#ovOrders').value !== '') body.orders_per_user=+$('#ovOrders').value;
+    if(uploads.testplan) body.testplan=uploads.testplan;   // Phase 2: drive SLA/think/load from the test plan
+    if($('#ovThinkMin') && $('#ovThinkMin').value) body.think_min=+$('#ovThinkMin').value;
+    if($('#ovThinkMax') && $('#ovThinkMax').value) body.think_max=+$('#ovThinkMax').value;
+    if($('#ovSlaP95') && $('#ovSlaP95').value) body.sla_p95_ms=+$('#ovSlaP95').value;
+    if($('#ovSlaErr') && $('#ovSlaErr').value) body.sla_error_pct=+$('#ovSlaErr').value;
+    if($('#ovWorkers').value) body.workers=+$('#ovWorkers').value;
+    if($('#ovCartQty') && $('#ovCartQty').value) body.cart_qty=+$('#ovCartQty').value;
+    if($('#ovCaptchaToken') && $('#ovCaptchaToken').value) body.captcha_token=$('#ovCaptchaToken').value;
+    if($('#ovCaptchaField') && $('#ovCaptchaField').value) body.captcha_field=$('#ovCaptchaField').value;
+    if($('#ovPayMethod') && $('#ovPayMethod').value) body.payment_method=$('#ovPayMethod').value;
+    if($('#ovPayAddl') && $('#ovPayAddl').value) body.payment_additional_data=$('#ovPayAddl').value;
+    if($('#ovFaithful') && $('#ovFaithful').checked) body.faithful=true;
+    if($('#ovDataSharing') && $('#ovDataSharing').value) body.data_sharing=$('#ovDataSharing').value;
+    if($('#ovAiRepair') && $('#ovAiRepair').checked) body.ai_repair=true;
+    if(apiThroughput && Object.keys(apiThroughput).length) body.group_throughput=apiThroughput;
+    if($('#includeStatic') && $('#includeStatic').checked) body.include_static=true;
+    // user-curated call selection (only when a recording was analyzed in this session)
+    if(currentAnalysis && Array.isArray(currentAnalysis.calls) && currentAnalysis.calls.length){
+      const sel = selectedCallSigs();
+      if(!sel.length){
+        alert('Select at least one call to include in the generated script (or click "Only REST + API").');
+        btn.disabled=false; btn.innerHTML='▶ Generate &amp; Run Test'; return;
+      }
+      // only send when the user actually narrowed the set (keeps default runs unchanged)
+      if(sel.length < currentAnalysis.calls.length) body.selected_calls = sel;
+    }
+    // real-browser (Playwright) track — only when Browser VUs > 0 (default off)
+    const bvus = +($('#ovBrowserVus') && $('#ovBrowserVus').value || 0);
+    if(bvus > 0){
+      body.browser_vus = bvus;
+      // scenario + optional selectors always apply; gateway omitted = auto-detect
+      const bp = { scenario: ($('#ovBrowserScenario') && $('#ovBrowserScenario').value) || 'success' };
+      const gw = $('#ovBrowserGateway') && $('#ovBrowserGateway').value;
+      if(gw) bp.gateway = gw;
+      if($('#ovBrowserSubmit') && $('#ovBrowserSubmit').value.trim()) bp.submit_selector = $('#ovBrowserSubmit').value.trim();
+      if($('#ovBrowserSuccess') && $('#ovBrowserSuccess').value.trim()) bp.success_url_contains = $('#ovBrowserSuccess').value.trim();
+      body.browser_payment = bp;
+    }
+    if(uploads.users_csv) body.users_csv=uploads.users_csv;
+    if(uploads.data_csv) body.data_csv=uploads.data_csv;
+    if(uploads.recording) body.recording=uploads.recording;
+    const res = await api('/api/run', body);
+    currentRun = res.run_id;
+    showReview(res);
+    $('#liveCard').classList.remove('hidden');
+    $('#resultCard').classList.add('hidden');
+    $('#healCard').classList.add('hidden'); $('#healBody').innerHTML='';
+    $('#timelineCard').classList.add('hidden'); $('#timelineBody').innerHTML='';
+    startPolling();
+    $('#liveCard').scrollIntoView({behavior:'smooth'});
+  }catch(e){ alert('Run failed: '+e.message); }
+  btn.disabled=false; btn.innerHTML='▶ Generate &amp; Run Test';
+};
+
+function showReview(res){
+  $('#reviewCard').classList.remove('hidden');
+  const v=res.review;
+  const badge=$('#reviewVerdict');
+  badge.textContent=v.verdict; badge.className='badge '+(v.failures?'b-bad':'b-ok');
+  $('#reviewScore').textContent=v.score+' · '+res.plan.summary;
+  $('#reviewFindings').innerHTML = v.findings.map(f=>{
+    const ico = f.status==='pass'?'✅':f.status==='fail'?'❌':f.status==='info'?'ℹ️':'⚠️';
+    return `<div class="rec">${ico} <b>${f.check}</b><div class="d">${f.detail}</div></div>`;
+  }).join('');
+  if(v.ai_review){
+    $('#reviewFindings').innerHTML +=
+      `<div class="rec" style="border-left-color:#4f8cff;margin-top:10px;white-space:pre-wrap">`
+      +`🤖 <b>Senior engineer AI review (Claude)</b><div class="d">`+v.ai_review.replace(/</g,'&lt;')+`</div></div>`;
+  }
+  $('#scriptPreview').textContent=res.script_preview;
+}
+
+let liveChart=null;
+function initLiveChart(){
+  const el=document.getElementById('liveChart'); if(!el||!window.Chart) return;
+  if(liveChart){ liveChart.destroy(); }
+  const grid='#26262b', mut='#9a9aa4';
+  liveChart=new Chart(el,{type:'line',
+    data:{labels:[],datasets:[
+      {label:'req/s',data:[],borderColor:'#e11627',yAxisID:'y',tension:.3,pointRadius:0},
+      {label:'p95 (ms)',data:[],borderColor:'#e6a23c',yAxisID:'y1',tension:.3,pointRadius:0},
+      {label:'Users',data:[],borderColor:'#2ecc71',yAxisID:'y1',tension:.3,pointRadius:0},
+    ]},
+    options:{responsive:true,animation:false,interaction:{intersect:false},
+      plugins:{legend:{labels:{color:mut}}},
+      scales:{
+        x:{ticks:{color:mut,maxTicksLimit:8},grid:{color:grid}},
+        y:{position:'left',title:{display:true,text:'req/s',color:mut},ticks:{color:mut},grid:{color:grid}},
+        y1:{position:'right',ticks:{color:mut},grid:{display:false}},
+      }}});
+}
+function pushLive(s){
+  if(!liveChart) return;
+  const d=liveChart.data;
+  d.labels.push((s.elapsed_s||0)+'s');
+  d.datasets[0].data.push(+(s.rps||0).toFixed(1));
+  d.datasets[1].data.push(Math.round(s.p95||0));
+  d.datasets[2].data.push(Math.round(s.users||0));
+  if(d.labels.length>120){ d.labels.shift(); d.datasets.forEach(x=>x.data.shift()); }
+  liveChart.update();
+}
+$('#btnStop').onclick = async ()=>{
+  if(!currentRun) return;
+  const b=$('#btnStop'); b.disabled=true; b.textContent='Stopping…';
+  try{ await api('/api/run/'+currentRun+'/stop',{}); }catch(e){}
+};
+function startPolling(){
+  if(poll) clearInterval(poll);
+  initLiveChart();
+  callsCursor=0; callsAll=[];
+  if($('#liveCalls')) $('#liveCalls').innerHTML='<div class="muted" style="padding:8px">waiting for first request…</div>';
+  if($('#callsCount')) $('#callsCount').textContent='0';
+  const eo=$('#callsErrOnly'); if(eo) eo.onchange=renderCalls;
+
+  const b=$('#btnStop'); b.disabled=false; b.textContent='⏹ Stop run'; b.style.display='';
+  poll=setInterval(pollRun, 2000); pollRun();
+}
+async function pollCalls(){
+  if(!currentRun) return;
+  let r; try{ r=await api('/api/run/'+currentRun+'/calls?since='+callsCursor+'&limit=800'); }catch(e){ return; }
+  if(!r) return;
+  if(typeof r.next==='number') callsCursor=r.next;
+  if(r.calls && r.calls.length){
+    for(const c of r.calls) callsAll.push(c);
+    if(callsAll.length>3000) callsAll=callsAll.slice(-3000);
+    renderCalls();
+  }
+}
+function renderCalls(){
+  const box=$('#liveCalls'); if(!box) return;
+  const errOnly = $('#callsErrOnly') && $('#callsErrOnly').checked;
+  const matched = callsAll.filter(c=>!errOnly || !c.ok);
+  const rows = matched.slice(-600);   // cap DOM rows; buffer keeps more
+  const near = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+  box.innerHTML = rows.length ? rows.map(c=>{
+    const color = c.ok ? '#2ecc71' : '#e11627';
+    const grp = c.group ? `<span class="muted">[${_escHtml(c.group)}]</span> ` : '';
+    const st = c.status || (c.ok ? 'OK' : 'ERR');
+    return `<div class="callRow" data-seq="${c.seq}" style="padding:4px 8px;border-bottom:1px solid var(--line);cursor:pointer">
+        <b style="color:${color}">${c.ok?'✓':'✗'} ${st}</b> ${grp}${_escHtml(c.method||'')} ${_escHtml(c.name||c.url||'')}
+        <span class="muted" style="float:right">${Math.round(c.ms||0)}ms</span>
+        <div class="callDetail" style="display:none;white-space:pre-wrap;margin-top:6px;color:var(--muted)"></div>
+      </div>`;
+  }).join('') : '<div class="muted" style="padding:8px">no calls yet</div>';
+  if($('#callsCount')) $('#callsCount').textContent = callsAll.length + (errOnly ? (' ('+matched.length+' errors)') : '') + (matched.length>rows.length ? ' · showing last '+rows.length : '');
+  box.querySelectorAll('.callRow').forEach(row=>{
+    row.onclick=()=>{
+      const d=row.querySelector('.callDetail');
+      if(!d) return;
+      if(d.style.display==='none'){
+        const seq=+row.getAttribute('data-seq');
+        const c=callsAll.find(x=>x.seq===seq); if(!c) return;
+        d.innerHTML = `<b>URL:</b> ${_escHtml(c.url||'')}\n`
+          + (c.error ? `<b>Error:</b> ${_escHtml(c.error)}\n` : '')
+          + `<b>Request:</b>\n${_escHtml(c.req||'(none)')}\n`
+          + `<b>Response:</b>\n${_escHtml(c.resp||'(none)')}`;
+        d.style.display='block';
+      } else { d.style.display='none'; }
+    };
+  });
+  if(near) box.scrollTop = box.scrollHeight;
+}
+async function pollRun(){
+  if(!currentRun) return;
+  let s; try{ s=await api('/api/run/'+currentRun); }catch(e){ return; }
+  const st=s.status||'';
+  $('#liveStatus').textContent=st;
+  $('#liveStatus').className='badge '+(st==='completed'?'b-ok':(st==='error'||st==='stopped'||st==='failed')?'b-bad':'b-run');
+  $('#btnStop').style.display=['starting','running','analyzing'].includes(st)?'':'none';
+  $('#livePhase').textContent=(s.phase||'')+(s.error?(' — '+s.error):'');
+  renderBrowserTrack(s.browser_track);
+  $('#liveBar').style.width=((st==='completed')?100:(s.pct||0))+'%';
+  const kpis=[
+    ['Elapsed', (s.elapsed_s||0)+'s'],['Users', Math.round(s.users||0)],
+    ['Requests', Math.round(s.total_requests||0)],['Failures', Math.round(s.total_failures||0)],
+    ['req/s', (s.rps||0).toFixed(1)],['p95', Math.round(s.p95||0)+'ms'],
+  ];
+  if(s.orders!==undefined||s.login_ok!==undefined){
+    kpis.push(['Orders', Math.round(s.orders||0)]);
+    kpis.push(['Login ✓/✗', (s.login_ok||0)+' / '+(s.login_fail||0)]);
+  }
+  $('#liveKpis').innerHTML=kpis
+    .map(([l,v])=>`<div class="k"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+  pushLive(s);
+  if(s.log_tail && s.log_tail.length) $('#liveLog').textContent=s.log_tail.join('\n');
+  // AI Auto-heal lives in its OWN section, separate from the run.
+  const healing = (st==='healing');
+  if(s.ai_heal_note || healing){
+    $('#healCard').classList.remove('hidden');
+    const b=$('#healBadge'); b.textContent = healing?'working…':'applied';
+    b.className='badge '+(healing?'b-run':'b-ok');
+    $('#healBody').innerHTML = s.ai_heal_note
+      ? `<div class="rec" style="border-left-color:#4f8cff;white-space:pre-wrap">🤖 `
+        + s.ai_heal_note.replace(/</g,'&lt;') + `</div>`
+      : `<p class="muted"><span class="spin"></span> Claude is analyzing the failures and regenerating the script…</p>`;
+  }
+  renderTimeline(s);      // live checkout timeline + state + build + mode
+  pollCalls();            // live per-request feed (JMeter View-Results-Tree style)
+  // 'failed' is TERMINAL too — a run whose card payment didn't clear still ran,
+  // still has metrics and a report, and is exactly the run you want to read.
+  // Omitting it here left the results card hidden (no report buttons) and the
+  // poller running forever.
+  if(st==='completed'||st==='stopped'||st==='failed'){ clearInterval(poll); pushLive(s); showResults(s.analysis, s); setTimeout(pollCalls, 800); }
+  if(st==='error'){ clearInterval(poll); setTimeout(pollCalls, 800); }
+}
+
+// Real-browser (Playwright) track status — shown only when a run enabled it,
+// so a normal HTTP run is unaffected. Color-codes running / done / skipped / error.
+function renderBrowserTrack(bt){
+  const el=$('#liveBrowserTrack'); if(!el) return;
+  if(!bt){ el.style.display='none'; return; }
+  const t=String(bt).toLowerCase();
+  let color='#5b93ff', bg='#0f2e4d', ico='🧭';          // running / default
+  if(t.startsWith('skipped')){ color='#e6a700'; bg='#3a2d12'; ico='⏭️'; }
+  else if(t.startsWith('error')){ color='#ff6b9a'; bg='#3a1220'; ico='⚠️'; }
+  else if(t.startsWith('done')){ color='#3ddc97'; bg='#123a2a'; ico='✅'; }
+  let extra='';
+  if(t.indexOf('not installed')>=0)
+    extra=' — install it with <code>setup-browser-track.bat</code> (or <code>pip install playwright &amp;&amp; playwright install chromium</code>), then re-run.';
+  el.style.display='';
+  el.style.background=bg; el.style.borderColor=color;
+  el.innerHTML=`<b style="color:${color}">${ico} Browser track (Playwright):</b> ${_escHtml(bt)}${extra}`;
+}
+
+// ---- saved scripts ----
+async function saveScript(fromRun){
+  const name = prompt('Name this saved script:');
+  if(!name) return;
+  const body = {name};
+  if(fromRun && currentRun){
+    body.run_id = currentRun;
+  } else {
+    const url=$('#url').value.trim();
+    if(!url){ alert('Run Discover first (a target URL is needed to save the script).'); return; }
+    body.project_name=$('#projectName').value||'Saved';
+    body.url=url;
+    body.test_type=$('#testType').value;
+    body.expected_users=+$('#expectedUsers').value||100;
+    if($('#peakUsers').value) body.peak_users=+$('#peakUsers').value;
+    if($('#ovUsers').value) body.users=+$('#ovUsers').value;
+    if($('#ovDuration').value) body.duration_s=+$('#ovDuration').value;
+    if($('#ovSpawn').value) body.spawn_rate=+$('#ovSpawn').value;
+    if(uploads.testplan) body.testplan=uploads.testplan;   // Phase 2: drive SLA/think/load from the test plan
+    if($('#ovThinkMin') && $('#ovThinkMin').value) body.think_min=+$('#ovThinkMin').value;
+    if($('#ovThinkMax') && $('#ovThinkMax').value) body.think_max=+$('#ovThinkMax').value;
+    if($('#ovSlaP95') && $('#ovSlaP95').value) body.sla_p95_ms=+$('#ovSlaP95').value;
+    if($('#ovSlaErr') && $('#ovSlaErr').value) body.sla_error_pct=+$('#ovSlaErr').value;
+    if($('#ovWorkers').value) body.workers=+$('#ovWorkers').value;
+    if(uploads.users_csv) body.users_csv=uploads.users_csv;
+    if(uploads.data_csv) body.data_csv=uploads.data_csv;
+    if(uploads.recording) body.recording=uploads.recording;
+  }
+  try{ await api('/api/save-script', body);
+    alert('Saved "'+name+'". Find it under the Saved Scripts tab.'); }
+  catch(e){ alert('Save failed: '+e.message); }
+}
+let savedScripts = [];
+let loadedSaved = null;
+async function loadSaved(){
+  try{
+    savedScripts = await api('/api/saved-scripts');
+    $('#savedRows').innerHTML = savedScripts.length? savedScripts.map(r=>`
+      <tr><td>${r.name}</td><td>${r.base_url||''}</td><td>${r.test_type||''}</td>
+      <td>${(r.created_at||'').replace('T',' ').slice(0,16)}</td>
+      <td style="white-space:nowrap"><button class="btn ghost" onclick="useSaved('${encodeURIComponent(r.name)}')">⚙ Configure &amp; Run</button>
+        <button class="btn ghost" style="margin-left:6px" onclick="exportSavedCI('${encodeURIComponent(r.name)}')">⤓ Export to CI/CD</button>
+        <a class="link" style="cursor:pointer;margin-left:8px" onclick="renameSaved('${encodeURIComponent(r.name)}')">rename</a>
+        · <a class="link" style="cursor:pointer" onclick="deleteSaved('${encodeURIComponent(r.name)}')">delete</a>
+      </td></tr>`).join('')
+      : '<tr><td colspan="5" class="muted">No saved scripts yet. Save one from New Test.</td></tr>';
+  }catch(e){ $('#savedRows').innerHTML='<tr><td colspan="5" class="muted">'+e.message+'</td></tr>'; }
+}
+// Load a saved script into the main page so the user configures the test type + runs it.
+async function useSaved(nameEnc){
+  const name=decodeURIComponent(nameEnc);
+  const m = savedScripts.find(x=>x.name===name) || {name};
+  loadedSaved = name;
+  $('#projectName').value = m.name || 'Saved';
+  if(m.base_url) $('#url').value = m.base_url;
+  if(m.test_type){ $('#testType').value = m.test_type; }
+  if(m.expected_users){ $('#expectedUsers').value = m.expected_users; }
+  $('#savedName').textContent = name;
+  $('#savedBanner').classList.remove('hidden');
+  document.querySelector('nav button[data-tab="new"]').click();
+  // the recording + its data are baked into the saved script — disable those
+  // inputs and show the user only what still needs to be set per run.
+  let info=null; try{ info=await api('/api/saved-script-info',{name}); }catch(e){}
+  _setSavedLock(true, info);
+  refreshPlan(false);
+  $('#testType').scrollIntoView({behavior:'smooth', block:'center'});
+}
+function clearSaved(){
+  loadedSaved = null;
+  $('#savedBanner').classList.add('hidden');
+  _setSavedLock(false);
+}
+function _setSavedLock(on, info){
+  ['upRec','btnDiscover','upData','upUsers','btnCrawlRecord'].forEach(id=>{
+    const el=$('#'+id); if(el){ el.disabled=!!on; el.style.opacity=on?0.45:1; }
+  });
+  let note=$('#savedLockNote');
+  if(on){
+    const rec=$('#upRec');
+    if(!note && rec){ note=document.createElement('div'); note.id='savedLockNote';
+      note.className='rec'; note.style.borderLeftColor='var(--accent)';
+      rec.parentElement.insertBefore(note, rec); }
+    const cols=(info&&info.data_columns&&info.data_columns.length)
+      ? info.data_columns.join(', ') : '(none saved)';
+    if(note) note.innerHTML='🔒 <b>Reusing a saved script.</b> Its recording and data are '
+      +'already included, so the upload fields are disabled.<div class="d">Included data columns: '
+      +'<b>'+cols+'</b>. Just choose the test type / users / overrides below and run. '
+      +'Load a new recording (or click ✕ on the banner) to start fresh.</div>';
+  } else if(note){ note.remove(); }
+}
+async function runSavedConfigured(){
+  const btn=$('#btnRun'); btn.disabled=true; btn.innerHTML='<span class="spin"></span>Starting…';
+  try{
+    const body={name:loadedSaved, test_type:$('#testType').value,
+      expected_users:+$('#expectedUsers').value||100};
+    if($('#peakUsers').value) body.peak_users=+$('#peakUsers').value;
+    if($('#ovUsers').value) body.users=+$('#ovUsers').value;
+    if($('#ovDuration').value) body.duration_s=+$('#ovDuration').value;
+    if($('#ovSpawn').value) body.spawn_rate=+$('#ovSpawn').value;
+    if(uploads.testplan) body.testplan=uploads.testplan;   // Phase 2: drive SLA/think/load from the test plan
+    if($('#ovThinkMin') && $('#ovThinkMin').value) body.think_min=+$('#ovThinkMin').value;
+    if($('#ovThinkMax') && $('#ovThinkMax').value) body.think_max=+$('#ovThinkMax').value;
+    if($('#ovSlaP95') && $('#ovSlaP95').value) body.sla_p95_ms=+$('#ovSlaP95').value;
+    if($('#ovSlaErr') && $('#ovSlaErr').value) body.sla_error_pct=+$('#ovSlaErr').value;
+    if($('#ovWorkers').value) body.workers=+$('#ovWorkers').value;
+    if($('#ovCartQty') && $('#ovCartQty').value) body.cart_qty=+$('#ovCartQty').value;
+    if($('#ovCaptchaToken') && $('#ovCaptchaToken').value) body.captcha_token=$('#ovCaptchaToken').value;
+    if($('#ovCaptchaField') && $('#ovCaptchaField').value) body.captcha_field=$('#ovCaptchaField').value;
+    if($('#ovPayMethod') && $('#ovPayMethod').value) body.payment_method=$('#ovPayMethod').value;
+    if($('#ovPayAddl') && $('#ovPayAddl').value) body.payment_additional_data=$('#ovPayAddl').value;
+    if($('#ovFaithful') && $('#ovFaithful').checked) body.faithful=true;
+    if($('#ovDataSharing') && $('#ovDataSharing').value) body.data_sharing=$('#ovDataSharing').value;
+    const res=await api('/api/run-saved', body);
+    currentRun=res.run_id;
+    if(res.review){ showReview(res); }   // show Script review for saved runs too
+    else { $('#reviewCard').classList.add('hidden'); }
+    $('#resultCard').classList.add('hidden');
+    $('#healCard').classList.add('hidden'); $('#healBody').innerHTML='';
+    $('#timelineCard').classList.add('hidden'); $('#timelineBody').innerHTML='';
+    $('#liveCard').classList.remove('hidden');
+    startPolling();
+    $('#liveCard').scrollIntoView({behavior:'smooth'});
+  }catch(e){ alert('Run failed: '+e.message); }
+  btn.disabled=false; btn.innerHTML='▶ Generate &amp; Run Test';
+}
+
+function renderTimeline(src){
+  src = src || {};
+  const tl = src.timeline || [];
+  const mode = src.mode, build = src.build, cs = src.checkout_state || {};
+  const hasTl = tl.length;
+  if(!hasTl && !mode) return;
+  $('#timelineCard').classList.remove('hidden');
+  const am = src.applied_memory || {};
+  const amKeys = Object.keys(am).filter(k => k !== 'platform');
+  if($('#timelineMode')) $('#timelineMode').textContent =
+    (mode?('· mode: '+mode):'') + (build?('  · built: '+build):'')
+    + (amKeys.length?('  · memory: '+amKeys.join(', ')):'');
+  const b=$('#timelineBadge');
+  const esc = s => String(s).replace(/</g,'&lt;');
+  // Checkout State Report
+  let stateHtml='';
+  if(cs && (cs.state || cs.stopped_at)){
+    const qt = cs.quote_trace || [];
+    const qtHtml = qt.length
+      ? '<br><b>quote trace:</b>' + qt.map(q =>
+          `<br>&nbsp;&nbsp;${esc(q.stage)} → quote <b>${esc(q.quote_id||'—')}</b>`
+          + (q.note?` <span class="muted">(${esc(q.note)})</span>`:'')).join('')
+        + (cs.quote_mismatch?`<br>&nbsp;&nbsp;⚠ <b style="color:#e11627">QUOTE MISMATCH</b> — add-to-cart and the token's active quote differ`:'')
+      : '';
+    stateHtml = `<div class="rec" style="border-left-color:${cs.quote_mismatch?'#e11627':'#4f8cff'}"><b>📋 Checkout State</b><div class="d">`
+      +`reached: <b>${cs.state||'—'}</b> · cart: ${cs.cart_id||'—'} · items in cart: ${cs.item_count!=null?cs.item_count:'—'}`
+      +`<br>shipping methods: ${(cs.shipping_methods||[]).join(', ')||'—'}`
+      +`<br>payment methods: ${(cs.payment_methods||[]).join(', ')||'—'}`
+      +qtHtml
+      +(cs.stopped_at?`<br>🛑 STOPPED at <b>${esc(cs.stopped_at)}</b> (${cs.stop_status||''}): ${esc(cs.stop_reason||'')}`:'')
+      +(cs.order_id?`<br>✅ order id: <b>${esc(cs.order_id)}</b>`:'')
+      +`</div></div>`;
+  }
+  if(!hasTl){
+    if(b){ b.textContent=''; b.className='badge'; }
+    $('#timelineBody').innerHTML = stateHtml + '<p class="muted">No REST checkout validator ran for this mode. '
+      +'The step-by-step validator runs in <b>rest-checkout</b> mode (needs a Magento REST target + '
+      +'customer token). In <b>recorded-replay</b> / <b>faithful-replay</b> the recorded requests drive the flow.</p>';
+    return;
+  }
+  const okc=tl.filter(e=>e.ok && e.step!=='STOP').length;
+  if(b){ b.textContent = okc+'/'+tl.length+' ok'; b.className='badge '+(tl.some(e=>!e.ok)?'b-bad':'b-ok'); }
+  $('#timelineBody').innerHTML = stateHtml + tl.map(e=>{
+    const ico = e.step==='STOP' ? '🛑' : (e.ok?'✅':'❌');
+    const meta = [e.method, (e.status!=null?e.status:''), (e.ms!=null?e.ms+'ms':'')].filter(Boolean).join(' · ');
+    const extra = e.extra?`<div class="d"><b>${esc(e.extra)}</b></div>`:'';
+    const mono = 'font-family:monospace;font-size:11px;white-space:pre-wrap';
+    const req = e.req?`<div class="d" style="${mono};color:#8ba0bd">→ request: ${esc(e.req)}</div>`:'';
+    const body = e.body?`<div class="d" style="${mono};color:var(--mut)">← response: ${esc(e.body)}</div>`:'';
+    return `<div class="rec" style="border-left-color:${e.ok?'#2ecc71':'#e11627'}">`
+      +`${ico} <b>${e.step}</b> <span class="muted">${meta}</span>${extra}${req}${body}</div>`;
+  }).join('');
+}
+
+function showResults(a, s){
+  $('#resultCard').classList.remove('hidden');
+  renderTimeline(s || (a&&a.flow) || {});
+  if(!a){ // fetch detail if analysis absent
+    return;
+  }
+  // Defensive: a partial/empty analysis (e.g. no stats parsed) must never break
+  // the whole Results panel — render what's present, show '—' for the rest.
+  const num=v=>(typeof v==='number'?v:(parseFloat(v)||0));
+  const o=a.overall||{}, sla=a.sla||{}, rca=a.rca||{}, trend=a.trend||{};
+  const recs=Array.isArray(a.recommendations)?a.recommendations:[];
+  const gate=$('#gateBadge');
+  if(gate){ gate.textContent=sla.pass?'PASS ✅':'FAIL ❌';
+            gate.className='badge '+(sla.pass?'b-ok':'b-bad'); }
+  const rk=[
+    ['Requests', num(o.total_requests).toLocaleString()],
+    ['Failures', num(o.total_failures).toLocaleString()],
+    ['Error %', o.error_rate??0],['req/s', o.throughput??0],
+    ['Avg', num(o.avg_response)+'ms'],['p95', num(o.p95)+'ms'],
+    ['p99', num(o.p99)+'ms'],['Max', num(o.max_response)+'ms'],
+  ];
+  const fl=a.flow||{};
+  if(Object.keys(fl).length){
+    rk.push(['Orders created', fl.orders||0]);
+    rk.push(['Login ✓/✗', (fl.login_ok||0)+' / '+(fl.login_fail||0)]);
+  }
+  $('#resKpis').innerHTML=rk
+    .map(([l,v])=>`<div class="k"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+  $('#resRecs').innerHTML = recs.length
+    ? recs.map(r=>
+        `<div class="rec"><span class="badge ${r.priority==='P1'?'b-bad':'b-run'}">${r.priority||'P3'}</span>
+         <b>${r.title||''}</b> · <span class="muted">Impact ${r.impact||'-'} / Effort ${r.effort||'-'}</span>
+         <div class="d">${r.detail||''}</div></div>`).join('')
+    : '<p class="muted">No recommendations — results look healthy.</p>';
+  $('#resRca').innerHTML='<b>Root cause:</b> '+(rca.summary||'—')
+    + (a.llm_rca ? '<div class="d" style="margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--line);padding-top:8px">🤖 <b>AI analysis (Claude):</b> '
+        + a.llm_rca.replace(/</g,'&lt;') + '</div>' : '');
+  $('#resTrend').innerHTML='<b>Trend:</b> '+(trend.note||'—');
+  if(a.jira_markdown){ $('#jiraWrap').classList.remove('hidden');
+    $('#jiraTxt').textContent=a.jira_markdown; }
+  else $('#jiraWrap').classList.add('hidden');
+  $('#btnReport').onclick=()=>window.open('/api/run/'+currentRun+'/report','_blank');
+  $('#btnXlsx').onclick=()=>window.open('/api/run/'+currentRun+'/report.xlsx','_blank');
+  $('#btnReportDl').onclick=async()=>{
+    try{
+      const r=await fetch('/api/run/'+currentRun+'/report');
+      const html=await r.text();
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+      a.download='ltm_report_'+currentRun+'.html'; a.click();
+      URL.revokeObjectURL(a.href);
+    }catch(e){ alert('Download failed: '+e.message); }
+  };
+  $('#resultCard').scrollIntoView({behavior:'smooth'});
+}
+
+async function loadHistory(){
+  try{
+    const rows=await api('/api/history');
+    $('#historyRows').innerHTML = rows.length? rows.map(r=>`
+      <tr><td>${(r.started_at||'').replace('T',' ').slice(0,16)}</td>
+      <td>${r.project_name}${r.label?(' · <i>'+r.label+'</i>'):''}</td><td>${r.test_type}</td>
+      <td class="num">${r.users||''}</td><td class="num">${(r.total_requests||0).toLocaleString()}</td>
+      <td class="num">${r.error_rate??''}</td><td class="num">${Math.round(r.p95||0)}</td>
+      <td><span class="badge ${r.sla_pass?'b-ok':'b-bad'}">${r.sla_pass?'PASS':(r.status==='completed'?'FAIL':r.status)}</span></td>
+      <td style="white-space:nowrap">
+        <a class="link" href="/api/run/${r.id}/report" target="_blank">report</a>
+        · <a class="link" style="cursor:pointer" onclick="renameRun('${r.id}', ${JSON.stringify(r.label||'')})">rename</a>
+        · <a class="link" style="cursor:pointer" onclick="deleteRun('${r.id}')">delete</a>
+      </td></tr>`).join('')
+      : '<tr><td colspan="9" class="muted">No runs yet.</td></tr>';
+  }catch(e){ $('#historyRows').innerHTML='<tr><td colspan="9" class="muted">'+e.message+'</td></tr>'; }
+}
+async function loadProjects(){
+  try{
+    const rows=await api('/api/projects');
+    $('#projectRows').innerHTML = rows.length? rows.map(r=>`
+      <tr><td>${r.name}</td><td>${r.target_url}</td><td class="num">${r.run_count||0}</td>
+      <td>${(r.last_run||'').replace('T',' ').slice(0,16)||'—'}</td>
+      <td style="white-space:nowrap">
+        <a class="link" style="cursor:pointer" onclick="useProject('${encodeURIComponent(r.name)}','${encodeURIComponent(r.target_url)}')">use</a>
+        · <a class="link" style="cursor:pointer" onclick="renameProject(${r.id}, '${encodeURIComponent(r.name)}')">rename</a>
+        · <a class="link" style="cursor:pointer" onclick="deleteProject(${r.id}, '${encodeURIComponent(r.name)}')">delete</a>
+      </td></tr>`).join('')
+      : '<tr><td colspan="5" class="muted">No projects yet.</td></tr>';
+  }catch(e){ $('#projectRows').innerHTML='<tr><td colspan="5" class="muted">'+e.message+'</td></tr>'; }
+}
+function useProject(n,u){
+  $('#projectName').value=decodeURIComponent(n); $('#url').value=decodeURIComponent(u);
+  document.querySelector('nav button[data-tab="new"]').click();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+// ---- rename / delete handlers ----
+async function renameSaved(nameEnc){
+  const name=decodeURIComponent(nameEnc);
+  const nn=prompt('Rename saved script:', name); if(!nn||nn.trim()===name) return;
+  try{ await api('/api/saved-scripts/rename',{name, new_name:nn.trim()}); loadSaved(); }
+  catch(e){ alert('Rename failed: '+e.message); }
+}
+async function deleteSaved(nameEnc){
+  const name=decodeURIComponent(nameEnc);
+  if(!confirm('Delete saved script "'+name+'"? This cannot be undone.')) return;
+  try{ await api('/api/saved-scripts/delete',{name}); loadSaved(); }
+  catch(e){ alert('Delete failed: '+e.message); }
+}
+async function exportSavedCI(nameEnc){
+  const name=decodeURIComponent(nameEnc);
+  try{
+    const r = await api('/api/saved-scripts/export',{name});
+    let msg = 'CI/CD bundle written to:\n'+r.out_dir+'\n\nFiles:\n  '+(r.files||[]).join('\n  ')
+      + '\n\nCommit these into your app repo, then trigger the workflow after each deploy.'
+      + '\nEdit perf-test.yml for users/duration; edit ci/perf/testdata.csv for accounts.';
+    if((r.warnings||[]).length) msg += '\n\n⚠ '+r.warnings.join('\n⚠ ');
+    alert(msg);
+  }catch(e){ alert('Export failed: '+e.message); }
+}
+async function renameProject(id, nameEnc){
+  const name=decodeURIComponent(nameEnc);
+  const nn=prompt('Rename project:', name); if(!nn||nn.trim()===name) return;
+  try{ await api('/api/projects/rename',{project_id:id, new_name:nn.trim()}); loadProjects(); }
+  catch(e){ alert('Rename failed: '+e.message); }
+}
+async function deleteProject(id, nameEnc){
+  const name=decodeURIComponent(nameEnc);
+  if(!confirm('Delete project "'+name+'" and ALL its runs? This cannot be undone.')) return;
+  try{ await api('/api/projects/delete',{project_id:id}); loadProjects(); }
+  catch(e){ alert('Delete failed: '+e.message); }
+}
+async function renameRun(id, cur){
+  const nn=prompt('Label this run (e.g. "baseline v2"):', cur||''); if(nn===null) return;
+  try{ await api('/api/runs/rename',{run_id:id, label:nn.trim()}); loadHistory(); }
+  catch(e){ alert('Rename failed: '+e.message); }
+}
+async function deleteRun(id){
+  if(!confirm('Delete this run from history?')) return;
+  try{ await api('/api/runs/delete',{run_id:id}); loadHistory(); }
+  catch(e){ alert('Delete failed: '+e.message); }
+}
+$('#btnAsk').onclick=async()=>{
+  try{
+    const r=await api('/api/query',{text:$('#askText').value});
+    let html='';
+    if(r.answer){
+      html+='<div class="rec" style="margin-bottom:10px;white-space:pre-wrap">'+
+        r.answer.replace(/</g,'&lt;')+'</div>';
+    } else if(!r.ai_enabled){
+      html+='<p class="muted">Tip: set <b>ANTHROPIC_API_KEY</b> to get plain-language answers. Showing ledger data:</p>';
+    }
+    html+=`<p class="muted">Entity: <b>${r.entity}</b> · window: ${r.months} months · ${r.count} matches</p>`;
+    if(r.results.length){
+      html+='<table><thead><tr><th>Date</th><th>Project</th><th>Transaction</th><th>Type</th><th class="num">p95</th><th>Gate</th></tr></thead><tbody>'+
+        r.results.map(x=>`<tr><td>${(x.started_at||'').slice(0,10)}</td><td>${x.project_name}</td>
+        <td>${x.name}</td><td>${x.test_type}</td><td class="num">${Math.round(x.p95||0)}</td>
+        <td><span class="badge ${x.sla_pass?'b-ok':'b-bad'}">${x.sla_pass?'PASS':'FAIL'}</span></td></tr>`).join('')+
+        '</tbody></table>';
+    } else html+='<p class="muted">No matching history yet.</p>';
+    $('#askResult').innerHTML=html;
+  }catch(e){ $('#askResult').innerHTML='<p class="muted">'+e.message+'</p>'; }
+};
+</script>
+</body>
+</html>

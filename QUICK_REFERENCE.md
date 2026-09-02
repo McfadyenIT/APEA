@@ -18,7 +18,7 @@
 - **Action:** Can run immediately, see `UPDATED_QUICK_START.md`
 
 ### Level 2: Fixed The Generator (ALL Future Runs)
-- **File:** `apea/agents/generator.py`
+- **File:** `ltmetrics/agents/generator.py`
 - **Changes:** Added intelligent payment method detection
 - **Result:** ALL future generated scripts will use optimal payment method
 - **Action:** No action needed — works automatically on next script generation
@@ -48,14 +48,14 @@ cat GENERATOR_ENHANCEMENT.md  # 10 min read
 ### 2. Test the Fixed Script
 ```bash
 cd projects/test-radwell/mcstaging-radwell-eu/cb64e42b0101/
-python -m apea.cli --url https://mcstaging.radwell.eu \
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu \
     --test-type smoke --users 1 --duration 60
-# Expect: [APEA] Order ids: <number>  (payment succeeded)
+# Expect: [LT Metrics] Order ids: <number>  (payment succeeded)
 ```
 
 ### 3. Generate New Scripts
 ```bash
-python -m apea.cli --url <your-site> --discover --test-type load
+python -m ltmetrics.cli --url <your-site> --discover --test-type load
 # Auto-detection happens automatically
 # Generated script uses optimal payment method
 ```
@@ -114,7 +114,7 @@ _FORCED_PAYMENT = 'netterms'  # Auto-detected and switched
 
 ### Scenario A: CyberSource Site
 ```bash
-python -m apea.cli --url <site> --test-type load
+python -m ltmetrics.cli --url <site> --test-type load
 # Generator detects CyberSource
 # Switches to netterms automatically
 # Script works, >90% success
@@ -123,7 +123,7 @@ python -m apea.cli --url <site> --test-type load
 
 ### Scenario B: Want to Test CyberSource
 ```bash
-python -m apea.cli --url <site> --test-type smoke --browser-payment
+python -m ltmetrics.cli --url <site> --test-type smoke --browser-payment
 # Generator detects CyberSource
 # User flag enables Playwright integration
 # Script uses browser automation
@@ -132,7 +132,7 @@ python -m apea.cli --url <site> --test-type smoke --browser-payment
 
 ### Scenario C: Net Terms Site
 ```bash
-python -m apea.cli --url <site> --test-type load
+python -m ltmetrics.cli --url <site> --test-type load
 # Generator detects Net Terms
 # Uses it directly
 # Script works perfectly

@@ -1,11 +1,11 @@
 # ============================================================================
-#  APEA performance test — plain-English configuration
+#  LT Metrics performance test — plain-English configuration
 #  Edit the values on the right of each colon. Lines starting with # are notes.
-#  Run it locally:   python -m apea.cli --config perf-test.yml --check-sla
+#  Run it locally:   python -m ltmetrics.cli --config perf-test.yml --check-sla
 #  In CI it runs automatically (see .github/workflows or ci/Jenkinsfile).
 # ============================================================================
 
-# The site under test. If you leave this blank, APEA uses the URL from the
+# The site under test. If you leave this blank, LT Metrics uses the URL from the
 # recording below.
 target url: https://your-store.example.com
 
@@ -26,7 +26,7 @@ duration: 10m
 # Parallel load generators (leave 1 unless you need very high load).
 workers: 1
 
-# The data file APEA told you to upload (card, shipping, credentials, search…),
+# The data file LT Metrics told you to upload (card, shipping, credentials, search…),
 # committed in the repo. One row per virtual user.
 data file: ci/perf/testdata.csv
 

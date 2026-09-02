@@ -1,7 +1,7 @@
 """Remembering a captured token, so losing the file stops losing the token.
 
 A browser never tells a page where an uploaded file came from -- it reports a
-fake path on purpose -- so APEA edits its own copy and the operator's file stays
+fake path on purpose -- so LT Metrics edits its own copy and the operator's file stays
 as it was. Enrolment wrote tokens somewhere the next upload did not read, and
 the two drifted apart twice in one day.
 
@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from apea.agents import token_memory as TM  # noqa: E402
+from ltmetrics.agents import token_memory as TM  # noqa: E402
 
 # Point the store at a throwaway file BEFORE touching anything. This suite calls
 # forget(), and on the real store that destroys tokens someone just spent a
@@ -31,7 +31,7 @@ import tempfile  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 _REAL_STORE = TM._STORE
-TM._STORE = Path(tempfile.mkdtemp(prefix="apea-tokmem-test-")) / "memory.json"
+TM._STORE = Path(tempfile.mkdtemp(prefix="ltm-tokmem-test-")) / "memory.json"
 assert TM._STORE != _REAL_STORE, "the test must not use the real store"
 assert not TM._STORE.exists(), "the test store must start empty"
 
@@ -97,9 +97,9 @@ TM.forget()
 
 print()
 print("the wiring exists on both sides")
-srv = io.open("apea/server.py", encoding="utf-8").read()
+srv = io.open("ltmetrics/server.py", encoding="utf-8").read()
 enr = io.open("enrol_cards.py", encoding="utf-8").read()
-ui = io.open("apea/static/index.html", encoding="utf-8").read()
+ui = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 check("enrolment records what it captured", "token_memory.remember" in enr)
 check("upload restores into blank cells", "token_memory.apply_to_rows" in srv)
 check("the restore is reported to the page", '"restored_tokens"' in srv)
@@ -116,12 +116,12 @@ print()
 print()
 print("this suite cannot touch the real memory")
 check("it is using a throwaway store", str(TM._STORE) != str(_REAL_STORE))
-check("the real store was never opened", "apea-tokmem-test-" in str(TM._STORE))
+check("the real store was never opened", "ltm-tokmem-test-" in str(TM._STORE))
 
 print()
 print("the operator can forget a token, or a fresh one is unreachable")
-_srv = io.open("apea/server.py", encoding="utf-8").read()
-_ui = io.open("apea/static/index.html", encoding="utf-8").read()
+_srv = io.open("ltmetrics/server.py", encoding="utf-8").read()
+_ui = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 check("a forget endpoint exists", '@app.post("/api/enrol-cards/forget")' in _srv)
 check("it can clear one account", "req.username" in _srv)
 # The whole-store path moved when forget learned to take a list. Assert the

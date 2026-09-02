@@ -1,6 +1,6 @@
 """One pool, mixed payment methods.
 
-APEA used to force ONE payment method on every virtual user. That is wrong for
+LT Metrics used to force ONE payment method on every virtual user. That is wrong for
 the store it was built against: the checkout offers paradoxlabs_cybersource,
 paypal_express, netterms and wirepayment, and on a B2B distributor most real
 orders are placed on account, not by card. A pool where all ten users pay by
@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from apea.agents import generator as G  # noqa: E402
+from ltmetrics.agents import generator as G  # noqa: E402
 
 SRC = open(G.__file__, encoding="utf-8").read()
 FAILURES = []

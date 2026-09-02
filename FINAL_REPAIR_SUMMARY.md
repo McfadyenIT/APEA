@@ -94,30 +94,30 @@ Added intelligent selection logic:
 cat projects/test-radwell/mcstaging-radwell-eu/cb64e42b0101/UPDATED_QUICK_START.md
 
 # 2. Run smoke test (1 user, 1 minute)
-python -m apea.cli --url https://mcstaging.radwell.eu \
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu \
     --test-type smoke --users 1 --duration 60 --check-sla
 
 # 3. Verify order completion:
-# [APEA] Order ids: <order_number>
+# [LT Metrics] Order ids: <order_number>
 ```
 
 ### Short Term (Today)
 ```bash
 # 1. Run load test (10 users, 5 minutes)
-python -m apea.cli --url https://mcstaging.radwell.eu \
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu \
     --test-type load --users 10 --duration 300 --check-sla
 
 # 2. Check success rate (>90% expected)
-# [APEA] Requests=500 Failures=<5%
+# [LT Metrics] Requests=500 Failures=<5%
 
 # 3. Review results:
-# cat results/apea_flow.json | jq '.checkout_state'
+# cat results/ltm_flow.json | jq '.checkout_state'
 ```
 
 ### Medium Term (This Week)
 ```bash
 # 1. Test with realistic load (50+ users)
-python -m apea.cli --url https://mcstaging.radwell.eu \
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu \
     --test-type stress --users 50 --duration 600 --check-sla
 
 # 2. Test different payment methods (if needed):
@@ -156,7 +156,7 @@ python -m apea.cli --url https://mcstaging.radwell.eu \
 - [ ] Run smoke test (verify order creation)
 - [ ] Run load test with 10+ users
 - [ ] Verify >90% order success rate
-- [ ] Check `results/apea_flow.json` for payment method logged
+- [ ] Check `results/ltm_flow.json` for payment method logged
 - [ ] Review test report for no "payment" errors
 
 ---
@@ -212,7 +212,7 @@ A: The script falls back to any available offline method (PO, Check, etc.), or f
 
 **To run:**
 ```bash
-python -m apea.cli --url https://mcstaging.radwell.eu --test-type load --users 10 --check-sla
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu --test-type load --users 10 --check-sla
 ```
 
 **Expected result:**

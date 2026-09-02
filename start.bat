@@ -1,6 +1,6 @@
 @echo off
 REM ==================================================================
-REM  APEA - one-click launcher (Windows)
+REM  LT Metrics - one-click launcher (Windows)
 REM  Double-click this file. It sets up everything and opens the app.
 REM ==================================================================
 setlocal
@@ -42,8 +42,8 @@ if not errorlevel 1 (
 )
 
 echo.
-echo Starting APEA - your browser will open at http://127.0.0.1:8000
-echo Close this window to stop APEA.
+echo Starting LT Metrics - your browser will open at http://127.0.0.1:8000
+echo Close this window to stop LT Metrics.
 echo.
 python run.py
 

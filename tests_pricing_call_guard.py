@@ -1,8 +1,8 @@
 """Regression guard: business-critical calls must never be dropped silently,
 on ANY commerce platform.
 
-Run after any change to the call selector in apea/server.py,
-apea/static/index.html, the login-URL derivation in generator.py, or the
+Run after any change to the call selector in ltmetrics/server.py,
+ltmetrics/static/index.html, the login-URL derivation in generator.py, or the
 business_critical_paths blocks in knowledge/rules/platform_rules.yaml:
 
     ./.venv/bin/python tests_pricing_call_guard.py     # expect: FAILURES: 0
@@ -24,7 +24,7 @@ orders at 41.99 each with the product value missing. Defect 2 then produced a ru
 where the cart-add ran four times, returned 200 every time, and added nothing --
 caught only because the cart-value gate refused to place the order.
 
-APEA is not a single-store tool, so the paths are NOT hardcoded: they live in
+LT Metrics is not a single-store tool, so the paths are NOT hardcoded: they live in
 platform_rules.yaml per platform, with a deliberately broad `generic` block as
 the floor. A false positive costs one extra call in the script; a false negative
 costs a whole run of zero-value orders that reports success.
@@ -34,8 +34,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from apea.server import _call_sig, _critical_kind, _critical_paths   # noqa: E402
-from apea.knowledge import KB   # noqa: E402
+from ltmetrics.server import _call_sig, _critical_kind, _critical_paths   # noqa: E402
+from ltmetrics.knowledge import KB   # noqa: E402
 
 fails = []
 
@@ -120,7 +120,7 @@ check("nothing critical is dropped", len(still), 0)
 check("the selection grew by exactly two", len(fixed) - len(rest_only), 2)
 
 print("\nThe browser keeps NO second copy of the rule")
-html = (ROOT / "apea" / "static" / "index.html").read_text(encoding="utf-8")
+html = (ROOT / "ltmetrics" / "static" / "index.html").read_text(encoding="utf-8")
 check("no regex in the page", "PRICING_CRITICAL_RE" not in html, True)
 check("it reads the server's flag instead", "c && c.critical" in html, True)
 check("rows carry the KIND, not a boolean",
@@ -128,12 +128,12 @@ check("rows carry the KIND, not a boolean",
 check("bulk select honours it", "!!el.dataset.critical" in html, True)
 check("the warning explains the actual kind", "CRITICAL_WHY[kind]" in html, True)
 
-srv = (ROOT / "apea" / "server.py").read_text(encoding="utf-8")
+srv = (ROOT / "ltmetrics" / "server.py").read_text(encoding="utf-8")
 check("the server computes it from the KB", "KB.platform_rules(src)" in srv, True)
 check("and detects the platform per recording", "_platform_of(rec, flow)" in srv, True)
 
 print("\nThe generator prefixes its fallback login URLs with the store code")
-gen = (ROOT / "apea" / "agents" / "generator.py").read_text(encoding="utf-8")
+gen = (ROOT / "ltmetrics" / "agents" / "generator.py").read_text(encoding="utf-8")
 check("generator derives a store prefix", "_store_pfx" in gen, True)
 check("and prepends it to the login fallbacks",
       "_store_pfx + _g for _g in _fallbacks" in gen, True)
@@ -145,7 +145,7 @@ print()
 print()
 print("the out-of-stock fallback will not pick a 0-priced product")
 import io as _io2
-_src = _io2.open("apea/agents/generator.py", encoding="utf-8").read()
+_src = _io2.open("ltmetrics/agents/generator.py", encoding="utf-8").read()
 _blk = _src.split("LAST-RESORT in-stock fallback")[1][:2600]
 for label, needle in (
         ("a price is read from the candidate", 'float(_fc.get("price")'),

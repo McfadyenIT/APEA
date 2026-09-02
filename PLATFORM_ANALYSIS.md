@@ -1,22 +1,22 @@
-# APEA Platform — Comprehensive Analysis
+# LT Metrics Platform — Comprehensive Analysis
 
 **Date:** 2026-07-24  
-**Platform:** Performance Orchestration / Autonomous Performance Engineering Agent (APEA)  
+**Platform:** Performance Orchestration / Load Testing Reimagined (LT Metrics)  
 **Technology Stack:** Python, FastAPI, Locust, Claude AI, SQLite
 
 ---
 
 ## Executive Summary
 
-APEA is an **intelligent, end-to-end performance testing orchestration platform** that automates the complete journey from target discovery to load testing and root-cause analysis. It combines six specialized AI agents to eliminate manual performance engineering work, making production-ready load testing accessible to teams with zero performance-testing expertise.
+LT Metrics is an **intelligent, end-to-end performance testing orchestration platform** that automates the complete journey from target discovery to load testing and root-cause analysis. It combines six specialized AI agents to eliminate manual performance engineering work, making production-ready load testing accessible to teams with zero performance-testing expertise.
 
-**Key value proposition:** Point APEA at any URL, and it automatically crawls the target, understands the user journey, generates a production-ready Locust test script, runs the load test, and produces JMeter-style reports with AI-driven recommendations — all from a dead-simple web UI.
+**Key value proposition:** Point LT Metrics at any URL, and it automatically crawls the target, understands the user journey, generates a production-ready Locust test script, runs the load test, and produces JMeter-style reports with AI-driven recommendations — all from a dead-simple web UI.
 
 ---
 
 ## Platform Components
 
-### 1. **APEA Core System** (`apea/` — 84 files, 4 subdirectories)
+### 1. **LT Metrics Core System** (`ltmetrics/` — 84 files, 4 subdirectories)
 
 The heart of the platform; a FastAPI-based orchestrator that coordinates six specialized sub-agents.
 
@@ -39,7 +39,7 @@ The heart of the platform; a FastAPI-based orchestrator that coordinates six spe
 - Runs the full pipeline without the web UI
 - Parameterizable via CLI flags or environment variables
 - SLA-gated exit codes (0=pass, 1=SLA breach, 2=error)
-- Supports environment variables: `APEA_TARGET_URL`, `APEA_TEST_TYPE`, `APEA_USERS`, `APEA_DURATION`, `APEA_WORKERS`, `APEA_USERNAME`, `APEA_PASSWORD`, `APEA_PROJECT`
+- Supports environment variables: `LTM_TARGET_URL`, `LTM_TEST_TYPE`, `LTM_USERS`, `LTM_DURATION`, `LTM_WORKERS`, `LTM_USERNAME`, `LTM_PASSWORD`, `LTM_PROJECT`
 
 #### 1.3 **Configuration & Path Management** (`config.py`)
 - Centralized project isolation under `projects/<Project>/<url-slug>/<run-id>/`
@@ -52,7 +52,7 @@ The heart of the platform; a FastAPI-based orchestrator that coordinates six spe
   - `data/` → shared test data pools
 
 #### 1.4 **Database & History** (`db.py`)
-- SQLite ledger (`apea_history.db`)
+- SQLite ledger (`ltmetrics_history.db`)
 - Stores every run: project, URL, test type, parameters, results, SLA status
 - Enables trend analysis (baseline vs current run)
 - Powers historical queries and natural-language insights
@@ -67,7 +67,7 @@ The heart of the platform; a FastAPI-based orchestrator that coordinates six spe
 
 ---
 
-### 2. **The Six Specialized Agents** (`apea/agents/` — 23 agent modules)
+### 2. **The Six Specialized Agents** (`ltmetrics/agents/` — 23 agent modules)
 
 Each agent is a focused expert responsible for one stage of the load-test pipeline.
 
@@ -175,7 +175,7 @@ Each agent is a focused expert responsible for one stage of the load-test pipeli
 #### 3.1 **Recording Agent** (`recording.py`)
 - Imports pre-recorded test data (HAR files from browser exports, test session recordings)
 - Normalizes across formats (BlazeMeter, JMeter, Taurus YAML)
-- Bridges pre-recorded sessions into APEA's auto-discovery flow
+- Bridges pre-recorded sessions into LT Metrics's auto-discovery flow
 
 #### 3.2 **Flow Discovery** (`flow_discovery.py`)
 - Infers business logic from sequences of API calls
@@ -224,8 +224,8 @@ Pure analysis of pre-recorded test data without code generation.
 
 **Use case:** Understand a recording first before automating it; useful for compliance audits.
 
-#### 4.2 **APEA Code Repair Agent**
-(`apea-code-repair-agent/` — 4 files)
+#### 4.2 **LT Metrics Code Repair Agent**
+(`ltmetrics-code-repair-agent/` — 4 files)
 
 Repairs AI-generated Locust scripts for Magento checkout flows (or similar complex e-commerce).
 
@@ -271,10 +271,10 @@ Repairs AI-generated Locust scripts for Magento checkout flows (or similar compl
 - SLA pass/fail gate
 
 #### 5.3 **Docker & Compose** (`Dockerfile`, `docker-compose.yml`)
-- **Web UI mode:** `docker run -p 8000:8000 apea` → opens port 8000
-- **Headless CI mode:** `docker run --rm apea python -m apea.cli --url ... --check-sla`
+- **Web UI mode:** `docker run -p 8000:8000 ltmetrics` → opens port 8000
+- **Headless CI mode:** `docker run --rm ltmetrics python -m ltmetrics.cli --url ... --check-sla`
 - Volume mounts for `projects/` persistence
-- Compose services: `apea` (web) + `runner` (headless)
+- Compose services: `ltmetrics` (web) + `runner` (headless)
 
 ---
 
@@ -282,7 +282,7 @@ Repairs AI-generated Locust scripts for Magento checkout flows (or similar compl
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      APEA Web UI                                │
+│                      LT Metrics Web UI                                │
 │          (static/index.html + FastAPI + REST API)               │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
@@ -409,7 +409,7 @@ Repairs AI-generated Locust scripts for Magento checkout flows (or similar compl
 
 ### By Test Type
 
-| Test Type | Purpose | APEA Config |
+| Test Type | Purpose | LT Metrics Config |
 |-----------|---------|-------------|
 | **Smoke** | Basic connectivity | 5 users, 1m duration |
 | **Baseline** | Establish current performance | 50 users, 10m duration |
@@ -454,7 +454,7 @@ projects/
 ├─ Another_Project/
 │  └─ (same structure)
 │
-apea_history.db                        # SQLite ledger (all runs)
+ltmetrics_history.db                        # SQLite ledger (all runs)
 saved_scripts/                         # Curated Locust templates
 ├─ magento_checkout.py
 ├─ shopify_browse.py
@@ -467,7 +467,7 @@ saved_scripts/                         # Curated Locust templates
 
 ### 1. **Upstream: Recording Analysis**
 - **BlazeMeter Recording Analyzer** parses pre-recorded `.jmx`, `.har`, `.yaml`
-- Outputs `analysis.json` → feeds into APEA's Generator
+- Outputs `analysis.json` → feeds into LT Metrics's Generator
 
 ### 2. **Downstream: CI/CD**
 - **GitHub Actions** trigger on `push` or `workflow_dispatch`
@@ -476,7 +476,7 @@ saved_scripts/                         # Curated Locust templates
 - Exit codes: 0 (pass), 1 (SLA breach), 2 (error)
 
 ### 3. **Lateral: Code Repair**
-- **APEA Code Repair Agent** fixes generated scripts
+- **LT Metrics Code Repair Agent** fixes generated scripts
 - 18-phase repair for Magento/e-commerce checkouts
 - Knowledge base of known bugs → fast auto-heals
 
@@ -493,23 +493,23 @@ saved_scripts/                         # Curated Locust templates
 ```bash
 # Anthropic API (for Claude AI features)
 ANTHROPIC_API_KEY=sk-ant-...
-APEA_LLM_MODEL=claude-3-5-sonnet-latest  # default
+LTM_LLM_MODEL=claude-3-5-sonnet-latest  # default
 
 # CLI defaults
-APEA_TARGET_URL=https://example.com
-APEA_TEST_TYPE=load
-APEA_USERS=100
-APEA_DURATION=600
-APEA_WORKERS=1
-APEA_USERNAME=testuser
-APEA_PASSWORD=testpass
-APEA_PROJECT=My_Project
+LTM_TARGET_URL=https://example.com
+LTM_TEST_TYPE=load
+LTM_USERS=100
+LTM_DURATION=600
+LTM_WORKERS=1
+LTM_USERNAME=testuser
+LTM_PASSWORD=testpass
+LTM_PROJECT=My_Project
 ```
 
 ### .env File (Project Root)
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-APEA_LLM_MODEL=claude-opus-4-8
+LTM_LLM_MODEL=claude-opus-4-8
 ```
 
 ### Web UI Customization
@@ -536,7 +536,7 @@ APEA_LLM_MODEL=claude-opus-4-8
 
 ## Known Capabilities & Limitations
 
-### ✅ What APEA Does Well
+### ✅ What LT Metrics Does Well
 - Automatic discovery & script generation for 80% of standard web apps
 - Realistic checkout/e-commerce flows (Magento, Shopify)
 - REST APIs, GraphQL, SOAP
@@ -610,39 +610,39 @@ python run.py
 ### CLI (Headless, CI-friendly)
 ```bash
 # Basic load test
-python -m apea.cli --url https://example.com --test-type load --users 100
+python -m ltmetrics.cli --url https://example.com --test-type load --users 100
 
 # Stress test with SLA gate
-python -m apea.cli --url https://example.com --test-type stress \
+python -m ltmetrics.cli --url https://example.com --test-type stress \
     --users 500 --duration 900 --check-sla
 
 # Distributed (4 workers)
-python -m apea.cli --url https://example.com --test-type load \
+python -m ltmetrics.cli --url https://example.com --test-type load \
     --users 400 --workers 4 --check-sla
 
 # With credentials
-python -m apea.cli --url https://example.com --test-type load \
+python -m ltmetrics.cli --url https://example.com --test-type load \
     --users 100 --username admin --password secret123
 
 # Environment-variable driven (CI)
-export APEA_TARGET_URL=https://api.example.com
-export APEA_TEST_TYPE=stress
-export APEA_USERS=500
-python -m apea.cli --check-sla
+export LTM_TARGET_URL=https://api.example.com
+export LTM_TEST_TYPE=stress
+export LTM_USERS=500
+python -m ltmetrics.cli --check-sla
 ```
 
 ### Docker
 ```bash
 # Web UI
-docker build -t apea .
-docker run -p 8000:8000 -v "$PWD/projects:/app/projects" apea
+docker build -t ltmetrics .
+docker run -p 8000:8000 -v "$PWD/projects:/app/projects" ltmetrics
 
 # Headless in CI
 docker run --rm \
   -v "$PWD/projects:/app/projects" \
-  -e APEA_TARGET_URL=https://example.com \
-  -e APEA_USERS=100 \
-  apea python -m apea.cli --check-sla
+  -e LTM_TARGET_URL=https://example.com \
+  -e LTM_USERS=100 \
+  ltmetrics python -m ltmetrics.cli --check-sla
 ```
 
 ---
@@ -684,20 +684,20 @@ docker run --rm \
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| FastAPI Server | `apea/server.py` | REST API + web UI |
-| CLI Entry | `apea/cli.py` | Headless CI runner |
-| Config | `apea/config.py` | Path management |
-| Database | `apea/db.py` | SQLite ledger |
-| Discovery | `apea/agents/discovery.py` | Crawl & tech detection |
-| Planner | `apea/agents/planner.py` | Workload modeling |
-| Generator | `apea/agents/generator.py` | Locust script generation |
-| Reviewer | `apea/agents/reviewer.py` | Code audit |
-| Executor | `apea/agents/executor.py` | Locust runner |
-| Analyzer | `apea/agents/analyzer.py` | RCA & SLA gate |
-| Reporting | `apea/reporting.py` | HTML + Excel |
-| Web UI | `apea/static/index.html` | Frontend |
+| FastAPI Server | `ltmetrics/server.py` | REST API + web UI |
+| CLI Entry | `ltmetrics/cli.py` | Headless CI runner |
+| Config | `ltmetrics/config.py` | Path management |
+| Database | `ltmetrics/db.py` | SQLite ledger |
+| Discovery | `ltmetrics/agents/discovery.py` | Crawl & tech detection |
+| Planner | `ltmetrics/agents/planner.py` | Workload modeling |
+| Generator | `ltmetrics/agents/generator.py` | Locust script generation |
+| Reviewer | `ltmetrics/agents/reviewer.py` | Code audit |
+| Executor | `ltmetrics/agents/executor.py` | Locust runner |
+| Analyzer | `ltmetrics/agents/analyzer.py` | RCA & SLA gate |
+| Reporting | `ltmetrics/reporting.py` | HTML + Excel |
+| Web UI | `ltmetrics/static/index.html` | Frontend |
 | Recording Analyzer | `blazemeter-recording-analyzer/` | Pre-recorded analysis |
-| Code Repair | `apea-code-repair-agent/` | Script repair (18 phases) |
+| Code Repair | `ltmetrics-code-repair-agent/` | Script repair (18 phases) |
 | GitHub CI | `.github/workflows/performance-tests.yml` | Actions pipeline |
 | Jenkins CI | `ci/Jenkinsfile` | Groovy declarative |
 | Docker | `Dockerfile` + `docker-compose.yml` | Containerization |
@@ -706,7 +706,7 @@ docker run --rm \
 
 ## Conclusion
 
-APEA is a **mature, production-ready platform** for autonomous performance testing. It combines intelligent discovery, AI-driven script generation, code review, execution, and root-cause analysis into a single system that requires zero performance-engineering expertise to use. 
+LT Metrics is a **mature, production-ready platform** for autonomous performance testing. It combines intelligent discovery, AI-driven script generation, code review, execution, and root-cause analysis into a single system that requires zero performance-engineering expertise to use. 
 
 The platform is designed for:
 - **Scale:** From smoke tests to stress tests with 1000+ concurrent users
@@ -714,7 +714,7 @@ The platform is designed for:
 - **Intelligence:** AI-powered discovery, repair, and RCA
 - **Accessibility:** Simple UI for non-technical teams; advanced CLI for DevOps
 
-Whether used interactively via the web UI or automated via CI/CD, APEA eliminates the manual work of performance testing and makes it accessible to every team.
+Whether used interactively via the web UI or automated via CI/CD, LT Metrics eliminates the manual work of performance testing and makes it accessible to every team.
 
 ---
 

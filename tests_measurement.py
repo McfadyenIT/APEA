@@ -25,8 +25,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from apea.agents.generator import _assemble_flow_script, _wait_time_expr  # noqa: E402
-from apea.agents.engines.locust_engine import LocustEngine               # noqa: E402
+from ltmetrics.agents.generator import _assemble_flow_script, _wait_time_expr  # noqa: E402
+from ltmetrics.agents.engines.locust_engine import LocustEngine               # noqa: E402
 
 fails = []
 

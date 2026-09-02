@@ -14,7 +14,7 @@ DevTools is slow and easy to get wrong. Do this instead:
          python extract_card_tokens.py ~/Downloads/*.har
 
 It prints the `username,payment_token,card_cvv` columns to paste into the test
-data CSV, then in APEA set
+data CSV, then in LT Metrics set
 
     Payment additional_data:
         {"card_id": "{{payment_token}}", "cc_cid": "{{card_cvv}}", "save": false}
@@ -115,7 +115,7 @@ def method_of(txt: str) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        description="Extract stored-card tokens from HAR captures for the APEA test CSV.")
+        description="Extract stored-card tokens from HAR captures for the LT Metrics test CSV.")
     ap.add_argument("captures", nargs="+",
                     help="HAR files, one per test account (globs allowed)")
     ap.add_argument("--cvv", default="123",
@@ -166,7 +166,7 @@ def main(argv=None) -> int:
             print("#   %-28s %-14s %s...  (%s)"
                   % (acct, k, val[:12], m or "method?"), file=sys.stderr)
         keys = {r[2] for r in rows}
-        print("#\n# In APEA set Payment additional_data to:", file=sys.stderr)
+        print("#\n# In LT Metrics set Payment additional_data to:", file=sys.stderr)
         print('#   {"%s": "{{payment_token}}", "cc_cid": "{{card_cvv}}", '
               '"save": false}' % sorted(keys)[0], file=sys.stderr)
         if len(keys) > 1:

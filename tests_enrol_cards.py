@@ -133,7 +133,7 @@ check("a body with no token yields nothing",
       E._TOKEN_RE.search('{"paymentMethod":{"method":"netterms"}}') is None)
 
 print()
-print("gateway profiles resolve by substring, as elsewhere in APEA")
+print("gateway profiles resolve by substring, as elsewhere in LT Metrics")
 KB = {"cybersource": SANDBOX, "stripe": {"frame_url_patterns": ["js.stripe.com"]}}
 check("paradoxlabs_cybersource finds the cybersource profile",
       E._gateway_profile(KB, "paradoxlabs_cybersource") is SANDBOX)
@@ -371,7 +371,7 @@ check("a run that enrolled nothing but skipped something exits non-zero",
 # --- appended: more cards, and a security-code override ----------------------
 print()
 print("a second Mastercard is available, from the knowledge base")
-from apea.agents.browser_runner_gen import _load_browser_patterns as _kb  # noqa: E402
+from ltmetrics.agents.browser_runner_gen import _load_browser_patterns as _kb  # noqa: E402
 _cards = (_kb() or {}).get("paradoxlabs_cybersource", {}).get("test_cards", {})
 check("mastercard_alt exists", "mastercard_alt" in _cards)
 check("it is the number that was asked for",

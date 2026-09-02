@@ -14,8 +14,8 @@ import sys
 
 sys.path.insert(0, ".")
 
-from apea.agents import recommendation  # noqa: E402
-from apea.config import DEFAULT_P95_THRESHOLD_MS  # noqa: E402
+from ltmetrics.agents import recommendation  # noqa: E402
+from ltmetrics.config import DEFAULT_P95_THRESHOLD_MS  # noqa: E402
 
 FAILURES = []
 

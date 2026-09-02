@@ -85,7 +85,7 @@ Run the test with 10+ concurrent users. You'll see:
 - Error: "Address verification failed" or "Billing address does not match shipping"
 
 ### Root Cause
-**The script was generated from a recorded session where the billing address was changed mid-session.** The generator captured the final state (billing=US) instead of dynamically using the active shipping address. This is a classic APEA repair phase failure:
+**The script was generated from a recorded session where the billing address was changed mid-session.** The generator captured the final state (billing=US) instead of dynamically using the active shipping address. This is a classic LT Metrics repair phase failure:
 - **Phase 7 (State Machine):** Should fail if billing ≠ shipping
 - **Phase 9 (Quote Consistency):** Should resolve billing FROM shipping, not from a cached recording
 
@@ -394,7 +394,7 @@ From `locust_stats.csv` — Notice these requests appear successful but ARE vuln
 3. ✅ Add order-placement response validation
 
 ### Short-term (Repair Phase)
-Run the **APEA Code Repair Agent** on this script:
+Run the **LT Metrics Code Repair Agent** on this script:
 - It will catch all three issues above
 - It has a knowledge base entry for billing-address mismatch (auto-heal)
 - It will generate a repair report showing before/after
@@ -434,7 +434,7 @@ Run the **APEA Code Repair Agent** on this script:
 
 1. **Run the repair agent** on `locustfile.py`:
    ```bash
-   apea-code-repair-agent locustfile.py → repaired_locustfile.py
+   ltmetrics-code-repair-agent locustfile.py → repaired_locustfile.py
    ```
 
 2. **Update testdata.csv** with real payment tokens:
@@ -446,7 +446,7 @@ Run the **APEA Code Repair Agent** on this script:
 
 3. **Re-run the test** with repaired script and updated data:
    ```bash
-   python -m apea.cli --url https://mcstaging.radwell.eu --test-type load --users 10 --check-sla
+   python -m ltmetrics.cli --url https://mcstaging.radwell.eu --test-type load --users 10 --check-sla
    ```
 
 4. **Monitor for payment gateway errors** in the next run's logs

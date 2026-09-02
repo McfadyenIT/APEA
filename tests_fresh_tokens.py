@@ -18,7 +18,7 @@ import tempfile
 
 sys.path.insert(0, ".")
 
-from apea.server import _clear_tokens  # noqa: E402
+from ltmetrics.server import _clear_tokens  # noqa: E402
 
 FAILURES = []
 
@@ -105,15 +105,15 @@ check("and is not rewritten",
 
 print()
 print("the endpoint and the page offer it")
-_srv = io.open("apea/server.py", encoding="utf-8").read()
+_srv = io.open("ltmetrics/server.py", encoding="utf-8").read()
 check("the request can name a data file", "data_csv: Optional[str] = None" in _srv)
 check("forgetting also clears those cells",
       "_clear_tokens(req.data_csv, targets)" in _srv)
 check("and reports both numbers", '"cleared": cleared' in _srv)
-check("it rewrites APEA's copy, never the operator's",
+check("it rewrites LT Metrics's copy, never the operator's",
       "uploaded copy, never the operator" in _srv)
 
-_ui = io.open("apea/static/index.html", encoding="utf-8").read()
+_ui = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 check("the ready state offers it", "btnFreshTokens" in _ui)
 check("it is wired when the panel is drawn", "wireFresh();" in _ui)
 check("it sends the accounts that have tokens", "usernames: have" in _ui)

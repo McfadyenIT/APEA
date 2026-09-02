@@ -1,7 +1,7 @@
 # Generator Enhancement Summary — Fix the Root Cause
 
 **Problem Level:** Root Cause (Generator)  
-**Scope:** All future APEA script generations  
+**Scope:** All future LT Metrics script generations  
 **Impact:** Eliminates payment method issues before they occur  
 **Status:** ✅ IMPLEMENTED
 
@@ -181,7 +181,7 @@ Script works out-of-the-box for load testing (no token setup, no offline fallbac
 
 ## Technical Details
 
-**File Modified:** `apea/agents/generator.py`
+**File Modified:** `ltmetrics/agents/generator.py`
 
 **Changes:**
 - Added `_detect_payment_method_from_recording()` function (~90 lines)
@@ -240,7 +240,7 @@ The enhancement has been implemented and is ready for testing with various recor
 
 ---
 
-## Impact on APEA Pipeline
+## Impact on LT Metrics Pipeline
 
 This enhancement affects:
 
@@ -293,11 +293,11 @@ By fixing the **root cause (generator)** instead of the symptom (individual scri
 ✅ **Increased** script quality from day one  
 ✅ **Created** foundation for future enhancements  
 
-**Result:** The APEA platform now generates intelligent, production-ready payment handling code automatically.
+**Result:** The LT Metrics platform now generates intelligent, production-ready payment handling code automatically.
 
 ---
 
 **Status:** Ready for production  
-**Scope:** Affects all future APEA script generations  
+**Scope:** Affects all future LT Metrics script generations  
 **Quality Level:** High confidence, well-tested approach  
 **Maintenance:** Centralized (easy to update detection patterns)

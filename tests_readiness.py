@@ -1,8 +1,8 @@
 """Regression guard: the run must be sized by ACCOUNTS, not by rows, and the
 readiness panel must say what will happen before the run, not after.
 
-Run after any change to _account_summary in apea/server.py or the readiness
-panel in apea/static/index.html:
+Run after any change to _account_summary in ltmetrics/server.py or the readiness
+panel in ltmetrics/static/index.html:
 
     ./.venv/bin/python tests_readiness.py     # expect: FAILURES: 0
 
@@ -28,7 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from apea.server import _account_summary, _read_csv_rows   # noqa: E402
+from ltmetrics.server import _account_summary, _read_csv_rows   # noqa: E402
 
 fails = []
 
@@ -90,7 +90,7 @@ a = summarise("email,product_id\nalice@x.com,1\n")
 check("email counts as a login", a["unique_logins"], 1)
 
 print("\nThe panel exists and reads the right things")
-html = (ROOT / "apea" / "static" / "index.html").read_text(encoding="utf-8")
+html = (ROOT / "ltmetrics" / "static" / "index.html").read_text(encoding="utf-8")
 check("there is a readiness panel", 'id="readiness"' in html, True)
 check("it warns when users exceed accounts",
       "users but only" in html, True)

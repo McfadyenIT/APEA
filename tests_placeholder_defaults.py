@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from apea.agents import generator as G  # noqa: E402
+from ltmetrics.agents import generator as G  # noqa: E402
 
 SRC = open(G.__file__, encoding="utf-8").read()
 

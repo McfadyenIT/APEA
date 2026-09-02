@@ -1,4 +1,4 @@
-# APEA — Autonomous Performance Engineering Agent
+# LT Metrics — Autonomous Performance Engineering Agent
 # Core dependencies. Install with:  pip install -r requirements.txt
 fastapi>=0.110
 uvicorn[standard]>=0.27
@@ -13,12 +13,12 @@ pypdf>=4.0            # Performance Test Plan (PDF) analysis. If absent, the ana
 python-docx>=1.1     # Performance Test Plan (DOCX) analysis. Optional; PDF/Markdown/text work without it.
 
 # Optional — the agentic AI layer (script self-repair, root-cause narrative,
-# parameterization/correlation, Ask APEA). No extra package needed (uses `requests`).
-# Just set an Anthropic API key in the environment before starting APEA:
+# parameterization/correlation, Ask LT Metrics). No extra package needed (uses `requests`).
+# Just set an Anthropic API key in the environment before starting LT Metrics:
 #   Windows : set ANTHROPIC_API_KEY=sk-ant-...
 #   macOS/Linux : export ANTHROPIC_API_KEY=sk-ant-...
-# Optionally override the model:  set APEA_LLM_MODEL=claude-3-5-sonnet-latest
-# With no key set, APEA runs exactly as before (deterministic).
+# Optionally override the model:  set LTM_LLM_MODEL=claude-3-5-sonnet-latest
+# With no key set, LT Metrics runs exactly as before (deterministic).
 
 # Optional — headless-browser (Playwright). Powers BOTH the JS-rendered
 # Discovery re-crawl (React / Angular / Vue / Next.js) AND the Track-B

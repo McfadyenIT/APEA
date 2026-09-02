@@ -1,6 +1,6 @@
 """Regression guard for the recording noise filter.
 
-Run after any change to apea/agents/filter.py or apea/agents/parser.py:
+Run after any change to ltmetrics/agents/filter.py or ltmetrics/agents/parser.py:
 
     ./.venv/bin/python tests_filter_noise.py      # expect: FAILURES: 0
 
@@ -13,8 +13,8 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from apea.agents import filter as f
-from apea.agents import parser as P
+from ltmetrics.agents import filter as f
+from ltmetrics.agents import parser as P
 
 fails = []
 

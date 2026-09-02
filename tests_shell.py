@@ -22,7 +22,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-UI = io.open("apea/static/index.html", encoding="utf-8").read()
+UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 
 FAILURES = []
 

@@ -1,4 +1,4 @@
-"""The CSV APEA generates must be usable without hand-editing.
+"""The CSV LT Metrics generates must be usable without hand-editing.
 
 A tester uploads a recording, downloads the sample data file, fills in accounts,
 and runs. Every column that flow needs has to be IN that file. Two were not:
@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, ".")
 
 FAILURES = []
-SRC = io.open("apea/agents/test_data_generator.py", encoding="utf-8").read()
+SRC = io.open("ltmetrics/agents/test_data_generator.py", encoding="utf-8").read()
 
 
 def check(name, cond, detail=""):

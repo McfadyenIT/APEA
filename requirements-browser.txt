@@ -1,6 +1,6 @@
-# APEA — OPTIONAL real-browser (Playwright) track dependencies.
+# LT Metrics — OPTIONAL real-browser (Playwright) track dependencies.
 #
-# The core APEA install (requirements.txt) deliberately does NOT include these,
+# The core LT Metrics install (requirements.txt) deliberately does NOT include these,
 # so a normal HTTP/Locust load test stays lightweight. Install these ONLY if you
 # want the Track-B real-browser engine that can drive hosted payment iframes
 # (Stripe / ParadoxLabs-CyberSource) and complete a real card payment.

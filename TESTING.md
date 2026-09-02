@@ -1,10 +1,10 @@
 # Testing the latest changes — Orchestrator + Knowledge Base + Memory
 
-This guide verifies the three new layers added to APEA:
+This guide verifies the three new layers added to LT Metrics:
 
-- **Knowledge Base** (`apea/knowledge/`) — shared rules every agent consults.
-- **Memory** (`apea/memory.py` + `apea/db.py`) — each run teaches the next.
-- **Orchestrator / Decision Engine** (`apea/agents/orchestrator.py`) — retry / stop / escalate / invoke-Claude control logic.
+- **Knowledge Base** (`ltmetrics/knowledge/`) — shared rules every agent consults.
+- **Memory** (`ltmetrics/memory.py` + `ltmetrics/db.py`) — each run teaches the next.
+- **Orchestrator / Decision Engine** (`ltmetrics/agents/orchestrator.py`) — retry / stop / escalate / invoke-Claude control logic.
 
 There are two test levels. **Run Test A first** (fast, deterministic, no network); it proves the "brains". **Then run Test B** for the live integration proof.
 
@@ -73,7 +73,7 @@ loop, and KB-first repair that skips the LLM for known failures).
 
 ### B1 — Start fresh and run
 
-1. **Close any running APEA** (the console window from a previous `start.bat`),
+1. **Close any running LT Metrics** (the console window from a previous `start.bat`),
    so the new code is loaded.
 2. Double-click **`start.bat`** (or run it from the terminal). Wait for the
    browser to open at `http://127.0.0.1:8000`.
@@ -82,9 +82,9 @@ loop, and KB-first repair that skips the LLM for known failures).
 
 ### B2 — Verify Memory recorded what the run learned
 
-After the run finishes, query the history DB (project root, `apea_history.db`):
+After the run finishes, query the history DB (project root, `ltmetrics_history.db`):
 ```
-python -c "import sqlite3;c=sqlite3.connect('apea_history.db');print('FACTS:',c.execute('select scope_key,fact_key,fact_value from learned_facts').fetchall());print('RCA:',c.execute('select error_signature,root_cause,occurrences,resolved from rca_memory').fetchall())"
+python -c "import sqlite3;c=sqlite3.connect('ltmetrics_history.db');print('FACTS:',c.execute('select scope_key,fact_key,fact_value from learned_facts').fetchall());print('RCA:',c.execute('select error_signature,root_cause,occurrences,resolved from rca_memory').fetchall())"
 ```
 **Expected:** at least one `RCA` row whose `error_signature` matches what the run
 hit (e.g. `product_out_of_stock`, `payment_method_unavailable`, `region_id_type`),
@@ -96,7 +96,7 @@ order, you'll also see a `last_success_build` fact.
 
 Open the newest run's `heal.json`:
 ```
-apea/projects/radwell.../mcstaging-radwell-eu/<run-id>/heal.json
+ltmetrics/projects/radwell.../mcstaging-radwell-eu/<run-id>/heal.json
 ```
 **Expected for a recognised failure:** `reason` reads
 *"recognised by knowledge base (no LLM) — deterministic fix '…' is applied by the
@@ -109,12 +109,12 @@ prompt is now grounded in the KB rules.)
 
 1. Run the **same** Radwell test a **second** time.
 2. Re-run the B2 query. **Expected:** the same `error_signature` now shows
-   `occurrences = 2` — proof APEA is accumulating knowledge run over run rather
+   `occurrences = 2` — proof LT Metrics is accumulating knowledge run over run rather
    than rediscovering it each time.
 
 ### B5 — Verify the live diagnostics still work
 
-In the run's `results/apea_flow.json` (or the UI Checkout State card) confirm the
+In the run's `results/ltm_flow.json` (or the UI Checkout State card) confirm the
 build stamp is today's, the mode is `rest-checkout (validator)`, and the
 `checkout_state` / `quote_trace` are populated — i.e. the validator and quote
 tracing from earlier fixes are running under the new architecture.
@@ -141,16 +141,16 @@ the planned next step; once done, `start.bat` alone will cover everything.)
 
 - **Test A block 1 fails ("empty"):** `pip install pyyaml`, re-run.
 - **No `learned_facts` / `rca_memory` tables:** they are created on first use;
-  run any APEA run once (or Test A, which calls `db.init_db()`), then re-query.
+  run any LT Metrics run once (or Test A, which calls `db.init_db()`), then re-query.
 - **`heal.json` still mentions Claude:** that failure wasn't in the known-bug
   catalogue (unknown failure) — expected. Add its signature to
-  `apea/knowledge/rules/known_bugs.yaml` to make it deterministic next time.
-- **KB edits not taking effect:** the KB is cached per process; restart APEA
+  `ltmetrics/knowledge/rules/known_bugs.yaml` to make it deterministic next time.
+- **KB edits not taking effect:** the KB is cached per process; restart LT Metrics
   (or call `KB.reload()`), then re-run.
 
 ## Cleanup (optional)
 
 Test A writes throwaway rows under the host `kb-selftest.example`. To remove them:
 ```
-python -c "import sqlite3;c=sqlite3.connect('apea_history.db');c.execute(\"delete from learned_facts where scope_key='kb-selftest.example'\");c.commit();print('cleaned')"
+python -c "import sqlite3;c=sqlite3.connect('ltmetrics_history.db');c.execute(\"delete from learned_facts where scope_key='kb-selftest.example'\");c.commit();print('cleaned')"
 ```

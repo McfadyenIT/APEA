@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, ".")
 
 FAILURES = []
-SRC = io.open("apea/agents/parameterization.py", encoding="utf-8").read()
+SRC = io.open("ltmetrics/agents/parameterization.py", encoding="utf-8").read()
 
 
 def check(name, cond, detail=""):

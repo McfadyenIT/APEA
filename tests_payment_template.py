@@ -1,8 +1,8 @@
 """Regression guard: the payment additional_data template must be filled in
 from the knowledge base, per gateway, and must never be locked.
 
-Run after any change to the payment picker in apea/server.py,
-apea/static/index.html, apea/agents/payment.py, or the token_field_by_method
+Run after any change to the payment picker in ltmetrics/server.py,
+ltmetrics/static/index.html, ltmetrics/agents/payment.py, or the token_field_by_method
 block in knowledge/rules/browser_patterns.yaml:
 
     ./.venv/bin/python tests_payment_template.py     # expect: FAILURES: 0
@@ -14,7 +14,7 @@ trap: the wrong key is accepted by the UI and only fails at the last step of a
 run. Worse, the field's own hint used to read `{"payment_token":"..."}`, which
 is not a key ANY gateway accepts.
 
-So APEA fills it in. But it must stay editable: a store may need an extra value
+So LT Metrics fills it in. But it must stay editable: a store may need an extra value
 (a 3-D Secure session id, an agreement id), and locking the field would make
 that case impossible.
 """
@@ -24,8 +24,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-import apea.agents.payment as P          # noqa: E402
-import apea.server as S                  # noqa: E402
+import ltmetrics.agents.payment as P          # noqa: E402
+import ltmetrics.server as S                  # noqa: E402
 
 fails = []
 
@@ -39,7 +39,7 @@ def check(label, got, want):
 
 
 def template_for(code):
-    """The template APEA offers for one payment method code."""
+    """The template LT Metrics offers for one payment method code."""
     orig = P.methods_from_recording
     P.methods_from_recording = lambda _f: [{"code": code, "kind": "hosted"}]
     try:
@@ -88,7 +88,7 @@ check("POST is not offered", "POST" in codes, False)
 check("GET is not offered", "GET" in codes, False)
 
 print("\nThe field is filled in, never locked")
-html = (ROOT / "apea" / "static" / "index.html").read_text(encoding="utf-8")
+html = (ROOT / "ltmetrics" / "static" / "index.html").read_text(encoding="utf-8")
 import re   # noqa: E402
 _tag = re.search(r"<input[^>]*id=\"ovPayAddl\"[^>]*>", html)
 check("the field exists", bool(_tag), True)
@@ -112,7 +112,7 @@ check("while still allowing a method the recording never used",
       'id="ovPayMethod" type="text"' in html, True)
 
 print("\nAlternatives to a card are named, and ranked by the KB")
-from apea.knowledge import KB   # noqa: E402
+from ltmetrics.knowledge import KB   # noqa: E402
 pref = (KB.platform_rules("magento") or {}).get("offline_payments_realistic") or []
 check("the KB ranks real-money methods", "netterms" in pref, True)
 check("bank transfer is offered", "wirepayment" in pref, True)
@@ -124,7 +124,7 @@ check("PayPal is correctly a hosted gateway, not an alternative to a card",
       P.classify_payment("paypal_express"), "hosted")
 
 check("the server sends the ranking to the UI",
-      "offline_preference" in (ROOT / "apea" / "server.py").read_text(encoding="utf-8"),
+      "offline_preference" in (ROOT / "ltmetrics" / "server.py").read_text(encoding="utf-8"),
       True)
 check("the UI ranks with it rather than hardcoding",
       "PAY_OFFLINE_PREF" in html, True)
@@ -140,9 +140,9 @@ sys.exit(1 if fails else 0)
 
 # --- appended: the auto-filled template must be one a run can honour ---------
 print()
-print("the template APEA fills in works without hand-editing")
+print("the template LT Metrics fills in works without hand-editing")
 import io as _io3
-_kb = _io3.open("apea/knowledge/rules/browser_patterns.yaml", encoding="utf-8").read()
+_kb = _io3.open("ltmetrics/knowledge/rules/browser_patterns.yaml", encoding="utf-8").read()
 check("the security code carries a default", "{{card_cvv|123}}" in _kb, True)
 check("the token deliberately does NOT", "{{payment_token|" not in _kb, True)
 check("the reason is recorded beside it",
@@ -151,7 +151,7 @@ check("the reason is recorded beside it",
 # --- appended: a per-row method still needs the card details -----------------
 print()
 print("{{payment_method}} still fills in the card details")
-_ui = _io3.open("apea/static/index.html", encoding="utf-8").read()
+_ui = _io3.open("ltmetrics/static/index.html", encoding="utf-8").read()
 _fn = _ui.split("function applyPayTemplate()")[1].split("\nfunction ")[0]
 check("a placeholder method falls back to the file's gateway",
       "code.indexOf('{{') > -1 && ACCOUNTS" in _fn, True)
