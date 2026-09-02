@@ -196,6 +196,18 @@
     font-size:12px;color:var(--mut)}
   #noiseChips b{color:var(--txt);font-weight:700}
   #liveLeft{font-weight:400;font-size:13px;color:var(--mut);margin-left:8px}
+  #liveSays{font-size:24px;font-weight:700;line-height:1.3;margin:2px 0 14px;
+    font-family:var(--head)}
+  #liveScale{display:flex;justify-content:space-between;font-family:var(--mono);
+    font-size:12px;color:var(--mut);margin:6px 0 16px}
+  /* 9a gives each tile a coloured top edge and a line saying whether the
+     number is good. A bare figure makes the reader do that work. */
+  #liveKpis .k,#resKpis .k{border-top:3px solid var(--line);position:relative}
+  #liveKpis .k.ok,#resKpis .k.ok{border-top-color:var(--ok)}
+  #liveKpis .k.warn,#resKpis .k.warn{border-top-color:var(--warn)}
+  #liveKpis .k.bad,#resKpis .k.bad{border-top-color:var(--bad)}
+  #liveKpis .k .sub,#resKpis .k .sub{font-size:11px;color:var(--mut);
+    margin-top:4px;line-height:1.4}
   @media(max-width:900px){#resultsGrid{grid-template-columns:1fr}}
   /* Inside the rail the cards are already framed by the rail itself. */
   #setupRail .card{border:none;border-bottom:1px solid var(--hair);
@@ -696,12 +708,14 @@
 
     <div class="card hidden" id="liveCard">
       <h2>4 · Live execution <span class="badge b-run" id="liveStatus">running</span>
-        <button class="btn ghost" id="btnStop" style="float:right;padding:6px 14px">⏹ Stop run</button>
+        <button class="btn ghost" id="btnStop" style="float:right;padding:6px 14px">⏹ Stop and see the result</button>
       </h2>
+      <p id="liveSays">Load test in progress</p>
       <p class="hint" id="livePhase"></p>
       <div id="liveBrowserTrack" style="display:none;margin:6px 0 2px;padding:9px 12px;border-radius:8px;
            border:1px solid var(--line);font-size:13px"></div>
       <div class="bar"><div id="liveBar"></div></div>
+      <div id="liveScale"></div>
       <div class="grid-k" id="liveKpis"></div>
       <div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:14px">
         <canvas id="liveChart" height="120"></canvas>
@@ -1390,6 +1404,9 @@ function splitIntoPanels(){
   // after the card reversed the sequence -- the engine log came out above the
   // chart it should follow.
   const tail = new Map();
+  // panel -> the card it came out of, collected while we still have it. Looking
+  // it up afterwards fails: the anchor has moved into the panel by then.
+  const bornFrom = new Map();
   for(const [anchorId, title] of Object.entries(PANEL_SPLITS)){
     const anchor = document.getElementById(anchorId);
     if(!anchor) continue;
@@ -1409,6 +1426,10 @@ function splitIntoPanels(){
     const panel = document.createElement('div');
     panel.className = 'card panel';
     panel.dataset.phase = card.dataset.phase || '1';
+    // Inherit visibility, not just phase. The results card is hidden until a
+    // run finishes; a panel that ignores that shows an empty box instead.
+    if(card.classList.contains('hidden')) panel.classList.add('hidden');
+    panel.dataset.source = anchorId;
     if(inherited){
       panel.appendChild(inherited);
       if(inherited.tagName === 'LABEL'){
@@ -1441,7 +1462,22 @@ function splitIntoPanels(){
     const after = tail.get(card) || card;
     card.parentElement.insertBefore(panel, after.nextElementSibling);
     tail.set(card, panel);
+    if(!bornFrom.has(card)) bornFrom.set(card, []);
+    bornFrom.get(card).push(panel);
   }
+
+  // Keep each panel's visibility tied to the card it came from, for the life
+  // of the page -- the app reveals the source card when a run ends, and the
+  // panels have to come with it.
+  bornFrom.forEach((panels, src)=>{
+    const mirror = ()=>{
+      const h = src.classList.contains('hidden');
+      panels.forEach(pn=> pn.classList.toggle('hidden', h));
+    };
+    new MutationObserver(mirror).observe(src, {attributes:true,
+                                               attributeFilter:['class']});
+    mirror();
+  });
 
   // The canvas gives the results verdict and its numbers a 1.5fr / 1fr split.
   const recs = document.getElementById('resRecs');
@@ -2930,17 +2966,64 @@ async function pollRun(){
   renderBrowserTrack(s.browser_track);
   $('#liveBar').style.width=((st==='completed')?100:(s.pct||0))+'%';
   renderTimeLeft(s, st);
-  const kpis=[
-    ['Elapsed', (s.elapsed_s||0)+'s'],['Users', Math.round(s.users||0)],
-    ['Requests', Math.round(s.total_requests||0)],['Failures', Math.round(s.total_failures||0)],
-    ['req/s', (s.rps||0).toFixed(1)],['p95', Math.round(s.p95||0)+'ms'],
+  // 9a says what is happening in a sentence before it says it in numbers.
+  const says = $('#liveSays');
+  if(says){
+    const u = Math.round(s.users || 0);
+    says.textContent = ['starting','running'].includes(st)
+      ? (u ? u + (u === 1 ? ' shopper is' : ' shoppers are')
+             + ' on the site right now.' : 'Starting the run…')
+      : (st === 'completed' ? 'The run has finished.'
+         : st ? 'The run ' + st + '.' : 'Load test in progress');
+  }
+
+  // The three labels 9a puts under the bar.
+  const scale = $('#liveScale');
+  if(scale){
+    const el = Math.round(s.elapsed_s || 0);
+    const tot = +s.duration_s || (s.pct > 0 ? Math.round(el * 100 / s.pct) : 0);
+    const mmss = x => x >= 60 ? Math.floor(x/60) + 'm ' + (x%60) + 's' : x + 's';
+    scale.innerHTML = '<span>elapsed ' + mmss(el) + '</span>'
+      + '<span>' + Math.round(s.pct || 0) + '% complete</span>'
+      + '<span>' + (tot ? mmss(tot) + ' total' : '') + '</span>';
+  }
+
+  // Every tile carries a second line saying whether its number is good, and a
+  // colour saying the same at a glance. "73" alone makes the reader work it out.
+  const gateP95 = +(($('#ovSlaP95') || {}).value) || 0;
+  const gateErr = +(($('#ovSlaErr') || {}).value) || 1;
+  const reqs = Math.round(s.total_requests || 0);
+  const fails = Math.round(s.total_failures || 0);
+  const errPct = reqs ? (100 * fails / reqs) : 0;
+  const p95 = Math.round(s.p95 || 0);
+  const elapsed = Math.round(s.elapsed_s || 0);
+  const total = +s.duration_s || (s.pct > 0 ? Math.round(elapsed * 100 / s.pct) : 0);
+  const leftM = total ? Math.max(0, Math.round((total - elapsed) / 60)) : 0;
+
+  const kpis = [
+    ['Elapsed', elapsed >= 60 ? Math.floor(elapsed/60)+'m '+(elapsed%60)+'s' : elapsed+'s',
+     leftM ? leftM + 'm remaining' : '', ''],
+    ['Users', Math.round(s.users || 0),
+     (($('#ovSpawn')||{}).value ? 'ramped at ' + $('#ovSpawn').value + '/s' : ''), ''],
+    ['Requests', reqs.toLocaleString(), (s.rps||0).toFixed(1) + ' / sec', ''],
+    ['Failures', fails,
+     reqs ? errPct.toFixed(1) + '% · ' + (errPct <= gateErr ? 'within gate' : 'over gate') : '',
+     reqs ? (errPct <= gateErr ? 'ok' : 'bad') : ''],
+    ['req/s', (s.rps||0).toFixed(1), '', ''],
+    ['p95', p95 ? p95.toLocaleString() + 'ms' : '0ms',
+     gateP95 ? (p95 <= gateP95 ? 'within the ' + gateP95.toLocaleString() + 'ms gate'
+                               : 'over the ' + gateP95.toLocaleString() + 'ms gate') : '',
+     gateP95 ? (p95 <= gateP95 ? 'ok' : 'bad') : ''],
   ];
   if(s.orders!==undefined||s.login_ok!==undefined){
-    kpis.push(['Orders', Math.round(s.orders||0)]);
-    kpis.push(['Login ✓/✗', (s.login_ok||0)+' / '+(s.login_fail||0)]);
+    kpis.push(['Orders', Math.round(s.orders||0), 'placed so far', '']);
+    kpis.push(['Logins', (s.login_ok||0)+' / '+(s.login_fail||0),
+               (s.login_fail ? s.login_fail + ' rejected' : 'all sessions authenticated'),
+               s.login_fail ? 'bad' : 'ok']);
   }
-  $('#liveKpis').innerHTML=kpis
-    .map(([l,v])=>`<div class="k"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+  $('#liveKpis').innerHTML = kpis.map(([l,v,sub,cls])=>
+    `<div class="k ${cls||''}"><div class="l">${l}</div><div class="v">${v}</div>`
+    + (sub ? `<div class="sub">${sub}</div>` : '') + `</div>`).join('');
   pushLive(s);
   if(s.log_tail && s.log_tail.length) $('#liveLog').textContent=s.log_tail.join('\n');
   // AI Auto-heal lives in its OWN section, separate from the run.
