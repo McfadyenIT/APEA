@@ -177,6 +177,20 @@
     padding:5px 8px}
   #stageTable table.inner tr:last-child td{border-bottom:none}
   #stageTable .bad{color:var(--bad);font-weight:700}
+  .rung{display:inline-flex;align-items:center;gap:6px;font-weight:700;
+    font-size:12px;white-space:nowrap}
+  .rung::before{content:"";width:10px;height:10px;border-radius:2px;
+    background:currentColor;flex:none}
+  .rung-Healthy{color:#5C607A}
+  .rung-Watch{color:#8E8931}
+  .rung-Strained{color:#B4551F}
+  .rung-Failing{color:#C91A12}
+  .rung-Critical{color:#8A120C}
+  #ladderKey{display:flex;flex-wrap:wrap;gap:16px;align-items:center;
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:10px 14px;margin:10px 0 14px;font-size:12px}
+  #ladderKey .lk{color:var(--mut);text-transform:uppercase;
+    letter-spacing:.08em;font-weight:700;font-size:11px}
   /* Long blocks open on demand. The canvas shows four call rows, not four
      hundred lines of recorded selectors. */
   details.quiet{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
@@ -753,6 +767,7 @@
         easiest way to misread a load test. Transaction timers are left out:
         one contains the calls inside it, so counting it would add the same
         milliseconds twice.</p>
+      <div id="ladderKey"></div>
       <div id="stageBar"></div>
       <div id="stageLegend"></div>
       <table id="stageTable"></table>
@@ -1213,6 +1228,26 @@ async function loadStages(runId){
   // stage COST; "Spans" is how long it was in play. With users running
   // concurrently these differ a lot, and reading one as the other is the
   // easiest way to misread a load test.
+  // The ladder key. A rung is a claim about the operator's system, so what it
+  // was measured against is on screen rather than in documentation.
+  const key = $('#ladderKey');
+  if(key){
+    const L = d.ladder || {};
+    const g = d.gate_ms || 0;
+    key.innerHTML = '<span class="lk">Ladder key</span>'
+      + [['Healthy','\u2264 ' + (L.healthy_pct||50) + '%'],
+         ['Watch','\u2264 ' + (L.watch_pct||80) + '%'],
+         ['Strained','\u2264 ' + (L.strained_pct||100) + '%'],
+         ['Failing','\u2264 ' + (L.failing_pct||150) + '%'],
+         ['Critical','above that, or any 5xx']]
+        .map(([n,r])=>'<span class="rung rung-' + n + '">' + n
+             + '</span><span style="color:var(--mut);margin-left:-10px">'
+             + _escHtml(r) + '</span>').join('')
+      + (g ? '<span style="color:var(--mut);margin-left:auto">of this run\u2019s '
+             + g.toLocaleString() + 'ms gate</span>' : '');
+    key.style.display = g ? '' : 'none';
+  }
+
   // Only shown when the run can actually answer it. A dash in a "users"
   // column reads as zero, which is a different claim from "not recorded".
   const funnel = !!d.funnel;
@@ -1221,8 +1256,8 @@ async function loadStages(runId){
     '<tr><th></th><th>Stage</th>'
     + (funnel ? '<th class="n">Users</th><th class="n">Stopped</th>' : '')
     + '<th class="n">Calls</th><th class="n">Time</th>'
-    + '<th class="n">Share</th><th class="n">Spans</th><th class="n">Average</th>'
-    + '<th class="n">Errors</th><th>Slowest call</th></tr>'
+    + '<th class="n">Share</th><th class="n">Spans</th><th class="n">p95</th>'
+    + '<th class="n">Errors</th><th>Health</th></tr>'
     + rows.map((s,i)=>
         '<tr class="stage-row' + (s === lead ? ' lead' : '') + '" data-i="' + i + '">'
         + '<td class="tw">+</td>'
@@ -1236,9 +1271,14 @@ async function loadStages(runId){
         + '<td class="n">' + (s.ms/1000).toFixed(1) + 's</td>'
         + '<td class="n">' + s.share + '%</td>'
         + '<td class="n">' + (s.span_s || 0).toFixed(1) + 's</td>'
-        + '<td class="n">' + Math.round(s.avg_ms) + 'ms</td>'
+        + '<td class="n">' + (s.p95 ? Math.round(s.p95).toLocaleString() + 'ms' : '—') + '</td>'
         + '<td class="n' + (s.errors ? ' bad' : '') + '">' + s.errors + '</td>'
-        + '<td class="muted">' + _escHtml(s.slowest_call || '') + '</td></tr>'
+        + '<td>' + (s.health
+            ? '<span class="rung rung-' + s.health + '">' + s.health + '</span>'
+              + (s.gate_pct != null
+                 ? '<span class="muted" style="margin-left:8px">' + s.gate_pct + '%</span>'
+                 : '')
+            : '<span class="muted">no gate set</span>') + '</td></tr>'
         + '<tr class="calls" data-for="' + i + '" hidden><td colspan="' + cols + '">'
         + '<table class="inner">'
         + (s.by_call || []).map(b=>
@@ -1264,6 +1304,15 @@ async function loadStages(runId){
   const bits = [];
   bits.push('<b>' + _escHtml(lead.stage) + '</b> takes ' + lead.share
             + '% of all time, at ' + Math.round(lead.avg_ms) + ' ms a call.');
+  // The worst rung is the finding. Say it rather than leaving it to be spotted
+  // in a column.
+  const RANK = ['Healthy','Watch','Strained','Failing','Critical'];
+  const worst = rows.reduce((a,b)=>
+    RANK.indexOf(b.health) > RANK.indexOf(a.health) ? b : a, rows[0]);
+  if(worst && RANK.indexOf(worst.health) > 1)
+    bits.push('<b>' + _escHtml(worst.stage) + '</b> is '
+              + _escHtml(worst.health.toLowerCase()) + ' at ' + worst.gate_pct
+              + '% of the gate.');
   bits.push(broke.length
     ? 'Failures in ' + broke.map(s=>_escHtml(s.stage)).join(', ') + '.'
     : 'Nothing failed.');

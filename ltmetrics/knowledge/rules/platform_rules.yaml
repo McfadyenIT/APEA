@@ -72,6 +72,25 @@ generic:
     "Place Order (REST)": "Order"
     "Place Order (replay)": "Order"
 
+  # HEALTH LADDER --------------------------------------------------------------
+  # When a stage stops being fine, as a share of the run's OWN p95 gate. Never
+  # absolute milliseconds: 800ms and 5,000ms are both somebody's real target,
+  # and a fixed threshold would call one of them wrong.
+  #
+  # Derived from the approved design's numbers against its 2,000ms gate --
+  # 15% and 31% read Healthy, 60% Watch, 84% Strained, 105% Failing -- so the
+  # rungs sit at half the gate, four fifths of it, and the gate itself.
+  #
+  # A stage returning 5xx is escalated to Critical whatever its latency says.
+  # Being slow and being broken are different problems and the ladder should
+  # not blur them.
+  health_ladder:
+    healthy_pct: 50
+    watch_pct: 80
+    strained_pct: 100
+    failing_pct: 150
+    server_error_is_critical: true
+
 magento:
   display_name: "Magento / Adobe Commerce"
   business_critical_paths:

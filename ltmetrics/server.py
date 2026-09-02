@@ -1615,6 +1615,51 @@ def run_status(run_id: str):
     return out
 
 
+_LADDER_DEFAULT = {"healthy_pct": 50, "watch_pct": 80, "strained_pct": 100,
+                   "failing_pct": 150, "server_error_is_critical": True}
+
+
+def _health_ladder(platform: str = "") -> dict:
+    """Thresholds from the KB, with the design's own values as the fallback."""
+    out = dict(_LADDER_DEFAULT)
+    try:
+        from .knowledge import KB
+        for block in ("generic", (platform or "").strip().lower()):
+            if not block:
+                continue
+            m = (KB.platform_rules(block) or {}).get("health_ladder")
+            if isinstance(m, dict):
+                out.update(m)
+    except Exception:
+        pass
+    return out
+
+
+def _rate(p95: float, gate: float, errors: int, server_errors: int,
+          ladder: dict) -> str:
+    """Where a stage sits on the ladder.
+
+    Latency sets the rung, as a share of the run's own gate. A 5xx overrides
+    it: a stage returning server errors is not merely slow, and calling a
+    broken stage "Strained" because it happens to be fast would be worse than
+    saying nothing.
+    """
+    if server_errors and ladder.get("server_error_is_critical", True):
+        return "Critical"
+    if not gate:
+        return "Failing" if errors else ""
+    pct = 100.0 * (p95 or 0) / gate
+    if pct <= ladder.get("healthy_pct", 50):
+        return "Failing" if errors else "Healthy"
+    if pct <= ladder.get("watch_pct", 80):
+        return "Failing" if errors else "Watch"
+    if pct <= ladder.get("strained_pct", 100):
+        return "Failing" if errors else "Strained"
+    if pct <= ladder.get("failing_pct", 150):
+        return "Failing"
+    return "Critical"
+
+
 def _calls_path(out_dir):
     """The call log for a run, whichever name it was written under.
 
@@ -1676,6 +1721,17 @@ def run_stages(run_id: str):
 
     order, agg, txn, unlabelled = [], {}, 0, 0
     seen_vu = set()
+
+    # The gate this run was judged against, from its own stored targets. Not
+    # the value currently in the setup form: a run made last week was measured
+    # against last week's target, and re-judging it against today's would
+    # quietly rewrite what the operator was told.
+    stored = db.get_run(run_id) or {}
+    targets = [float(e.get("sla_target") or 0)
+               for e in (stored.get("endpoints") or [])
+               if (e.get("sla_target") or 0)]
+    gate = max(targets) if targets else 0.0
+    ladder = _health_ladder(str(stored.get("platform") or ""))
     try:
         for ln in path.read_text(encoding="utf-8", errors="ignore").splitlines():
             ln = ln.strip()
@@ -1703,7 +1759,7 @@ def run_stages(run_id: str):
                 agg[stage] = {"stage": stage, "calls": 0, "ms": 0.0,
                               "errors": 0, "slowest": 0.0, "slowest_call": "",
                               "first_ts": None, "last_ts": None, "by_call": {},
-                              "users": set()}
+                              "users": set(), "server_errors": 0, "times": []}
             vu = c.get("vu")
             if isinstance(vu, int) and vu > 0:
                 agg[stage]["users"].add(vu)
@@ -1738,6 +1794,16 @@ def run_stages(run_id: str):
                 b["errors"] += 1
             if ms > b["slowest"]:
                 b["slowest"] = ms
+
+            # A stage returning 5xx is broken, not slow. Tracked separately so
+            # the ladder can say so.
+            try:
+                code = int(c.get("status") or 0)
+            except Exception:
+                code = 0
+            if code >= 500:
+                a["server_errors"] += 1
+            a["times"].append(ms)
     except Exception:
         return {"stages": [], "total_ms": 0, "excluded_txn": 0}
 
@@ -1760,6 +1826,12 @@ def run_stages(run_id: str):
             b["slowest"] = round(b["slowest"], 1)
         a["by_call"] = calls
         a["users"] = len(a["users"])
+
+        # The stage's own p95, and where that puts it on the ladder.
+        times = sorted(a.pop("times", []))
+        a["p95"] = round(times[max(0, int(len(times) * 0.95) - 1)], 1) if times else 0
+        a["health"] = _rate(a["p95"], gate, a["errors"], a["server_errors"], ladder)
+        a["gate_pct"] = round(100.0 * a["p95"] / gate, 1) if gate else None
         a.pop("first_ts", None)
         a.pop("last_ts", None)
         stages.append(a)
@@ -1778,7 +1850,8 @@ def run_stages(run_id: str):
             a["dropped"] = None
     return {"stages": stages, "total_ms": round(total, 1),
             "excluded_txn": txn, "unlabelled": unlabelled,
-            "users": len(seen_vu), "funnel": funnel_ok}
+            "users": len(seen_vu), "funnel": funnel_ok,
+            "gate_ms": round(gate, 1), "ladder": ladder}
 
 
 @app.get("/api/run/{run_id}/calls")
