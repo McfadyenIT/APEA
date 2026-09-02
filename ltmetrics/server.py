@@ -1652,6 +1652,12 @@ def run_stages(run_id: str):
 
     TXN rows are excluded: a transaction timer spans the requests inside it, so
     counting it here would add the same milliseconds twice.
+
+    What this deliberately does NOT return is a drop-off funnel -- how many
+    users reached each stage and where they stopped. Answering that needs to
+    know WHICH user made each call, and nothing in the log says. A funnel built
+    from call counts would look authoritative and be wrong, so the gap is left
+    open until a logged call carries a user identity.
     """
     out_dir = _run_out_dir(run_id)
     if not out_dir:
