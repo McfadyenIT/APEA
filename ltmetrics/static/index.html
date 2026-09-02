@@ -113,6 +113,13 @@
   .eyebrow i,.railEyebrow i{display:none}
   .ask{font-size:26px;font-weight:700;line-height:1.25;margin:0 0 4px;
     max-width:34ch;font-family:var(--head)}
+  #dataSteps{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0}
+  #dataSteps .st{border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;background:var(--panel)}
+  #dataSteps .st h3{font-size:14px;margin:0 0 8px;font-weight:700}
+  #dataSteps .st .cols{font-family:var(--mono);font-size:12px;color:var(--mut);
+    margin-bottom:10px;word-break:break-word}
+  @media(max-width:900px){#dataSteps{grid-template-columns:1fr}}
   #trafficPresets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
     margin:10px 0}
   #trafficPresets button{text-align:left;background:var(--panel);
@@ -490,7 +497,9 @@
     </div>
 
     <div class="card hidden" id="discoveryCard">
-      <h2>2 · Recording analysis</h2>
+      <!-- 9a has no "Recording analysis" heading. The eyebrow above already
+           says what the reader is looking at; repeating it in the tool's own
+           vocabulary is what made this card read as a different product. -->
       <details class="quiet"><summary>Recording details<span class="n"
         id="discOne"></span></summary>
         <div class="grid-k" id="discKpis"></div>
@@ -537,20 +546,33 @@
         <div id="anGroups"></div>
       </details>
       <div id="anNotes"></div>
-      <div class="btns">
-        <button class="btn" id="btnSampleCsv">⬇ Download sample data CSV</button>
+
+      <div class="eyebrow" style="margin-top:22px">Test data</div>
+      <p class="hint" id="dataNeed">Some fields in the recording need real
+        values. Download the template, fill one row per virtual user, and
+        upload it back.</p>
+      <div id="dataSteps">
+        <div class="st">
+          <h3>1 · Get the template</h3>
+          <div class="cols" id="dataCols"></div>
+          <div class="btns" style="margin:0">
+            <button class="btn" id="btnSampleCsv">⬇ Download sample CSV</button>
+          </div>
+        </div>
+        <div class="st">
+          <h3>2 · Upload your data</h3>
+          <div class="cols" id="dataHave">nothing uploaded yet</div>
+          <input type="file" id="upData" accept=".csv">
+          <div class="muted" id="sumData"></div>
+        </div>
       </div>
-      <label style="margin-top:14px">Upload your filled data CSV
-        <span class="muted">— all the columns listed above (one row per virtual user)</span></label>
-      <input type="file" id="upData" accept=".csv">
-      <div class="muted" id="sumData"></div>
       <div id="validateOut"></div>
       <!-- "Before you run" sits with the validation it is about. It used to
            live far down the page, beside the run controls, so the file's
            problems and the file's verdict were nowhere near each other. -->
       <div id="readiness" style="margin-top:10px"></div>
-      <label style="margin-top:10px">User credentials CSV
-        <span class="muted">— optional if username/password are already in the data CSV</span></label>
+      <p class="hint" style="margin-top:12px">Optional — a separate credentials
+        CSV, if logins aren't in the data file.</p>
       <input type="file" id="upUsers" accept=".csv">
       <div class="muted" id="sumUsers"></div>
       <div class="btns">
@@ -2555,6 +2577,22 @@ function renderAnalysis(a){
     nFieldsA ? nFieldsA + ' fields need data' : '',
   ].filter(Boolean).join(' · ');
   const one = $('#discOne'); if(one) one.textContent = line;
+
+  // 9a names the columns the template will carry, and counts the fields that
+  // actually need a value: "Four fields in the recording need real values."
+  const names = [];
+  (a.groups || []).forEach(g => (g.fields || []).forEach(f => {
+    const n = f && (f.name || f.field || f.key);
+    if(n && names.indexOf(n) < 0) names.push(n);
+  }));
+  const cols = $('#dataCols');
+  if(cols) cols.textContent = names.length ? names.slice(0, 8).join(' · ')
+                                           : 'no fields need data';
+  const need = $('#dataNeed');
+  if(need && nFieldsA) need.textContent = nFieldsA + (nFieldsA === 1
+      ? ' field in the recording needs a real value. '
+      : ' fields in the recording need real values. ')
+    + 'Download the template, fill one row per virtual user, and upload it back.';
   const rl = $('#railRecording'); if(rl) rl.textContent = line;
 
   const j=a.journey||{};
