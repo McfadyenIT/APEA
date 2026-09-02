@@ -76,8 +76,9 @@ check("phases are announced to assistive tech",
       'role="tablist"' in UI and 'aria-selected' in UI)
 
 _tag = fn_body("tagPhases")
+# Section headings are eyebrows now, so the match widened with them.
 check("cards are matched on their own heading",
-      "querySelector('h2')" in _tag)
+      "querySelector('h2, .eyebrow')" in _tag)
 check("an unrecognised card falls back to phase 1 rather than vanishing",
       "let ph = '1'" in _tag)
 

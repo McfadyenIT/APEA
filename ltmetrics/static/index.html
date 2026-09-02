@@ -539,7 +539,7 @@
         <summary>Correlated values<span class="n" id="corrCount">found and handled for you</span></summary>
         <div id="anCorr"></div>
       </details>
-      <details class="quiet" open>
+      <details class="quiet">
         <summary>Fields that need real values<span class="n" id="fieldCount"></span></summary>
         <p class="hint">Download the template, fill one row per virtual user, and
           upload it back.</p>
@@ -778,10 +778,17 @@
     </div>
 
     <div class="card hidden" id="liveCard">
-      <h2>4 · Live execution <span class="badge b-run" id="liveStatus">running</span>
-        <button class="btn ghost" id="btnStop" style="float:right;padding:6px 14px">⏹ Stop and see the result</button>
-      </h2>
-      <p id="liveSays">Load test in progress</p>
+      <!-- 9a leads with the state and the time, then the sentence. The old
+           heading crammed the phase number, the badge, the stop button and the
+           remaining time onto one line, which is why it read as a run-on. -->
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="flex:1">
+          <div class="eyebrow" id="liveEyebrow">Running</div>
+          <h2 id="liveSays" style="font-size:24px;margin:2px 0 14px">Load test in progress</h2>
+        </div>
+        <button class="btn ghost" id="btnStop" style="padding:6px 14px">⏹ Stop and see the result</button>
+      </div>
+      <span class="badge b-run hidden" id="liveStatus">running</span>
       <p class="hint" id="livePhase"></p>
       <div id="liveBrowserTrack" style="display:none;margin:6px 0 2px;padding:9px 12px;border-radius:8px;
            border:1px solid var(--line);font-size:13px"></div>
@@ -822,7 +829,7 @@
     </div>
 
     <div class="card" id="stageCard">
-      <h2>Where the time went</h2>
+      <div class="eyebrow">Where the time went</div>
       <p class="hint">Every call in the run, grouped by the stage of the journey
         it belongs to. Stages appear in the order the run first reached them —
         whatever stages your recording actually has. Click a stage to see the
@@ -853,6 +860,7 @@
         <span class="muted" id="resRunId" style="font-weight:400;font-size:13px"></span></h2>
       <p id="resSays"></p>
       <div id="stageTiles"></div>
+      <div class="eyebrow" style="margin-top:18px">The numbers behind it</div>
       <div class="grid-k" id="resKpis"></div>
       <div class="btns">
         <button class="btn" id="btnReport">📊 Open full report</button>
@@ -860,13 +868,13 @@
         <button class="btn ghost" id="btnXlsx">⬇ Download Excel</button>
         <button class="btn ghost" onclick="saveScript(true)">💾 Save script</button>
       </div>
-      <h2 style="margin-top:22px">AI recommendations</h2>
+      <div class="eyebrow" style="margin-top:22px">AI recommendations</div>
       <div id="resRecs"></div>
-      <h2 style="margin-top:22px">Root cause &amp; trend</h2>
+      <div class="eyebrow" style="margin-top:22px">Root cause &amp; trend</div>
       <div class="rec" id="resRca"></div>
       <div class="rec" id="resTrend"></div>
       <div id="jiraWrap" class="hidden">
-        <h2 style="margin-top:22px">Jira ticket (SLA failed)</h2>
+        <div class="eyebrow" style="margin-top:22px">Jira ticket (SLA failed)</div>
         <pre class="code" id="jiraTxt"></pre>
       </div>
     </div>
@@ -1509,7 +1517,7 @@ function tagPhases(){
     // A panel split out of another card already knows its phase: it inherited
     // it. Re-deriving from the heading would send "Engine log" to phase 1.
     if(c.classList.contains('panel')) return;
-    const h = c.querySelector('h2');
+    const h = c.querySelector('h2, .eyebrow');
     const t = (h ? h.textContent : '').trim();
     let ph = '1';
     for(const [re, n] of PHASE_RULES){ if(re.test(t)){ ph = n; break; } }
@@ -1577,7 +1585,7 @@ function buildSetupRail(){
 
   [...main.children].forEach(c=>{
     if(!c.classList || !c.classList.contains('card')) return;
-    const h = (c.querySelector('h2') || {}).textContent || '';
+    const h = (c.querySelector('h2, .eyebrow') || {}).textContent || '';
     if(RAIL_CARDS.some(re => re.test(h))) body.appendChild(c);
   });
 
@@ -1630,7 +1638,7 @@ function splitIntoPanels(){
     // A heading immediately above it already names this panel; take it rather
     // than adding a second one.
     let head = start.previousElementSibling;
-    const inherited = head && /^(H2|LABEL)$/.test(head.tagName) ? head : null;
+    const inherited = head && /^(H2|LABEL|DIV)$/.test(head.tagName) && (head.tagName !== 'DIV' || head.classList.contains('eyebrow')) ? head : null;
 
     const panel = document.createElement('div');
     panel.className = 'card panel';
@@ -1642,13 +1650,15 @@ function splitIntoPanels(){
     if(inherited){
       panel.appendChild(inherited);
       if(inherited.tagName === 'LABEL'){
-        const h = document.createElement('h2');
+        const h = document.createElement('div');
+        h.className = 'eyebrow';
         h.textContent = title;
         panel.insertBefore(h, inherited);
       }
     }else if(!(start.firstElementChild
-               && start.firstElementChild.tagName === 'H2')){
-      const h = document.createElement('h2');
+               && (start.firstElementChild.tagName === 'H2' || start.firstElementChild.classList.contains('eyebrow')))){
+        const h = document.createElement('div');
+      h.className = 'eyebrow';
       h.textContent = title;
       panel.appendChild(h);
     }
@@ -1659,6 +1669,10 @@ function splitIntoPanels(){
     while(node){
       const next = node.nextElementSibling;
       if(node !== start){
+        // An eyebrow opens the next section, and it sits BEFORE that section's
+        // anchor -- so stopping only at the anchor swept the heading in here
+        // and left the next panel to invent a duplicate.
+        if(node.classList && node.classList.contains('eyebrow')) break;
         const opens = [...stop].some(id=>{
           const el = document.getElementById(id);
           return el && (node === el || node.contains(el));
@@ -1746,6 +1760,8 @@ document.querySelectorAll('#phases button').forEach(b=>{
 // card merely being visible is not news: only the moment `hidden` goes away
 // counts, so the previous state is remembered per card.
 let PHASE_MUTING = false;
+// True between pressing Start and the results arriving.
+let RUN_IN_FLIGHT = false;
 function watchPhaseReveals(){
   const wasHidden = new WeakMap();
   const cards = document.querySelectorAll('#tab-new .card[data-phase]');
@@ -1753,6 +1769,9 @@ function watchPhaseReveals(){
 
   const obs = new MutationObserver(ms=>{
     if(PHASE_MUTING) return;
+    // A run drives its own phase: it knows the order, and the poll reveals
+    // cards from several phases while it works.
+    if(RUN_IN_FLIGHT) return;
     for(const m of ms){
       const c = m.target;
       if(!(c instanceof Element) || !c.dataset || !c.dataset.phase) continue;
@@ -3076,6 +3095,8 @@ $('#btnRun').onclick = async ()=>{
     currentRun = res.run_id;
     showReview(res);
     $('#liveCard').classList.remove('hidden');
+    RUN_IN_FLIGHT = true;
+    if(typeof showPhase === 'function') showPhase('2');   // watch it run
     $('#resultCard').classList.add('hidden');
     $('#healCard').classList.add('hidden'); $('#healBody').innerHTML='';
     $('#timelineCard').classList.add('hidden'); $('#timelineBody').innerHTML='';
@@ -3225,8 +3246,19 @@ async function pollRun(){
   $('#livePhase').textContent=(s.phase||'')+(s.error?(' — '+s.error):'');
   renderBrowserTrack(s.browser_track);
   $('#liveBar').style.width=((st==='completed')?100:(s.pct||0))+'%';
-  renderTimeLeft(s, st);
   renderLiveJourney(st);
+
+  // 9a's eyebrow: the state, then how much longer. One line, one marker.
+  const eb = $('#liveEyebrow');
+  if(eb){
+    const el = Math.round(s.elapsed_s || 0);
+    const tot = +s.duration_s || (s.pct > 0 ? Math.round(el * 100 / s.pct) : 0);
+    const left = tot ? Math.max(0, Math.round((tot - el) / 60)) : 0;
+    eb.textContent = ['starting','running'].includes(st)
+      ? (left ? 'Running · ' + left + ' minute' + (left === 1 ? '' : 's') + ' left'
+              : 'Running · finishing')
+      : (st || 'run');
+  }
   // 9a says what is happening in a sentence before it says it in numbers.
   const says = $('#liveSays');
   if(says){
@@ -3446,6 +3478,8 @@ async function runSavedConfigured(){
     $('#healCard').classList.add('hidden'); $('#healBody').innerHTML='';
     $('#timelineCard').classList.add('hidden'); $('#timelineBody').innerHTML='';
     $('#liveCard').classList.remove('hidden');
+    RUN_IN_FLIGHT = true;
+    if(typeof showPhase === 'function') showPhase('2');   // watch it run
     startPolling();
     $('#liveCard').scrollIntoView({behavior:'smooth'});
   }catch(e){ alert('Run failed: '+e.message); }
@@ -3508,6 +3542,9 @@ function renderTimeline(src){
 
 function showResults(a, s){
   $('#resultCard').classList.remove('hidden');
+  // The run is over; the operator wants the verdict, not the live view.
+  RUN_IN_FLIGHT = false;
+  if(typeof showPhase === 'function') showPhase('3');
   // Phases 3 and 4 both read the call log, which is complete only once the run
   // ends. One fetch feeds both.
   if(currentRun) loadStages(currentRun);

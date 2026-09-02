@@ -86,7 +86,13 @@ check("not stacked against the source card",
 
 print()
 print("a heading a block already carried is reused, not duplicated")
-check("an adjacent h2 or label is adopted", "/^(H2|LABEL)$/" in _split)
+# Headings became eyebrows, so the adopt test widened with them. The point is
+# unchanged: a block that already has a heading does not get a second one.
+check("an adjacent heading or label is adopted", "/^(H2|LABEL|DIV)$/" in _split)
+check("and only an eyebrow counts among divs",
+      "classList.contains('eyebrow')" in _split)
+check("a panel stops at the next section's heading",
+      "node.classList.contains('eyebrow')) break" in _split)
 check("a block with its own h2 gets no second one",
       "start.firstElementChild.tagName === 'H2'" in _split)
 
