@@ -394,12 +394,13 @@
            collapsed browser-track panel where nobody found it. -->
       <div id="paymentStrategy" style="margin-top:12px"></div>
       <div class="chips" id="discTech" style="display:none"></div>
-      <label style="margin-top:14px">Calls going into the script
-        <span class="muted">— LT Metrics auto-selected the real API &amp; REST calls; untick any you don't want in the load test</span></label>
+      <label style="margin-top:14px">What we kept from the recording
+        <span class="muted" id="keptCount"></span></label>
       <div class="callTools">
+        <span class="muted" style="margin-right:6px">Filter the noise</span>
+        <button class="btn ghost" type="button" id="callApiOnly">Only REST &amp; API</button>
         <button class="btn ghost" type="button" id="callAll">Select all</button>
         <button class="btn ghost" type="button" id="callNone">Select none</button>
-        <button class="btn ghost" type="button" id="callApiOnly">Only REST + API</button>
         <span class="muted" id="callCount"></span>
       </div>
       <div class="callList" id="anCalls"></div>
@@ -407,13 +408,13 @@
       <div id="noiseChips"></div>
       <div id="anDropped"></div>
       <label style="margin-top:12px">Recorded browser actions
-        <span class="muted">— every click/type/wait captured from Selenium, for reference</span></label>
+        <span class="muted">— every click, keystroke and wait, for reference</span></label>
       <div id="anUiSteps"></div>
-      <label style="margin-top:12px">Auto-correlated dynamic values
-        <span class="muted">— handled for you, no input needed</span></label>
+      <label style="margin-top:12px">Correlated values
+        <span class="muted">— found and handled for you. Nothing to do.</span></label>
       <div id="anCorr"></div>
-      <label style="margin-top:12px">Fields to parameterize — upload these values
-        <span class="muted">— "typed in browser" / "submitted request" shows where each value came from</span></label>
+      <label style="margin-top:12px">Fields that need real values
+        <span class="muted">— download the template, fill one row per virtual user, and upload it back</span></label>
       <div id="anGroups"></div>
       <div id="anNotes"></div>
       <div class="btns">
@@ -462,11 +463,10 @@
         <div id="planTypes" style="margin-top:10px"></div>
       </details>
 
-      <label style="margin-top:4px">What your recording does, and how often to repeat it</label>
-      <p class="hint" style="margin:2px 0 8px">Each step below is a transaction from your recording.
-        The request count is fixed — it is what the browser actually sent. The slider sets how often
-        that step runs. The two multiply, so a big step at a low percentage can still outweigh a
-        small step at a high one.</p>
+      <label style="margin-top:4px">The test plan</label>
+      <p class="hint" style="margin:2px 0 8px">How much of the traffic goes to each part of the
+        journey. 100% means every virtual user walks that group every iteration. The request count
+        beside each one is fixed — it is what the browser actually sent — so the two multiply.</p>
       <div id="anThroughput"><p class="muted">Analyze a recording (Section 1) to see its transaction groups.</p></div>
 
       <label>Test type</label>
@@ -1707,6 +1707,14 @@ function renderCallSelector(calls, dropped){
     }).join('');
   }
   document.querySelectorAll('#anCalls .callChk').forEach(el=> el.onchange=updateCallCount);
+
+  // The canvas states both numbers next to the heading rather than making the
+  // reader open a collapsible to find the second one.
+  const kept = $('#keptCount');
+  if(kept) kept.textContent = calls.length
+    ? '— ' + calls.length + ' call' + (calls.length === 1 ? '' : 's')
+      + (dropped.length ? ' · ' + dropped.length + ' dropped as noise' : '')
+    : '';
   // What KIND of thing was dropped. Grouped from the path and the filter's own
   // reason -- nothing here is estimated, and a category with nothing in it is
   // not shown rather than shown as zero.
@@ -1729,12 +1737,19 @@ function renderCallSelector(calls, dropped){
                    'CORS preflight','Other'];
     chips.innerHTML = order.filter(k=>buckets[k])
       .map(k=>'<span>' + _escHtml(k) + ' <b>' + buckets[k] + '</b></span>').join('');
+    // The canvas closes this block with one sentence. Its other sentence --
+    // "Colour is how each call behaved last run" -- is left out: nothing
+    // colours these rows by a previous run, and describing a colour that is
+    // not there sends the reader looking for it.
+    if(dropped.length) chips.innerHTML +=
+      '<span style="border:none;padding-left:0">Images, fonts and trackers were'
+      + ' dropped automatically.</span>';
   }
 
   const nd = $('#anDropped');
   if(nd){
     nd.innerHTML = dropped.length
-      ? `<details style="margin-top:10px"><summary>Filtered out as noise — ${dropped.length} request${dropped.length==1?'':'s'} (static assets, page shells, trackers — not load-tested)</summary>`
+      ? `<details style="margin-top:10px"><summary>See the ${dropped.length} dropped request${dropped.length==1?'':'s'}</summary>`
         + '<div class="callList" style="margin-top:8px">'
         + dropped.map(d=>`<div class="noiseItem"><span class="m">${_escHtml(d.method||'GET')}</span><span class="p">${_escHtml(d.path||'')}</span><span>${_escHtml(d.reason||'')}</span></div>`).join('')
         + '</div></details>'

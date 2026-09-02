@@ -46,7 +46,7 @@ def fn_body(name):
 
 def label_block():
     """The <label> for the panel, and the markup up to the panel itself."""
-    i = UI.index("What your recording does")
+    i = UI.index("The test plan")
     j = UI.index('<div id="anThroughput"', i)
     return UI[UI.rindex("<label", 0, i + 1):j]
 
