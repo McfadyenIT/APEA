@@ -123,5 +123,27 @@ check("something other than the id has to say it is an order",
       "if not confirms:" in _GEN and "confirms = (any(s in u" in _GEN)
 
 print()
+print("a page placeholder is not a captured value")
+# Amneal's add-to-cart was rejected with "Selected contract is not valid."
+# Every contract field was correct; uenc went out as %2525uenc%2525. Magento
+# renders cart links containing a literal /uenc/%25uenc%25/ for its own
+# JavaScript to fill in, and the extractor captured that marker and injected
+# it downstream, overwriting the real value the recording held.
+exec(_re.search(r"^_PLACEHOLDER_RE = .+$", _GEN, _re.M).group(0), _ns)
+exec(_re.search(r"^def _is_placeholder.*?(?=^def |^_[A-Z])", _GEN,
+                _re.M | _re.S).group(0), _ns)
+check("Magento's own uenc marker is recognised",
+      _ns["_is_placeholder"]("%25uenc%25"))
+check("so is the undecoded form", _ns["_is_placeholder"]("%uenc%"))
+check("and a templating marker", _ns["_is_placeholder"]("${uenc}"))
+check("a real uenc is not a placeholder",
+      not _ns["_is_placeholder"]("aHR0cHM6Ly9tY3N0YWdpbmcuYW1uZWFsLmNvbQ"))
+check("nor a form key", not _ns["_is_placeholder"]("MX3ZhFaJ4MTpGWzC"))
+check("the capture skips it rather than storing it",
+      "if m and _is_placeholder(m.group(1)):" in _GEN)
+check("and says so, instead of failing silently",
+      "keeping the recorded value" in _GEN)
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

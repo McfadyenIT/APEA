@@ -1818,6 +1818,17 @@ def _is_real_id(v) -> bool:
     return str(v or "").strip().lower() not in _NOT_AN_ID
 
 
+# A page can carry a marker where a value will go. Magento writes
+# /uenc/%25uenc%25/ into cart links for its own JavaScript to replace, and a
+# correlation extractor cannot tell that from a real capture without looking.
+_PLACEHOLDER_RE = re.compile(r"^(%25|%|\$\{|\{\{|__)[A-Za-z0-9_]+(%25|%|\}|\}\}|__)$")
+
+
+def _is_placeholder(v) -> bool:
+    v = str(v or "").strip()
+    return bool(v) and bool(_PLACEHOLDER_RE.match(v))
+
+
 def _extract_order_id(txt):
     """Pull a real order/quote id from a place-order or quote-submit response.
 
@@ -3158,7 +3169,14 @@ __BROWSE_TASKS__
 
     def _capture(self, text):
         """JMeter-style extractor: pull correlation values out of a response into
-        self._vars using the configured regexes (first match wins per variable)."""
+        self._vars using the configured regexes (first match wins per variable).
+
+        A match that is itself a template placeholder is skipped. Magento
+        renders cart-add links with /uenc/%25uenc%25/ in them for its own
+        JavaScript to fill in; capturing that and injecting it downstream sent
+        uenc=%2525uenc%2525 and the store answered "Selected contract is not
+        valid." The recorded value is kept instead, which is a real one.
+        """
         if not (_CORRELATIONS and text):
             return
         for c in _CORRELATIONS:
@@ -3167,6 +3185,11 @@ __BROWSE_TASKS__
                     m = re.search(pat, text)
                 except Exception:
                     continue
+                if m and _is_placeholder(m.group(1)):
+                    _clog_annotate("%s looked like a placeholder in the page "
+                                   "(%s) — keeping the recorded value"
+                                   % (c["name"], m.group(1)[:40]))
+                    continue           # keep looking; a later pattern may be real
                 if m:
                     self._vars[c["name"]] = m.group(1)
                     break
