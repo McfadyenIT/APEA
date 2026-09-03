@@ -110,13 +110,96 @@ def merge_into_discovery(discovery: dict, rec: dict) -> dict:
     return discovery
 
 
+# What a call DOES, read from its path. The order matters and is the order the
+# journey has always used: "cart/add" is an Add to Cart before "checkout/cart"
+# is a View Cart, and both before the catch-all "/checkout".
+#
+# Each stage also says what it proves happened, so the journey can still name
+# itself ("Checkout", "Quote Submission") from the same pass.
+_STAGE_RULES = (
+    ("Login",               ("account/login", "loginpost"),                     ""),
+    ("Search",              ("catalogsearch", "q=", "/search"),                 ""),
+    ("Product View",        ("/buy/", "/product/", "catalog/product/view"),     ""),
+    ("Add to Cart",         ("cart/add", "carts/mine/items", "add-to-cart",
+                             "add_to_cart"),                                    "cart"),
+    ("View Cart",           ("checkout/cart",),                                 "cart"),
+    ("Quote",               ("negotiable", "requestforquote", "/rfq",
+                             "quote/save", "quotes/mine"),                      "quote"),
+    ("Shipping",            ("estimate-shipping", "shipping-information",
+                             "shipping-method"),                                "checkout"),
+    ("Payment / Place Order", ("payment-information", "set-payment",
+                               "secureaccept", "placeorder", "place-order"),    "order"),
+    ("Order Confirmation",  ("onepage/success", "checkout/success",
+                             "order-received"),                                 "order"),
+    ("Checkout",            ("/checkout",),                                     "checkout"),
+)
+
+
+def stage_of_step(step) -> tuple:
+    """(stage name, what it proves) for one recorded request, or ("", "").
+
+    The single place a URL is turned into a business step. Two callers rely on
+    it -- the recorded journey and the traffic groups -- and they must agree.
+    """
+    p = ((step or {}).get("path") or "").lower()
+    if (step or {}).get("login") or p.endswith("/login"):
+        return "Login", ""
+    for name, needles, proves in _STAGE_RULES:
+        if any(n in p for n in needles):
+            return name, proves
+    return "", ""
+
+
+def _is_useful_group_name(name: str) -> bool:
+    """A group name earns its place by meaning something to a reader.
+
+    Recorders that do not label transactions fall back to the URL, and one that
+    labels nothing at all leaves a single wrapper around the whole session. In
+    both cases the name says nothing about what the step does.
+    """
+    n = (name or "").strip()
+    if not n:
+        return False
+    if "://" in n or n.startswith(("http", "/")) or n.count("/") >= 2:
+        return False                       # it is a URL, not a business step
+    return n.lower() not in {"test", "tests", "scenario", "recording", "session",
+                             "thread group", "default", "untitled", "flow"}
+
+
 def api_call_groups(flow: list) -> list:
-    """Ordered business groups (JMeter Throughput-Controller style) recovered from
-    the recording's `transaction:` wrappers, with the request count per group.
-    Returns [{"name", "count"}] in first-seen order; ungrouped steps are omitted."""
+    """Ordered business groups (JMeter Throughput-Controller style), with the
+    request count per group. Returns [{"name", "count", "derived"}] in
+    first-seen order; steps that belong to no group are omitted.
+
+    Taken from the recording's own `transaction:` wrappers when those say
+    something. When they do not -- a single wrapper named "Test", or labels that
+    are just URLs -- the group is worked out from what each call does, so the
+    panel offers the real steps of the journey instead of one slider for
+    everything.
+    """
+    recorded = _count_groups((s.get("group") or "").strip() for s in (flow or []))
+    useful = [g for g in recorded if _is_useful_group_name(g["name"])]
+    if len(useful) >= 2:
+        return [dict(g, derived=False) for g in recorded]
+
+    derived = _count_groups(stage_of_step(s)[0] or _OTHER for s in (flow or []))
+    named = [g for g in derived if g["name"] != _OTHER]
+    if not named:
+        # Nothing recognisable either way: better one honest group than none.
+        return [dict(g, derived=False) for g in recorded]
+    # _OTHER last: it is the remainder, not a step of the journey.
+    rest = [g for g in derived if g["name"] == _OTHER]
+    return [dict(g, derived=True) for g in named + rest]
+
+
+# Everything the rules cannot name. Named plainly, and counted, so the panel
+# adds up to the journey rather than quietly showing a fraction of it.
+_OTHER = "Other steps"
+
+
+def _count_groups(names) -> list:
     order, counts = [], {}
-    for s in (flow or []):
-        g = (s.get("group") or "").strip()
+    for g in names:
         if not g:
             continue
         if g not in counts:
@@ -137,30 +220,16 @@ def _derive_journey(flow: list) -> tuple:
 
     has_order = has_quote = has_cart = has_checkout = False
     for s in flow:
-        p = (s.get("path") or "").lower()
-        if s.get("login") or "account/login" in p or "loginpost" in p or p.endswith("/login"):
-            add("Login")
-        elif "catalogsearch" in p or "q=" in p or "/search" in p:
-            add("Search")
-        elif "/buy/" in p or "/product/" in p or "catalog/product/view" in p:
-            add("Product View")
-        elif ("cart/add" in p or "carts/mine/items" in p or "add-to-cart" in p
-              or "add_to_cart" in p):
-            add("Add to Cart"); has_cart = True
-        elif "checkout/cart" in p:
-            add("View Cart"); has_cart = True
-        elif ("negotiable" in p or "requestforquote" in p or "/rfq" in p
-              or "quote/save" in p or "quotes/mine" in p):
-            add("Quote"); has_quote = True
-        elif "estimate-shipping" in p or "shipping-information" in p or "shipping-method" in p:
-            add("Shipping"); has_checkout = True
-        elif ("payment-information" in p or "set-payment" in p or "secureaccept" in p
-              or "placeorder" in p or "place-order" in p):
-            add("Payment / Place Order"); has_order = True
-        elif "onepage/success" in p or "checkout/success" in p or "order-received" in p:
-            add("Order Confirmation"); has_order = True
-        elif "/checkout" in p:
-            add("Checkout"); has_checkout = True
+        # Same classifier the traffic groups use, so the journey and the panel
+        # can never name the same call two different things.
+        stage, proves = stage_of_step(s)
+        if not stage:
+            continue
+        add(stage)
+        has_cart = has_cart or proves == "cart"
+        has_quote = has_quote or proves == "quote"
+        has_checkout = has_checkout or proves == "checkout"
+        has_order = has_order or proves == "order"
     if not milestones:
         milestones = ["Recorded steps"]
     if has_quote:

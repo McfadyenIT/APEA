@@ -616,6 +616,7 @@
       <p class="hint" style="margin:2px 0 8px">How much of the traffic goes to each part of the
         journey. 100% means every virtual user walks that group every iteration. The request count
         beside each one is fixed — it is what the browser actually sent — so the two multiply.</p>
+      <p class="hint" id="thrSource" style="margin:2px 0 8px;display:none"></p>
       <div id="anThroughput"><p class="muted">Analyze a recording (Section 1) to see its transaction groups.</p></div>
 
       <label>Test type</label>
@@ -2736,6 +2737,23 @@ function renderAnalysis(a){
   const ag = a.api_groups || [];
   _agNames = ag.map(g=>g.name);
   window._agCounts = ag;
+  // A recording that names its transactions needs no explanation. One that
+  // does not gets its groups worked out from what each call does, and the
+  // reader should be told that rather than left wondering.
+  const src = $('#thrSource');
+  if(src){
+    const derived = ag.length && ag[0].derived;
+    const other = ag.find(g=>g.name === 'Other steps');
+    src.style.display = derived ? '' : 'none';
+    src.textContent = derived
+      ? ('This recording did not name its steps, so these were worked out from '
+         + 'what each call does.'
+         + (other ? ' ' + other.count + ' call' + (other.count===1?'':'s')
+                  + ' could not be matched to a step and are grouped as “Other '
+                  + 'steps” — mostly site-wide requests and endpoints specific '
+                  + 'to this store.' : ''))
+      : '';
+  }
   $('#anThroughput').innerHTML = ag.length
     ? ag.map((g,i)=>{ apiThroughput[g.name]=100; return `
         <div class="rec" style="display:flex;align-items:center;gap:10px">

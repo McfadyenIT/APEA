@@ -27,6 +27,9 @@ UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 
 FAILURES = []
 
+_FD_SRC = io.open("ltmetrics/agents/flow_discovery.py",
+                  encoding="utf-8").read()
+
 
 def check(name, cond, detail=""):
     print("  %-60s %s%s" % (name[:60], "ok" if cond else "FAIL",
@@ -131,6 +134,69 @@ check("crediting both reasons: the ticked calls and correlation",
       "ticked" in _dl and "correlates" in _dl)
 check("the misleading phrasing is gone",
       "on average per iteration" not in UI)
+
+print()
+print("a recording that names nothing still gets real groups")
+# Amneal's recorder wrapped all 195 requests in one transaction it called
+# "Test" and labelled every nested request with its own URL, so the panel
+# offered a single meaningless slider. There was nothing to expand into: the
+# stages had to come from what each call does.
+import sys as _sys
+_sys.path.insert(0, ".")
+from ltmetrics.agents import flow_discovery as _fd
+
+
+def _flow(*paths):
+    return [{"path": p} for p in paths]
+
+
+_AMNEAL = _flow(
+    "/amnealajaxlogin/account/login",
+    "/buy/product/429",
+    "/rest/default/V1/carts/mine/shipping-information",
+    "/rest/default/V1/carts/mine/payment-information",
+    "/customer/section/load/",
+    "/amnealcustomer/addressSelection/popupData",
+)
+_g = _fd.api_call_groups(_AMNEAL)
+_names = [x["name"] for x in _g]
+check("one useless wrapper is not accepted as a group",
+      not _fd._is_useful_group_name("Test"))
+check("nor a label that is really a URL",
+      not _fd._is_useful_group_name("https://shop.example.com/customer/section/load/"))
+check("the stages are recovered from the calls",
+      _names[:4] == ["Login", "Product View", "Shipping", "Payment / Place Order"])
+check("and it is marked as worked out, not recorded",
+      all(x["derived"] for x in _g))
+check("every step is accounted for",
+      sum(x["count"] for x in _g) == len(_AMNEAL))
+check("what could not be named is said plainly, and last",
+      _names[-1] == "Other steps" and _g[-1]["count"] == 2)
+
+print()
+print("a recording that DOES name its steps keeps its own names")
+_RADWELL = [{"path": "/customer/account/loginPost/", "group": "Login"},
+            {"path": "/checkout/cart/add/", "group": "Add to cart"},
+            {"path": "/rest/V1/carts/mine/payment-information", "group": "Checkout"}]
+_r = _fd.api_call_groups(_RADWELL)
+check("its own transaction names win",
+      [x["name"] for x in _r] == ["Login", "Add to cart", "Checkout"])
+check("nothing is marked as worked out", not any(x["derived"] for x in _r))
+check("and no Other steps bucket appears",
+      not any(x["name"] == "Other steps" for x in _r))
+
+print()
+print("the journey and the traffic panel share one classifier")
+# They used to be two copies of the same if/elif chain, free to drift apart and
+# name the same call two different things.
+check("the journey asks the classifier", "stage_of_step(s)" in _FD_SRC)
+check("so do the groups", "stage_of_step(s)[0]" in _FD_SRC)
+check("and the rules live in exactly one place",
+      _FD_SRC.count("catalogsearch") == 1)
+_name, _ms = _fd._derive_journey(_AMNEAL)
+check("the journey still names itself from the same pass", _name == "Checkout")
+check("and lists the stages it saw",
+      _ms == ["Login", "Product View", "Shipping", "Payment / Place Order"])
 
 print()
 print("FAILURES: %d" % len(FAILURES))
