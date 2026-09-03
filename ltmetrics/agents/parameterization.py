@@ -84,10 +84,32 @@ def _is_fill_placeholder(v) -> bool:
     return str(v or "").strip().startswith(_FILL_SENTINEL)
 
 
+# Characters that belong to the syntax carrying a value, not to the value. A
+# GraphQL body reached a sample CSV as the search keyword because nothing here
+# asked the question. Parentheses are absent on purpose: a recorded telephone
+# number is "+1 (354) 643-6356".
+_NOT_A_VALUE = set('{}[]<>"\\')
+
+
+def _looks_like_a_value(s: str) -> bool:
+    """Is this something a person would type into a field, or a piece of the
+    request it was captured from?"""
+    if not s:
+        return False
+    if any(c in _NOT_A_VALUE for c in s):
+        return False
+    return "  " not in s          # runs of whitespace mean formatted source
+
+
 def _clean_sample(v) -> str:
-    """A recorded value trimmed to a CSV-friendly single-line sample."""
+    """A recorded value trimmed to a CSV-friendly single-line sample.
+
+    Returns "" for anything that is not a value: an empty cell is already how
+    this tool says the recording did not supply one, and a required column then
+    shows its <<FILL: ...>> marker rather than a plausible-looking blob.
+    """
     s = "" if v is None else str(v).replace("\r", " ").replace("\n", " ").strip()
-    return s[:80]
+    return s[:80] if _looks_like_a_value(s) else ""
 
 # Values that are DYNAMIC (server-issued) and must be correlated, not parameterized.
 _CORRELATION_KEYS = [

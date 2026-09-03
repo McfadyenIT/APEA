@@ -64,5 +64,26 @@ print("the existing sku guarantee is untouched")
 check("sku is still always offered", 'if "sku" not in columns:' in SRC)
 
 print()
+print("a sample value has to be a value")
+# The Amneal sample CSV carried a GraphQL query body as its search keyword:
+#   {       cmsBlocks(identifiers: ["no-search-category-block"]) {   items {
+# _clean_sample flattened the newlines and cut it to 80 characters, which is
+# how a request body came to look like something a person had typed.
+import sys as _sys
+_sys.path.insert(0, ".")
+from ltmetrics.agents.parameterization import _clean_sample as _cs
+
+check("a request body is not offered as a sample",
+      _cs('{  cmsBlocks(identifiers: ["no-search-category-block"]) { items {') == "")
+check("nor is JSON", _cs('{"query":"x"}') == "")
+check("nor is markup", _cs("<div>hi</div>") == "")
+check("a recorded telephone number survives its brackets",
+      _cs("+1 (354) 643-6356") == "+1 (354) 643-6356")
+check("so does an ordinary address", _cs("1000 QUALITY DRIVE") == "1000 QUALITY DRIVE")
+check("and an email", _cs("dartmouth@yopmail.com") == "dartmouth@yopmail.com")
+check("a rejected value leaves the cell empty, which already means 'not "
+      "supplied'", _cs("{}") == "")
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
