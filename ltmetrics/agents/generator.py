@@ -1900,11 +1900,18 @@ def _confirm_order(url, status, txt):
 # and "error": false has to stay a pass.
 _BODY_ERROR_RE = re.compile(
     r'"error"\s*:\s*true'
+    r'|"isError"\s*:\s*true'
     r'|"success"\s*:\s*false'
     r'|"error_messages"\s*:\s*\[\s*[^\]\s]'
-    r'|"errors"\s*:\s*\[\s*\{', re.I)
+    r'|"errors"\s*:\s*\[\s*\{'
+    # Salesforce Commerce (OCAPI) answers a refusal with a fault object.
+    r'|"fault"\s*:\s*\{'
+    # SOAP, still the wire format for a good deal of enterprise middleware.
+    r'|<(?:\w+:)?Fault[\s>]'
+    r'|<faultstring>', re.I)
 _BODY_ERROR_MSG_RE = re.compile(
-    r'"(?:error_messages|message|error)"\s*:\s*\[?\s*"([^"]{3,200})"', re.I)
+    r'"(?:error_messages|message|error|description)"\s*:\s*\[?\s*"([^"]{3,200})"'
+    r'|<faultstring>([^<]{3,200})</faultstring>', re.I)
 
 
 def _body_error(txt):
@@ -1915,7 +1922,10 @@ def _body_error(txt):
     if not t or not _BODY_ERROR_RE.search(t):
         return ""
     m = _BODY_ERROR_MSG_RE.search(t)
-    return (m.group(1) if m else "the response body reports an error").strip()
+    if not m:
+        return "the response body reports an error"
+    return (m.group(1) or m.group(2) or "").strip() or \
+        "the response body reports an error"
 
 
 def _looks_like_order(path, status, txt):

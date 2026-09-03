@@ -171,6 +171,19 @@ check("error: false is not an error", _ns["_body_error"]('{"error":false}') == "
 check("nor is prose that mentions the word",
       _ns["_body_error"]("<p>An error occurred in our warehouse description</p>")
       == "")
+check("Salesforce Commerce answers a refusal with a fault object",
+      _ns["_body_error"]('{"fault":{"type":"X","message":"No such product"}}')
+      == "No such product")
+check("SOAP with a Fault element",
+      _ns["_body_error"]("<soap:Fault><faultstring>Contract expired"
+                         "</faultstring></soap:Fault>") == "Contract expired")
+# Deliberately absent: {"status":"FAILED"}. It reads like an error envelope and
+# appears just as often as data -- a list of past orders where one of them
+# failed -- so matching it would fail steps that succeeded.
+check("a list containing a failed order is not a failed request",
+      _ns["_body_error"]('{"orders":[{"id":1,"status":"FAILED"}]}') == "")
+check("nor is a field merely named faultTolerance",
+      _ns["_body_error"]('{"faultTolerance":3}') == "")
 check("an address payload is not an error",
       _ns["_body_error"]('{"billingAddresses":[{"entity_id":"106"}]}') == "")
 check("both recorded-step paths apply it",
