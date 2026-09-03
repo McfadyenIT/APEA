@@ -172,17 +172,39 @@ check("and it is marked as worked out, not recorded",
       all(x["derived"] for x in _g))
 check("every step is accounted for",
       sum(x["count"] for x in _g) == len(_AMNEAL))
-check("background traffic is separated from unnamed business calls",
-      "Background traffic" in _names and "Unrecognised calls" in _names)
-check("and both come last, after the real steps",
-      _names.index("Background traffic") == len(_names) - 1
-      and _names.index("Unrecognised calls") == len(_names) - 2)
+check("background traffic is a group of its own",
+      "Background traffic" in _names)
+check("and it comes last, after the real steps",
+      _names.index("Background traffic") == len(_names) - 1)
+check("a call the stage rules cannot name is named from its URL",
+      "Graphql" in _names and "Unrecognised calls" not in _names)
 check("the every-page ajax is one of them",
       _fd.is_every_page_call({"path": "/customer/section/load/"}))
 check("a checkout call is not",
       not _fd.is_every_page_call({"path": "/amnealcustomer/addressSelection/popupData"}))
 check("and the address picker is named, not left in a bin",
       "Checkout" in _names)
+
+print()
+print("an application that is not a shop still gets real groups")
+# The stage rules are e-commerce vocabulary. A logistics journey matches none
+# of it, and used to produce no groups at all -- nine calls, nothing on screen.
+_FEDEX = _flow("/auth/oauth/v2/token", "/track/v1/trackingnumbers",
+               "/rate/v1/rates/quotes", "/api/session/refresh")
+_f = [x["name"] for x in _fd.api_call_groups(_FEDEX)]
+check("every call is grouped", sum(x["count"] for x in _fd.api_call_groups(_FEDEX))
+      == len(_FEDEX))
+check("named from the part of the URL that says what it is for",
+      _f == ["Auth", "Track", "Rate", "Session"])
+check("version markers are not group names",
+      _fd.path_group({"path": "/track/v1/trackingnumbers"}) == "Track")
+check("nor is the transport prefix",
+      _fd.path_group({"path": "/api/session/refresh"}) == "Session")
+check("a recording that names its own steps still wins",
+      [x["name"] for x in _fd.api_call_groups(
+          [{"path": "/track/v1/x", "group": "Track shipment"},
+           {"path": "/rate/v1/y", "group": "Get a rate"}])]
+      == ["Track shipment", "Get a rate"])
 
 print()
 print("a recording that DOES name its steps keeps its own names")

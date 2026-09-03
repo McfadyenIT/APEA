@@ -177,6 +177,32 @@ def stage_of_step(step, milestones_only: bool = False) -> tuple:
     return "", ""
 
 
+# Segments that name the plumbing rather than the work. A path is skipped past
+# these to reach the part that says what the call is for.
+_PLUMBING = {"api", "apis", "rest", "restapi", "service", "services", "svc",
+             "public", "internal", "default", "web", "www", "gateway"}
+
+
+def path_group(step) -> str:
+    """A group name taken from the URL itself, for applications the stage rules
+    do not have vocabulary for.
+
+    Only used where those rules found nothing: a store's journey should be
+    named in the language of shopping, but a logistics portal has no such
+    words, and "Track" beats no group at all.
+    """
+    raw = ((step or {}).get("path") or "").split("?")[0]
+    for seg in raw.strip("/").lower().split("/"):
+        if not seg or len(seg) > 40:
+            continue
+        if seg in _PLUMBING:
+            continue
+        if seg.isdigit() or (seg[0] == "v" and seg[1:].isdigit()):
+            continue                       # /v1/, /v2/ and bare ids
+        return seg.replace("-", " ").replace("_", " ").strip().title()
+    return ""
+
+
 def is_every_page_call(step) -> bool:
     """A call the store makes on every page whatever the shopper is doing.
 
@@ -223,8 +249,10 @@ def api_call_groups(flow: list) -> list:
         return [dict(g, derived=False) for g in recorded]
 
     def _label(step):
-        return (stage_of_step(step)[0]
-                or (_EVERY_PAGE if is_every_page_call(step) else _OTHER))
+        if is_every_page_call(step):
+            return _EVERY_PAGE
+        # What it does, then where it lives, then the honest bin.
+        return stage_of_step(step)[0] or path_group(step) or _OTHER
 
     derived = _count_groups(_label(s) for s in (flow or []))
     named = [g for g in derived if g["name"] not in (_OTHER, _EVERY_PAGE)]
