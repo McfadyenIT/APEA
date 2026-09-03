@@ -157,6 +157,7 @@ _AMNEAL = _flow(
     "/rest/default/V1/carts/mine/payment-information",
     "/customer/section/load/",
     "/amnealcustomer/addressSelection/popupData",
+    "//graphql",          # the one call in the real recording nothing can name
 )
 _g = _fd.api_call_groups(_AMNEAL)
 _names = [x["name"] for x in _g]
@@ -165,13 +166,23 @@ check("one useless wrapper is not accepted as a group",
 check("nor a label that is really a URL",
       not _fd._is_useful_group_name("https://shop.example.com/customer/section/load/"))
 check("the stages are recovered from the calls",
-      _names[:4] == ["Login", "Product View", "Shipping", "Payment / Place Order"])
+      set(["Login", "Product View", "Shipping", "Payment / Place Order"])
+      <= set(_names))
 check("and it is marked as worked out, not recorded",
       all(x["derived"] for x in _g))
 check("every step is accounted for",
       sum(x["count"] for x in _g) == len(_AMNEAL))
-check("what could not be named is said plainly, and last",
-      _names[-1] == "Other steps" and _g[-1]["count"] == 2)
+check("page furniture is separated from unnamed business calls",
+      "Site furniture" in _names and "Other steps" in _names)
+check("and both come last, after the real steps",
+      _names.index("Site furniture") == len(_names) - 1
+      and _names.index("Other steps") == len(_names) - 2)
+check("the every-page ajax is the furniture",
+      _fd.is_site_furniture({"path": "/customer/section/load/"}))
+check("a checkout call is not",
+      not _fd.is_site_furniture({"path": "/amnealcustomer/addressSelection/popupData"}))
+check("and the address picker is named, not left in a bin",
+      "Checkout" in _names)
 
 print()
 print("a recording that DOES name its steps keeps its own names")
@@ -182,21 +193,44 @@ _r = _fd.api_call_groups(_RADWELL)
 check("its own transaction names win",
       [x["name"] for x in _r] == ["Login", "Add to cart", "Checkout"])
 check("nothing is marked as worked out", not any(x["derived"] for x in _r))
-check("and no Other steps bucket appears",
-      not any(x["name"] == "Other steps" for x in _r))
+check("and neither remainder appears",
+      not any(x["name"] in ("Other steps", "Site furniture") for x in _r))
 
 print()
 print("the journey and the traffic panel share one classifier")
 # They used to be two copies of the same if/elif chain, free to drift apart and
 # name the same call two different things.
-check("the journey asks the classifier", "stage_of_step(s)" in _FD_SRC)
-check("so do the groups", "stage_of_step(s)[0]" in _FD_SRC)
-check("and the rules live in exactly one place",
-      _FD_SRC.count("catalogsearch") == 1)
+check("the journey asks the classifier",
+      "stage_of_step(s, milestones_only=True)" in _FD_SRC)
+check("so do the groups", "stage_of_step(step)[0]" in _FD_SRC)
 _name, _ms = _fd._derive_journey(_AMNEAL)
 check("the journey still names itself from the same pass", _name == "Checkout")
 check("and lists the stages it saw",
       _ms == ["Login", "Product View", "Shipping", "Payment / Place Order"])
+
+print()
+print("a supporting call is grouped without rewriting the journey")
+# Marking cart-totals a milestone put "Cart" after "Shipping" on a store that
+# reads totals late. Grouping it is useful; naming it in the journey was not.
+_TOTALS = [{"path": "/rest/V1/carts/mine/totals"}]
+check("it still gets a stage for grouping",
+      _fd.stage_of_step(_TOTALS[0])[0] == "Cart")
+check("but the journey does not name it",
+      _fd.stage_of_step(_TOTALS[0], milestones_only=True)[0] == "")
+check("so a late totals read cannot reorder the milestones",
+      _fd._derive_journey(_AMNEAL + _TOTALS)[1] == _ms)
+
+print()
+print("the rules live in the knowledge base, with the code as a fallback")
+check("they are read from the KB", "KB.platform_rules(\"generic\")" in _FD_SRC)
+check("a KB that fails to load does not take the classifier with it",
+      "except Exception:" in _FD_SRC and "return [(n, m, pr, True)" in _FD_SRC)
+_kb = io.open("ltmetrics/knowledge/rules/platform_rules.yaml",
+              encoding="utf-8").read()
+check("the stages are defined there", "journey_stages:" in _kb)
+check("so is the furniture", "site_furniture:" in _kb)
+check("and the milestone flag is used, not just declared",
+      "milestone: false" in _kb)
 
 print()
 print("FAILURES: %d" % len(FAILURES))

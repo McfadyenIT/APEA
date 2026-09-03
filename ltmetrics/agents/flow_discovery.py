@@ -135,19 +135,58 @@ _STAGE_RULES = (
 )
 
 
-def stage_of_step(step) -> tuple:
+def _kb_rules():
+    """(stage rules, furniture patterns) from the KB, falling back to the tuple
+    above. A YAML that fails to load must not take the classifier with it."""
+    try:
+        from ltmetrics.knowledge.kb import KB
+        g = KB.platform_rules("generic") or {}
+        rules = []
+        for r in (g.get("journey_stages") or []):
+            stage = (r or {}).get("stage")
+            match = (r or {}).get("match") or []
+            if stage and match:
+                rules.append((stage, tuple(match), r.get("proves") or "",
+                              bool(r.get("milestone", True))))
+        if rules:
+            return rules, tuple(g.get("site_furniture") or ())
+    except Exception:
+        pass
+    return [(n, m, pr, True) for n, m, pr in _STAGE_RULES], ()
+
+
+def stage_of_step(step, milestones_only: bool = False) -> tuple:
     """(stage name, what it proves) for one recorded request, or ("", "").
 
     The single place a URL is turned into a business step. Two callers rely on
     it -- the recorded journey and the traffic groups -- and they must agree.
+
+    `milestones_only` drops the supporting calls. A cart-totals read is a cart
+    call worth grouping, but naming it in the journey put "Cart" after
+    "Shipping" on a store that reads totals late.
     """
     p = ((step or {}).get("path") or "").lower()
     if (step or {}).get("login") or p.endswith("/login"):
         return "Login", ""
-    for name, needles, proves in _STAGE_RULES:
+    rules, _ = _kb_rules()
+    for name, needles, proves, milestone in rules:
+        if milestones_only and not milestone:
+            continue
         if any(n in p for n in needles):
             return name, proves
     return "", ""
+
+
+def is_site_furniture(step) -> bool:
+    """A call the store makes on every page whatever the shopper is doing.
+
+    Real traffic, still sent, but not a step -- so it is grouped apart from the
+    business calls the rules could not name. One bucket holding both could not
+    be turned down safely: skipping the decoration skipped the address picker.
+    """
+    p = ((step or {}).get("path") or "").lower()
+    _, furniture = _kb_rules()
+    return any(f in p for f in furniture)
 
 
 def _is_useful_group_name(name: str) -> bool:
@@ -182,19 +221,29 @@ def api_call_groups(flow: list) -> list:
     if len(useful) >= 2:
         return [dict(g, derived=False) for g in recorded]
 
-    derived = _count_groups(stage_of_step(s)[0] or _OTHER for s in (flow or []))
-    named = [g for g in derived if g["name"] != _OTHER]
+    def _label(step):
+        return (stage_of_step(step)[0]
+                or (_FURNITURE if is_site_furniture(step) else _OTHER))
+
+    derived = _count_groups(_label(s) for s in (flow or []))
+    named = [g for g in derived if g["name"] not in (_OTHER, _FURNITURE)]
     if not named:
         # Nothing recognisable either way: better one honest group than none.
         return [dict(g, derived=False) for g in recorded]
-    # _OTHER last: it is the remainder, not a step of the journey.
-    rest = [g for g in derived if g["name"] == _OTHER]
+    # The two remainders go last: they are what is left, not steps of the
+    # journey, and they are kept apart so the furniture can be turned down
+    # without taking an unnamed business call with it.
+    rest = [g for g in derived if g["name"] in (_OTHER, _FURNITURE)]
+    rest.sort(key=lambda g: g["name"] == _FURNITURE)
     return [dict(g, derived=True) for g in named + rest]
 
 
 # Everything the rules cannot name. Named plainly, and counted, so the panel
 # adds up to the journey rather than quietly showing a fraction of it.
 _OTHER = "Other steps"
+# Kept apart from _OTHER on purpose: this one is safe to turn down, and the
+# other is not.
+_FURNITURE = "Site furniture"
 
 
 def _count_groups(names) -> list:
@@ -222,7 +271,7 @@ def _derive_journey(flow: list) -> tuple:
     for s in flow:
         # Same classifier the traffic groups use, so the journey and the panel
         # can never name the same call two different things.
-        stage, proves = stage_of_step(s)
+        stage, proves = stage_of_step(s, milestones_only=True)
         if not stage:
             continue
         add(stage)

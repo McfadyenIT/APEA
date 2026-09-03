@@ -29,6 +29,76 @@ generic:
             "j_spring_security_check", "customer/ajax/login"]
 
 
+  # WHAT A RECORDED CALL DOES, READ FROM ITS PATH ------------------------------
+  # Used for two things that must never disagree: the milestones of the recorded
+  # journey, and the traffic groups when a recording did not name its own
+  # transactions (a recorder that wraps everything in one "Test" transaction, or
+  # labels each request with its own URL, tells us nothing).
+  #
+  # ORDER MATTERS. It is read top to bottom and the first match wins, so
+  # "cart/add" is an Add to Cart before "checkout/cart" is a View Cart, and both
+  # come before the catch-all "/checkout".
+  #
+  # milestone: false means "group it, but do not name it in the journey". The
+  # journey is the headline path; a supporting call belongs in a group without
+  # earning a place in that sentence. Marking cart-totals a milestone put "Cart"
+  # after "Shipping" in a journey that was already correct, because that store
+  # reads totals late and milestones appear in first-seen order.
+  journey_stages:
+    - stage: "Login"
+      match: ["account/login", "loginpost", "validateemail"]
+      proves: ""
+    - stage: "Search"
+      match: ["catalogsearch", "q=", "/search"]
+      proves: ""
+    - stage: "Product View"
+      match: ["/buy/", "/product/", "catalog/product/view"]
+      proves: ""
+    - stage: "Add to Cart"
+      match: ["cart/add", "carts/mine/items", "add-to-cart", "add_to_cart"]
+      proves: "cart"
+    - stage: "View Cart"
+      match: ["checkout/cart"]
+      proves: "cart"
+    # Supporting cart calls: grouped, not named in the journey.
+    - stage: "Cart"
+      match: ["carts/mine/totals", "totals-information", "inventory/validate"]
+      proves: "cart"
+      milestone: false
+    - stage: "Quote"
+      match: ["negotiable", "requestforquote", "/rfq", "quote/save", "quotes/mine"]
+      proves: "quote"
+    - stage: "Shipping"
+      match: ["estimate-shipping", "shipping-information", "shipping-method"]
+      proves: "checkout"
+    - stage: "Payment / Place Order"
+      match: ["payment-information", "set-payment", "secureaccept", "placeorder",
+              "place-order"]
+      proves: "order"
+    - stage: "Order Confirmation"
+      match: ["onepage/success", "checkout/success", "order-received"]
+      proves: "order"
+    # Supporting checkout calls -- an address picker, a purchase-order number.
+    # Named across stores, not invented for one of them.
+    - stage: "Checkout"
+      match: ["addressselection", "address-selection", "checkout/address",
+              "purchaseorder", "purchase-order"]
+      proves: "checkout"
+      milestone: false
+    - stage: "Checkout"
+      match: ["/checkout"]
+      proves: "checkout"
+
+  # PAGE FURNITURE -------------------------------------------------------------
+  # Calls a store makes on every page whatever the shopper is doing: the
+  # customer-data ajax, banner loaders. They are real traffic and must still be
+  # sent, but they are not a step of the journey, so they get their own group.
+  # Mixing them with unnamed business steps made one group that could not
+  # safely be turned down -- skipping the decoration would have skipped the
+  # address picker with it.
+  site_furniture: ["customer/section/load", "section/load", "banner/ajax",
+                   "/ajax/load"]
+
   # STAGE LABELS FOR THE TOOL'S OWN CALLS --------------------------------------
   # A call carries a transaction group only if the recording wrapped it in one.
   # Everything the generator emits itself -- create the cart, add the item, place

@@ -2743,16 +2743,21 @@ function renderAnalysis(a){
   const src = $('#thrSource');
   if(src){
     const derived = ag.length && ag[0].derived;
-    const other = ag.find(g=>g.name === 'Other steps');
+    const find = n => ag.find(g=>g.name === n);
+    const furn = find('Site furniture'), other = find('Other steps');
+    const bits = ['This recording did not name its steps, so these were worked '
+                + 'out from what each call does.'];
+    // The two remainders are not interchangeable at the slider, so the
+    // difference is spelt out rather than left to the names.
+    if(furn) bits.push('“Site furniture” is the ' + furn.count + ' call'
+      + (furn.count===1?'':'s') + ' this store makes on every page whatever the '
+      + 'shopper is doing — turn that one down to cut background traffic.');
+    if(other) bits.push('“Other steps” is ' + other.count + ' call'
+      + (other.count===1?' the rules could not name':'s the rules could not name')
+      + ' — it may contain real checkout calls, so leave it at 100% unless you '
+      + 'have checked what is in it.');
     src.style.display = derived ? '' : 'none';
-    src.textContent = derived
-      ? ('This recording did not name its steps, so these were worked out from '
-         + 'what each call does.'
-         + (other ? ' ' + other.count + ' call' + (other.count===1?'':'s')
-                  + ' could not be matched to a step and are grouped as “Other '
-                  + 'steps” — mostly site-wide requests and endpoints specific '
-                  + 'to this store.' : ''))
-      : '';
+    src.textContent = derived ? bits.join(' ') : '';
   }
   $('#anThroughput').innerHTML = ag.length
     ? ag.map((g,i)=>{ apiThroughput[g.name]=100; return `
