@@ -1809,6 +1809,15 @@ def _clean_token(txt):
     return None
 
 
+# A JSON null or boolean is not an identifier. "increment_id": null in an
+# address payload was read as an order id and reported as a placed order.
+_NOT_AN_ID = {"", "0", "null", "none", "nil", "undefined", "false", "true"}
+
+
+def _is_real_id(v) -> bool:
+    return str(v or "").strip().lower() not in _NOT_AN_ID
+
+
 def _extract_order_id(txt):
     """Pull a real order/quote id from a place-order or quote-submit response.
 
@@ -1823,7 +1832,7 @@ def _extract_order_id(txt):
                 r'"order_id"\s*:\s*"?(\d+)',
                 r'"entity_id"\s*:\s*"?(\d+)'):
         m = re.search(pat, t)
-        if m:
+        if m and _is_real_id(m.group(1)):
             return m.group(1)
     # B2B negotiable-quote / RFQ submission returns a quote id / number.
     for pat in (r'"quote_id"\s*:\s*"?([A-Za-z0-9_-]+)',
@@ -1859,19 +1868,20 @@ def _confirm_order(url, status, txt):
     low = (txt or "").lower()
     if '"error"' in low or "exception" in low or '"errors":true' in low:
         return None
-    oid = _extract_order_id(txt)
-    if oid:
-        return oid
     u = (url or "").lower()
-    if any(s in u for s in _ORDER_URL_SIGNALS):
-        return "confirmed"
-    if "thank you for your order" in low or "your order number" in low:
-        return "confirmed"
-    # B2B quote submission confirmations (order-without-payment path).
-    if ("quote has been submitted" in low or "quote request" in low
-            or "your quote" in low or "quote submitted" in low):
-        return "confirmed"
-    return None
+    # Something other than the id has to say this is an order. Scraping an id
+    # out of any response counted a billing-address popup as a placed order:
+    # its payload carries "increment_id" and "entity_id" like an order does.
+    confirms = (any(s in u for s in _ORDER_URL_SIGNALS)
+                or "thank you for your order" in low
+                or "your order number" in low
+                # B2B quote submission (the order-without-payment path).
+                or "quote has been submitted" in low or "quote request" in low
+                or "your quote" in low or "quote submitted" in low)
+    if not confirms:
+        return None
+    # Only now is an id in the body worth reading.
+    return _extract_order_id(txt) or "confirmed"
 
 
 def _looks_like_order(path, status, txt):

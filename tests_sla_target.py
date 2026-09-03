@@ -10,6 +10,7 @@ regression that reintroduces the constant fails here.
 
 Run:  ./.venv/bin/python tests_sla_target.py     # expect FAILURES: 0
 """
+import io
 import sys
 
 sys.path.insert(0, ".")
@@ -80,6 +81,46 @@ for bad in ({}, {"max_p95_ms": None}, {"max_p95_ms": ""}, None):
     except Exception as exc:
         ok, detail = False, str(exc)[:60]
     check("sla=%r is survivable" % (bad,), ok, "" if ok else detail)
+
+print()
+print("an id in a response is not evidence of an order")
+# A run that stopped at 'Items added' and never reached checkout reported one
+# order created, id "null". The call responsible was a billing-address popup:
+#   POST /amnealcustomer/addressSelection/popupData
+#   {"billingAddresses":[{"entity_id":"106","increment_id":null,...}]}
+# _confirm_order scraped an id out of any body, and "increment_id": null
+# matched. Rejecting nulls alone would not have been enough -- "entity_id":
+# "106" in the same payload matches the next pattern.
+import re as _re
+_GEN = io.open("ltmetrics/agents/generator.py", encoding="utf-8").read()
+_ns = {"re": _re}
+_ns["_ORDER_URL_SIGNALS"] = ["checkout/success", "onepage/success"]
+_ns["_ORDER_PLACE_PATTERNS"] = ["payment-information", "placeorder"]
+exec(_re.search(r"^_NOT_AN_ID = (.+)$", _GEN, _re.M).group(0), _ns)
+for _fn in ("_is_real_id", "_extract_order_id", "_confirm_order",
+            "_looks_like_order"):
+    exec(_re.search(r"^def %s\(.*?(?=^def |^class |^_[A-Z])" % _fn, _GEN,
+                    _re.M | _re.S).group(0), _ns)
+
+_addr = ('{"billingAddresses":[{"entity_id":"106","increment_id":null,'
+         '"parent_id":"40"}]}')
+check("an address popup is not an order",
+      _ns["_confirm_order"]("https://s/amnealcustomer/addressSelection/popupData",
+                            200, _addr) is None)
+check("nor is a cart id that happens to be a number",
+      _ns["_confirm_order"]("https://s/rest/V1/carts/mine", 200, "15277") is None)
+check("a JSON null is not an id", not _ns["_is_real_id"]("null"))
+check("nor a boolean", not _ns["_is_real_id"]("false"))
+check("a real id still is", _ns["_is_real_id"]("000001672"))
+
+check("a place-order call with a real id is still counted",
+      _ns["_looks_like_order"]("/rest/V1/carts/mine/payment-information",
+                               200, "63022") == "63022")
+check("a success page with no id in the body is still counted",
+      _ns["_confirm_order"]("https://s/checkout/success/", 200,
+                            "Thank you for your order") == "confirmed")
+check("something other than the id has to say it is an order",
+      "if not confirms:" in _GEN and "confirms = (any(s in u" in _GEN)
 
 print()
 print("FAILURES: %d" % len(FAILURES))
