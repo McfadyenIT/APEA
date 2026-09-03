@@ -1895,6 +1895,29 @@ def _confirm_order(url, status, txt):
     return _extract_order_id(txt) or "confirmed"
 
 
+# An application error carried inside a 200. Matched on JSON shapes rather than
+# the word "error" anywhere, so a product description mentioning it is safe --
+# and "error": false has to stay a pass.
+_BODY_ERROR_RE = re.compile(
+    r'"error"\s*:\s*true'
+    r'|"success"\s*:\s*false'
+    r'|"error_messages"\s*:\s*\[\s*[^\]\s]'
+    r'|"errors"\s*:\s*\[\s*\{', re.I)
+_BODY_ERROR_MSG_RE = re.compile(
+    r'"(?:error_messages|message|error)"\s*:\s*\[?\s*"([^"]{3,200})"', re.I)
+
+
+def _body_error(txt):
+    """The store's own error message when a 2xx body says the request failed,
+    else "". A refused add-to-cart answers 200 on this platform and several
+    others; taking the status line at face value reported it as a success."""
+    t = (txt or "")[:4000]
+    if not t or not _BODY_ERROR_RE.search(t):
+        return ""
+    m = _BODY_ERROR_MSG_RE.search(t)
+    return (m.group(1) if m else "the response body reports an error").strip()
+
+
 def _looks_like_order(path, status, txt):
     """Return an order id/'confirmed' if this step confirms an order, else None."""
     oid = _confirm_order(path, status, txt)
@@ -2248,6 +2271,9 @@ __BROWSE_TASKS__
                                  headers=hdrs or None, catch_response=True, **req) as r:
             txt = r.text or ""
             ok = r.status_code < 400
+            _berr = _body_error(txt) if ok else ""
+            if _berr:
+                ok = False
             for a in step.get("asserts", []):
                 if a and a not in txt:
                     ok = False
@@ -3315,6 +3341,12 @@ __BROWSE_TASKS__
             txt = r.text or ""
             self._capture(txt)                # harvest correlation vars from response
             ok = r.status_code < 400
+            # A 200 whose body says the request was refused is not a success.
+            _berr = _body_error(txt) if ok else ""
+            if _berr:
+                ok = False
+                _clog_annotate("%s answered 200 but refused it: %s"
+                               % (step.get("name") or path, _berr))
             for a in step.get("asserts", []):
                 if a and a not in txt:
                     ok = False

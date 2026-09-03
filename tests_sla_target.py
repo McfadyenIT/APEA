@@ -145,5 +145,39 @@ check("and says so, instead of failing silently",
       "keeping the recorded value" in _GEN)
 
 print()
+print("a 200 that refuses the request is not a success")
+# The add-to-cart answered
+#   HTTP 200 {"error":true,"error_messages":["Selected contract is not valid."]}
+# and the report showed it green: 1 sample, 0 fails. The one call that broke
+# the run was the one call the report said was fine.
+for _c in ("_BODY_ERROR_RE", "_BODY_ERROR_MSG_RE"):
+    exec(_re.search(r"^%s = re\.compile\(.*?\)\n" % _c, _GEN,
+                    _re.M | _re.S).group(0), _ns)
+exec(_re.search(r"^def _body_error.*?(?=^def |^_[A-Z])", _GEN,
+                _re.M | _re.S).group(0), _ns)
+
+check("a refused add-to-cart fails",
+      _ns["_body_error"]('{"error":true,"error_messages":'
+                         '["Selected contract is not valid."]}')
+      == "Selected contract is not valid.")
+check("and the store's own words are carried into the failure",
+      "Selected contract" in _ns["_body_error"](
+          '{"error":true,"error_messages":["Selected contract is not valid."]}'))
+check("a GraphQL errors array fails too",
+      _ns["_body_error"]('{"errors":[{"message":"Syntax Error"}]}') != "")
+check("a success body passes",
+      _ns["_body_error"]('{"success":true,"message":"Purchase order saved."}') == "")
+check("error: false is not an error", _ns["_body_error"]('{"error":false}') == "")
+check("nor is prose that mentions the word",
+      _ns["_body_error"]("<p>An error occurred in our warehouse description</p>")
+      == "")
+check("an address payload is not an error",
+      _ns["_body_error"]('{"billingAddresses":[{"entity_id":"106"}]}') == "")
+check("both recorded-step paths apply it",
+      _GEN.count("_berr = _body_error(txt) if ok else \"\"") == 2)
+check("and the run says so rather than failing three steps later",
+      "answered 200 but refused it" in _GEN)
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
