@@ -1,0 +1,227 @@
+# Platform rules consulted by the Generator, Decision Engine and Repair agents.
+# Human-editable. Add a new top-level key to onboard another commerce platform.
+
+# BUSINESS-CRITICAL CALLS ----------------------------------------------------
+# Some recorded calls are not "extra page load" -- dropping them makes the run
+# report 200 OK while the orders it creates are wrong. Two kinds, on every
+# platform we have seen:
+#
+#   cart_add   the storefront controller that applies the store's OWN pricing
+#              (custom modules, contract/tier price). Skipping it and adding via
+#              an API can land the line at price 0, so the order captures
+#              shipping and tax only -- and every metric still reads as a pass.
+#   login      authenticates the STOREFRONT session. Without it, storefront calls
+#              run as a guest: they still return 200, but into a guest cart.
+#
+# These are usually plain form POSTs rather than API calls, so any bulk
+# "API calls only" selection drops them. LT Metrics keeps them regardless and warns if
+# a human unticks one. Path fragments are matched case-insensitively as
+# substrings; add to the platform block to teach LT Metrics a new storefront.
+generic:
+  display_name: "Unknown / generic storefront"
+  # Fallback used when no platform block matched. Deliberately broad: a false
+  # positive costs one extra call in the script, a false negative costs a run of
+  # zero-value orders that reports success.
+  business_critical_paths:
+    cart_add: ["cart/add", "cart/additem", "addtocart", "add-to-cart", "add_to_cart",
+               "cart.php?action=add", "addproduct"]
+    login: ["loginpost", "account/login", "/login", "signin", "sign-in",
+            "j_spring_security_check", "customer/ajax/login"]
+
+
+  # STAGE LABELS FOR THE TOOL'S OWN CALLS --------------------------------------
+  # A call carries a transaction group only if the recording wrapped it in one.
+  # Everything the generator emits itself -- create the cart, add the item, place
+  # the order -- had no group at all, which left 81% of a measured run labelled
+  # "(none)". These names are OURS: the template emits the same ones for every
+  # client and every platform, so mapping them belongs to the tool rather than to
+  # any one store. A platform block may override any entry.
+  #
+  # A group that came from the recording always wins. If a tester named their
+  # transaction "PDP", that is what the operator sees -- their vocabulary, not
+  # ours. This only fills the gaps.
+  canonical_stages:
+    "GET / (warmup)": "Browse"
+    "Home Page": "Browse"
+    "Search Results": "Search"
+    "Product by ID": "Product"
+    "Resolve: graphql": "Product"
+    "Cart created": "Cart"
+    "Items added": "Cart"
+    "Ensure cart item (REST)": "Cart"
+    "Cart contains items": "Cart"
+    "Cart cleared": "Cart"
+    "AUTO-HEAL add cart item": "Cart"
+    "Login": "Login"
+    "Login Page": "Login"
+    "Login Submit": "Login"
+    "REST customer token": "Login"
+    "REST customer profile": "Login"
+    "AUTO-HEAL refresh token": "Login"
+    "Shipping methods available": "Checkout"
+    "Set shipping information": "Checkout"
+    "Re-bind shipping (heal)": "Checkout"
+    "Checkout agreements": "Checkout"
+    "Payment methods available": "Payment"
+    "REST payment-methods": "Payment"
+    "Set payment information": "Payment"
+    "Set payment information (retry)": "Payment"
+    "Mint payment token (API)": "Payment"
+    "Order created": "Order"
+    "Order created (retry)": "Order"
+    "Place Order (REST)": "Order"
+    "Place Order (replay)": "Order"
+
+  # HEALTH LADDER --------------------------------------------------------------
+  # When a stage stops being fine, as a share of the run's OWN p95 gate. Never
+  # absolute milliseconds: 800ms and 5,000ms are both somebody's real target,
+  # and a fixed threshold would call one of them wrong.
+  #
+  # Derived from the approved design's numbers against its 2,000ms gate --
+  # 15% and 31% read Healthy, 60% Watch, 84% Strained, 105% Failing -- so the
+  # rungs sit at half the gate, four fifths of it, and the gate itself.
+  #
+  # A stage returning 5xx is escalated to Critical whatever its latency says.
+  # Being slow and being broken are different problems and the ladder should
+  # not blur them.
+  health_ladder:
+    healthy_pct: 50
+    watch_pct: 80
+    strained_pct: 100
+    failing_pct: 150
+    server_error_is_critical: true
+
+magento:
+  display_name: "Magento / Adobe Commerce"
+  business_critical_paths:
+    cart_add: ["checkout/cart/add"]
+    login: ["customer/account/loginpost", "customer/ajax/login"]
+  checkout: rest                # full REST checkout validator implemented
+  # --- detection ---------------------------------------------------------
+  detect_any_in_path: ["/rest/", "/v1/", "customer/section/load", "checkout/cart/add", "mage-", "/pub/static/", "magento"]
+  # --- REST path shape ---------------------------------------------------
+  # Store-scoped installs serve REST under /<store>/rest/<store>/V1 (e.g. Radwell
+  # /uk/rest/uk/V1). Treat any "/rest/" anywhere in the path as REST.
+  rest_prefix_template: "/{store}/rest/{store}/V1"
+  rest_detection: "substring:/rest/"
+  # --- auth --------------------------------------------------------------
+  token_endpoint: "/integration/customer/token"
+  # The token is a BARE JSON string: EITHER a ~32-char opaque token OR a JWT
+  # (header.payload.signature). Accept base64url + dots; reject HTML/JSON bodies.
+  token_regex: "^[A-Za-z0-9._-]{20,4096}$"
+  bearer_header: "Authorization: Bearer <token>"
+  refresh_on_401: true
+  # --- product resolution (data-driven) ----------------------------------
+  # The CSV value is what a shopper TYPES INTO SEARCH (SKU / name / product id),
+  # NOT necessarily a sellable SKU. Resolve it via catalog search.
+  csv_value_is_search_term: true
+  # Resolve the search term -> sku + stock via PUBLIC GraphQL. The REST
+  # /V1/products endpoint is ADMIN-scoped and returns 401 for a customer token,
+  # so it must NOT be used for resolution.
+  resolve_via: graphql
+  graphql_endpoint: "/{store}/graphql"
+  graphql_products_query: "query($q:String!){products(search:$q,pageSize:5){items{sku stock_status __typename ... on ConfigurableProduct{variants{product{sku stock_status}}}}}}"
+  products_rest_endpoint_is_admin_only: true
+  # --- stock gate --------------------------------------------------------
+  # Only add if the product is in stock. If out of stock, capture and STOP.
+  stock_field: "extension_attributes.stock_item.is_in_stock"
+  stop_when_out_of_stock: true
+  walk_child_variants: false          # add with the default option, do not enumerate children
+  # --- cart / checkout endpoints -----------------------------------------
+  cart_create_endpoint: "/carts/mine"
+  add_item_endpoint: "/carts/mine/items"
+  verify_items_endpoint: "/carts/mine/items"           # GET; require count >= 1
+  estimate_shipping_endpoint: "/carts/mine/estimate-shipping-methods-by-address-id"
+  set_shipping_endpoint: "/carts/mine/shipping-information"
+  payment_methods_endpoint: "/carts/mine/payment-methods"
+  checkout_agreements_endpoint: "/carts/mine/checkout-agreements"   # cart-applicable T&C (NOT /checkoutAgreements, which 404s)
+  requires_agreement_ids: true
+  place_order_endpoint: "/carts/mine/payment-information"   # sets payment AND places order
+  # --- region ------------------------------------------------------------
+  # regionId is an INTEGER (e.g. 12), never a code string ("UKM"/"NUTS 1 Code").
+  # When there is no integer region id (e.g. UK), omit region fields entirely.
+  region_id_is_integer: true
+  omit_region_when_not_integer: true
+  # --- payment -----------------------------------------------------------
+  # Prefer offline / no-card methods for automated orders. Hosted-gateway tokens
+  # are single-use and cannot be HTTP-replayed under load, so the place-order load
+  # path deliberately steers to one of these "no card token needed" methods.
+  #
+  # ORDER MATTERS: this list is searched first-match-wins by substring against the
+  # cart's available payment codes, so put the cleanest test methods first. These
+  # are all methods where the order can be placed WITHOUT a real card / redirect:
+  #   purchaseorder  Purchase Order (B2B)          netterms       Net Terms / pay-on-account (B2B)
+  #   checkmo        Check / Money Order           paymentonaccount / companycredit  pay-on-account
+  #   wirepayment / banktransfer / wiretransfer    Bank / wire transfer (offline)
+  #   cashondelivery COD          moneyorder       Money order          free / zeropayment / nopayment  zero-total
+  # Add a site's real offline code here to make it a first-class test method
+  # instead of relying on the "first non-hosted code" fallback in the generator.
+  offline_payments: ["purchaseorder", "checkmo", "netterms", "paymentonaccount", "payment_on_account", "companycredit", "banktransfer", "wirepayment", "wiretransfer", "wire", "cashondelivery", "cashon", "moneyorder", "payorder", "free", "zeropayment", "nopayment", "offlinepayment", "offline", "check"]
+  # Offline methods that settle a REAL amount, best first. Used when LT Metrics has to
+  # SUGGEST an alternative to a card. "free"/"zeropayment"/"nopayment" are also
+  # offline, but they only apply to zero-total orders -- recommending one to
+  # somebody load-testing checkout would hand them back the very problem this
+  # tool exists to catch: orders that complete and are worth nothing.
+  offline_payments_realistic: ["netterms", "paymentonaccount", "payment_on_account", "companycredit", "purchaseorder", "banktransfer", "wirepayment", "wiretransfer", "checkmo", "cashondelivery", "moneyorder"]
+  hosted_gateways: ["cybersource", "paradoxlabs", "adyen", "stripe", "braintree", "authorizenet", "authorize_net", "payflow", "worldpay", "sagepay", "klarna", "paypal", "amazon", "checkout_com", "checkoutcom", "mollie", "square"]
+  # Order-completion ASSERTION signals (the load script asserts an order placed by
+  # matching one of these). Defaults cover standard B2C/B2B; extend per store —
+  # e.g. add a success-URL fragment or place-order path the Playwright crawl
+  # actually observed at the confirmation page (see browser_track.order_confirmation).
+  order_url_signals: ["onepage/success", "checkout/success", "checkout/onepage/success", "order-received", "thank_you", "thankyou", "checkout/thank", "order-confirmation", "/thank-you", "quote/success", "quote-submitted", "negotiable_quote/quote/view", "rfq/success"]
+  order_place_patterns: ["payment-information", "placeorder", "place-order", "saveorder", "checkout/onepage/save", "purchaseorder/save", "wc-ajax=checkout", "/checkout.json", "submitorder", "complete-order", "createorder", "negotiable-quote", "negotiablequote", "negotiable_quote", "requestforquote", "request-for-quote", "request-quote", "quote/save", "quotes/mine", "submitquote", "/rfq"]
+  never_replay_payment_token: true
+  # --- quote consistency -------------------------------------------------
+  # The storefront session-quote and the token /carts/mine quote can diverge —
+  # trace the quote id through create/add/get and stop on mismatch.
+  quote_trace: true
+
+# ---------------------------------------------------------------------------
+# Other platforms. Only detection + checkout MODE are defined today; their REST
+# checkout adapters aren't implemented yet, so they fall back to faithful
+# recorded replay (checkout: recorded-replay). Adding a full adapter later means
+# filling in this block — the generator/decision engine are already KB-driven.
+# ---------------------------------------------------------------------------
+shopify:
+  display_name: "Shopify"
+  business_critical_paths:
+    cart_add: ["/cart/add"]
+    login: ["/account/login"]
+  checkout: recorded-replay
+  detect_any_in_path: ["cdn.shopify.com", "myshopify.com", "/cart/add.js", "/wpm@", "shopify", "x-shopify"]
+
+salesforce_commerce:
+  display_name: "Salesforce Commerce Cloud (SFCC / Demandware)"
+  checkout: recorded-replay
+  detect_any_in_path: ["demandware.store", "/dw/shop/", "/on/demandware.store", "dwsid", "sfcc"]
+
+sap_commerce:
+  display_name: "SAP Commerce Cloud (Hybris)"
+  business_critical_paths:
+    cart_add: ["/cart/add", "/entries"]
+    login: ["j_spring_security_check", "/login"]
+  checkout: recorded-replay
+  detect_any_in_path: ["/occ/v2/", "hybris", "/rest/v2/", "cxserver"]
+
+bigcommerce:
+  display_name: "BigCommerce"
+  business_critical_paths:
+    cart_add: ["cart.php?action=add", "/api/storefront/carts"]
+    login: ["login.php", "/login"]
+  checkout: recorded-replay
+  detect_any_in_path: ["/api/storefront/", "bigcommerce.com", "/remote/v1/"]
+
+oracle_commerce:
+  display_name: "Oracle Commerce (ATG / Commerce Cloud)"
+  checkout: recorded-replay
+  detect_any_in_path: ["/ccstore/v1/", "/rest/model/atg/", "oracle"]
+
+graphql:
+  display_name: "GraphQL storefront (generic)"
+  checkout: recorded-replay
+  detect_any_in_path: ["/graphql", "graphql"]
+
+custom_rest:
+  display_name: "Custom REST (generic)"
+  checkout: recorded-replay
+  detect_any_in_path: ["/api/", "/rest/"]

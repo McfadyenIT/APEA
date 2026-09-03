@@ -1,8 +1,8 @@
-# APEA — Step-by-Step Guide to Running a Performance Test
+# LT Metrics — Step-by-Step Guide to Running a Performance Test
 
 This guide assumes **no prior knowledge**. Follow it top to bottom.
 
-APEA has two ways to run a test:
+LT Metrics has two ways to run a test:
 
 - **Headed mode** — a point-and-click website (the "UI"). Best for people who
   want a simple, visual experience. *Start here if you're new.*
@@ -24,7 +24,7 @@ Both do exactly the same thing under the hood; only the way you start them diffe
    - Download and run the installer.
    - **On Windows, tick the box "Add Python to PATH"** during install. This is important.
 
-2. **Get the APEA folder** onto your computer (you already have it at
+2. **Get the LT Metrics folder** onto your computer (you already have it at
    `Performance Orchestration`).
 
 That's it for setup. The launcher handles the rest automatically.
@@ -33,7 +33,7 @@ That's it for setup. The launcher handles the rest automatically.
 
 ## Part A — Headed mode (the website / UI)
 
-### Step A1 — Start APEA
+### Step A1 — Start LT Metrics
 
 **Windows:** open the `Performance Orchestration` folder and **double-click
 `start.bat`**.
@@ -51,7 +51,7 @@ automatically.
 
 > If the browser doesn't open, open it yourself and go to **http://127.0.0.1:8000**
 
-Keep the black window (terminal) open — that's the engine. Closing it stops APEA.
+Keep the black window (terminal) open — that's the engine. Closing it stops LT Metrics.
 
 ### Step A2 — Fill in the basics
 
@@ -63,14 +63,14 @@ On the **New Test** tab:
 ### Step A3 — (Optional) Add your own data
 
 Still on the New Test tab, you can upload files. **All of these are optional** —
-skip them and APEA uses sensible defaults.
+skip them and LT Metrics uses sensible defaults.
 
 - **User credentials CSV** — a spreadsheet with columns like `username` and
   `password`. Upload this if the test needs to log in.
 - **Product / search data CSV** — a spreadsheet with columns like `product_id`
-  and `search_keyword`. APEA will use these in the search and product tests.
+  and `search_keyword`. LT Metrics will use these in the search and product tests.
 - **Recorded script** — a BlazeMeter/JMeter `.jmx`, a `.yaml`/`.yml`, or a
-  browser `.har` recording. APEA reads the recorded steps and turns them into the test.
+  browser `.har` recording. LT Metrics reads the recorded steps and turns them into the test.
 
 After you pick each file you'll see a green ✅ with how many rows/endpoints were found.
 
@@ -79,7 +79,7 @@ After you pick each file you'll see a green ✅ with how many rows/endpoints wer
 
 ### Step A4 — Discover the site
 
-Click **🔍 Discover**. APEA visits the site, figures out what kind of app it is
+Click **🔍 Discover**. LT Metrics visits the site, figures out what kind of app it is
 (shop, blog, etc.), and lists the user journeys it will simulate. This takes a few
 seconds.
 
@@ -92,7 +92,7 @@ In section **2 · Choose a test**:
    (find the breaking point), Spike, Soak, etc.
 2. **Expected users** and **Peak users** — roughly how many people use the site at
    once. Defaults (100 / 500) are fine to start.
-3. Click **Preview plan** to see what APEA will do (users, duration, pass/fail
+3. Click **Preview plan** to see what LT Metrics will do (users, duration, pass/fail
    limits).
 
 *(Optional)* Under **Advanced overrides** you can force a specific number of users,
@@ -122,10 +122,10 @@ When it finishes you get:
 
 - **History** tab — every past run, with links to reopen the report.
 - **Projects** tab — reuse a saved project (click *use* to reload its settings).
-- **Ask APEA** tab — type questions like
+- **Ask LT Metrics** tab — type questions like
   *"show checkout regressions over the last 6 months"*.
 
-### Step A9 — Stop APEA
+### Step A9 — Stop LT Metrics
 
 Close the black terminal window, or press **Ctrl + C** in it.
 
@@ -161,7 +161,7 @@ source .venv/bin/activate
 The basic command:
 
 ```
-python -m apea.cli --url https://www.example.com --test-type smoke
+python -m ltmetrics.cli --url https://www.example.com --test-type smoke
 ```
 
 You'll see progress printed live, then a results summary and a line telling you
@@ -187,7 +187,7 @@ Add any of these to the command:
 **Full example** (a stress test with 4 workers, product data, gated for CI):
 
 ```
-python -m apea.cli --url https://www.example.com --test-type stress ^
+python -m ltmetrics.cli --url https://www.example.com --test-type stress ^
   --users 500 --duration 900 --workers 4 ^
   --data-csv data\products.csv --check-sla
 ```
@@ -231,10 +231,10 @@ command** (Part B). The key idea:
 
 There are two ways to run in CI:
 
-- **Crawl‑only (no files needed):** give just a URL. APEA crawls the site and
+- **Crawl‑only (no files needed):** give just a URL. LT Metrics crawls the site and
   runs a browse/search test. Good for a quick health gate on every push.
 - **With a recording + data (recommended for real flows):** commit your
-  BlazeMeter/JMeter recording and CSVs; APEA replays the full checkout/login
+  BlazeMeter/JMeter recording and CSVs; LT Metrics replays the full checkout/login
   flow. Use this when you need login validation and orders.
 
 ### Step C1 — Commit your test files (only if using the "with files" mode)
@@ -277,13 +277,13 @@ Actions**:
 **Run it two ways:**
 
 - **Automatically on every push** to `main` (uses the Variables/Secrets above).
-- **On demand:** repo → **Actions → APEA Performance Tests → Run workflow**, then
+- **On demand:** repo → **Actions → LT Metrics Performance Tests → Run workflow**, then
   fill in the boxes (url, test type, users, duration, workers, and optionally the
   `recording` / `users_csv` / `data_csv` paths). Manual inputs override the
   Variables for that run.
 
 **What the job does:** installs dependencies → runs
-`python -m apea.cli --check-sla` → uploads `performance_report.html`/`.xlsx` as
+`python -m ltmetrics.cli --check-sla` → uploads `performance_report.html`/`.xlsx` as
 downloadable **artifacts** → **fails the build if the SLA is breached** (so a bad
 result blocks the pipeline). Leave the recording/CSV variables blank for a
 crawl‑only run.
@@ -309,25 +309,25 @@ Three steps in any runner that has Python:
 
 ```yaml
 - pip install -r requirements.txt
-- python -m apea.cli --url "$APEA_TARGET_URL" --test-type smoke --check-sla
+- python -m ltmetrics.cli --url "$LTM_TARGET_URL" --test-type smoke --check-sla
 # then archive: projects/**/reports/performance_report.html and .xlsx
 ```
 
-To use committed files, add the paths (or set the `APEA_*` env vars):
+To use committed files, add the paths (or set the `LTM_*` env vars):
 
 ```
-python -m apea.cli --url "$APEA_TARGET_URL" \
+python -m ltmetrics.cli --url "$LTM_TARGET_URL" \
   --recording ci/perf/checkout.yaml \
   --users-csv ci/perf/users.csv \
   --data-csv  ci/perf/data.csv \
-  --username "$APEA_USERNAME" --password "$APEA_PASSWORD" \
+  --username "$LTM_USERNAME" --password "$LTM_PASSWORD" \
   --check-sla
 ```
 
 **Environment‑variable equivalents** (so you can avoid flags entirely):
-`APEA_TARGET_URL`, `APEA_TEST_TYPE`, `APEA_USERS`, `APEA_DURATION`,
-`APEA_WORKERS`, `APEA_RECORDING`, `APEA_USERS_CSV`, `APEA_DATA_CSV`,
-`APEA_USERNAME`, `APEA_PASSWORD`.
+`LTM_TARGET_URL`, `LTM_TEST_TYPE`, `LTM_USERS`, `LTM_DURATION`,
+`LTM_WORKERS`, `LTM_RECORDING`, `LTM_USERS_CSV`, `LTM_DATA_CSV`,
+`LTM_USERNAME`, `LTM_PASSWORD`.
 
 ### Step C5 — Read the CI result
 
@@ -340,12 +340,12 @@ python -m apea.cli --url "$APEA_TARGET_URL" \
 ### Step C6 — Run in Docker inside CI (optional, no Python on the runner)
 
 ```bash
-docker build -t apea .
+docker build -t ltmetrics .
 docker run --rm \
-  -e APEA_TARGET_URL=https://your-site.com \
-  -e APEA_TEST_TYPE=smoke \
+  -e LTM_TARGET_URL=https://your-site.com \
+  -e LTM_TEST_TYPE=smoke \
   -v "$PWD/projects:/app/projects" \
-  apea python -m apea.cli --check-sla
+  ltmetrics python -m ltmetrics.cli --check-sla
 ```
 
 See `PACKAGING.md` for more Docker and standalone options.
@@ -362,7 +362,7 @@ See `PACKAGING.md` for more Docker and standalone options.
 | Port 8000 busy | Start with `python run.py --port 9000` and open that port. |
 | YAML recording not read | Run `pip install pyyaml` (JMX and HAR work without it). |
 | Test shows lots of failures | Normal for stress tests; for others, check the target URL is correct and reachable. |
-| The run failed with an error popup | The message shows the cause; details are also written to `apea_error.log` in the project folder. |
+| The run failed with an error popup | The message shows the cause; details are also written to `ltm_error.log` in the project folder. |
 
 ---
 
@@ -373,5 +373,5 @@ open http://127.0.0.1:8000
 
 **Run headless:**
 ```
-python -m apea.cli --url <site> --test-type smoke --check-sla
+python -m ltmetrics.cli --url <site> --test-type smoke --check-sla
 ```

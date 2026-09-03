@@ -25,3 +25,14 @@ apea_error.log
 
 # Debug reference screenshots (large binaries, not source)
 Screenshots/
+enrol-failures/
+.apea-token-memory.json
+
+# Renaming APEA to LT Metrics moved these out from under the rules above, and
+# the next commit swept up the live card tokens and an 11 MB run history with
+# them. Runtime state -- never in git.
+.ltmetrics-token-memory.json
+ltmetrics_history.db
+ltmetrics_history.db-wal
+ltmetrics_history.db-shm
+ltmetrics_error.log

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""APEA launcher.
+"""LT Metrics launcher.
 
 Starts the web app and opens it in your browser.
 
@@ -44,7 +44,7 @@ def _find_free_port(host: str, start: int, tries: int = 20) -> int | None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Run the APEA web app")
+    ap = argparse.ArgumentParser(description="Run the LT Metrics web app")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--no-browser", action="store_true")
@@ -61,22 +61,22 @@ def main() -> None:
         if alt is None:
             raise SystemExit(
                 f"Port {port} is in use and no free port was found nearby.\n"
-                f"Another APEA may already be running — close it, or run:\n"
+                f"Another LT Metrics may already be running — close it, or run:\n"
                 f"    python run.py --port 9000")
-        print(f"[APEA] Port {port} is busy (another APEA instance?). "
+        print(f"[LT Metrics] Port {port} is busy (another LT Metrics instance?). "
               f"Using {alt} instead.")
         port = alt
 
     url = f"http://{args.host}:{port}"
     print("=" * 60)
-    print("  APEA — Autonomous Performance Engineering Agent")
+    print("  LT Metrics — Load Testing Reimagined")
     print(f"  Open: {url}")
     print("=" * 60)
     if not args.no_browser:
         threading.Thread(target=_open_browser, args=(url,), daemon=True).start()
 
     import uvicorn
-    uvicorn.run("apea.server:app", host=args.host, port=port, reload=False)
+    uvicorn.run("ltmetrics.server:app", host=args.host, port=port, reload=False)
 
 
 if __name__ == "__main__":

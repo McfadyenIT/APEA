@@ -1,6 +1,6 @@
-# Running APEA in CI/CD
+# Running LT Metrics in CI/CD
 
-APEA runs the same performance test in a pipeline that you run locally — driven
+LT Metrics runs the same performance test in a pipeline that you run locally — driven
 by **one plain-English file, `perf-test.yml`**. There is no uploading in CI: you
 commit the recording and data CSV to the repo, and the pipeline reads them by
 path. Anyone on the team can change the test by editing `perf-test.yml` in plain
@@ -15,12 +15,12 @@ your-repo/
 ├─ perf-test.yml            ← the plain-English config (edit this)
 ├─ ci/perf/
 │  ├─ checkout.jmx          ← your BlazeMeter/JMeter recording (or .yaml/.har)
-│  └─ testdata.csv          ← the data file APEA told you to upload
+│  └─ testdata.csv          ← the data file LT Metrics told you to upload
 ├─ requirements.txt
-└─ apea/                    ← the tool
+└─ ltmetrics/                    ← the tool
 ```
 
-Get `testdata.csv` from the app: upload your recording in the APEA UI, click
+Get `testdata.csv` from the app: upload your recording in the LT Metrics UI, click
 **Analyze recording**, then **Download sample data CSV**, fill it in, and commit
 it as `ci/perf/testdata.csv`.
 
@@ -58,7 +58,7 @@ Optional one-time setup under **Settings → Secrets and variables → Actions**
 - `PERF_USERNAME` / `PERF_PASSWORD` — only if the journey logs in.
 - `ANTHROPIC_API_KEY` — only if `ai repair: true` or you want AI analysis.
 
-After a run, open the run and download the **apea-performance-reports** artifact
+After a run, open the run and download the **ltmetrics-performance-reports** artifact
 (HTML report, Excel, stats, and the full failures CSV). The build fails if the
 pass/fail criteria in `perf-test.yml` are breached.
 
@@ -70,15 +70,15 @@ Point a Pipeline job at `ci/Jenkinsfile`. One-time setup:
 - Install the **HTML Publisher** plugin (to view the report in Jenkins).
 
 Run the job (optionally change the `CONFIG` parameter if your file isn't
-`perf-test.yml`). The report is published as **APEA Performance Report** and the
+`perf-test.yml`). The report is published as **LT Metrics Performance Report** and the
 build is gated on the pass/fail criteria.
 
 ## 3c. Docker (any CI)
 
 ```
-docker build -t apea .
-docker run --rm -v "$PWD:/work" -w /work apea \
-    python -m apea.cli --config perf-test.yml --check-sla
+docker build -t ltmetrics .
+docker run --rm -v "$PWD:/work" -w /work ltmetrics \
+    python -m ltmetrics.cli --config perf-test.yml --check-sla
 ```
 
 ---
@@ -91,6 +91,6 @@ the test by editing those files and committing — the next run picks them up.
 
 ## 5. Exit code
 
-`--check-sla` makes APEA exit non-zero when the pass/fail criteria are breached,
+`--check-sla` makes LT Metrics exit non-zero when the pass/fail criteria are breached,
 so the pipeline stage fails and blocks the build/deploy. Remove the pass/fail
 lines from `perf-test.yml` (or drop `--check-sla`) to run without gating.

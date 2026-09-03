@@ -96,7 +96,7 @@ When the script runs checkout:
 
 4. **Report** what was chosen
    ```
-   [APEA] Payment method selected: netterms (offline, available on target)
+   [LT Metrics] Payment method selected: netterms (offline, available on target)
    ```
 
 ---
@@ -148,7 +148,7 @@ Result: Respects user choice
 
 ## Code Flow
 
-### In Generator (`apea/agents/generator.py`)
+### In Generator (`ltmetrics/agents/generator.py`)
 
 ```python
 # Detect what's in the recording (for information)
@@ -240,8 +240,8 @@ The script will:
 
 4. **Report** what was selected
    ```
-   [APEA] Payment methods available: netterms, purchaseorder, paradoxlabs_cybersource
-   [APEA] Selected payment method: netterms (offline)
+   [LT Metrics] Payment methods available: netterms, purchaseorder, paradoxlabs_cybersource
+   [LT Metrics] Selected payment method: netterms (offline)
    ```
 
 ### When `_FORCED_PAYMENT` Is Set (User Override)

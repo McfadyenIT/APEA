@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline self-test for APEA — validates the pipeline without a live target.
+"""Offline self-test for LT Metrics — validates the pipeline without a live target.
 
 Runs discovery-planning-generation-review against synthetic data, compiles the
 generated Locust script, and exercises the analyzer + reporter with fabricated
@@ -15,9 +15,9 @@ import socketserver
 import threading
 from pathlib import Path
 
-from apea.agents import discovery, planner, generator, reviewer, analyzer
-from apea import reporting, db
-from apea.config import PROJECTS_DIR
+from ltmetrics.agents import discovery, planner, generator, reviewer, analyzer
+from ltmetrics import reporting, db
+from ltmetrics.config import PROJECTS_DIR
 
 PASS, FAIL = "PASS", "FAIL"
 results = []
@@ -153,7 +153,7 @@ def run_selftest():
     check("Ledger history query works", len(hist) >= 1)
 
     # ---- 6. Distributed command builders + CLI parser ----
-    from apea.agents import executor
+    from ltmetrics.agents import executor
     single = executor._single_cmd(plan_cfg, disc["base_url"])
     master = executor._master_cmd(plan_cfg, disc["base_url"], 4)
     worker = executor._worker_cmd()
@@ -161,7 +161,7 @@ def run_selftest():
     check("Master command built", "--master" in master and "--expect-workers" in master)
     check("Worker command built", "--worker" in worker and "--master-host" in worker)
 
-    from apea import cli
+    from ltmetrics import cli
     ns = cli.build_parser().parse_args(
         ["--url", "https://example.com", "--test-type", "stress",
          "--workers", "4", "--check-sla"])
@@ -170,11 +170,11 @@ def run_selftest():
 
     # ---- 7. Application-aware modules (this session's additions) ----
     try:
-        from apea.agents import (test_plan_analyzer, performance_planner,
+        from ltmetrics.agents import (test_plan_analyzer, performance_planner,
                                  payment_replay, payment_analyzer, business_data,
                                  application_knowledge, test_data_generator, live_store,
                                  data_pools)
-        from apea import memory
+        from ltmetrics import memory
         mods_ok = True
     except Exception as e:                       # a syntax/import error here is a hard fail
         mods_ok = False

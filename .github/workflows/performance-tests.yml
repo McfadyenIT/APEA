@@ -1,4 +1,4 @@
-name: APEA Performance Tests
+name: LT Metrics Performance Tests
 
 # Runs the performance test described in perf-test.yml (committed in the repo).
 # Everything is configured in that ONE plain-English file — no inputs to fiddle
@@ -15,7 +15,7 @@ on:
     branches: [main]
     paths:
       - "perf-test.yml"
-      - "apea/**"
+      - "ltmetrics/**"
       - "requirements.txt"
 
 jobs:
@@ -33,32 +33,32 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run APEA performance test
+      - name: Run LT Metrics performance test
         env:
           # Optional: only needed if perf-test.yml references AI features or logins.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          APEA_USERNAME: ${{ secrets.PERF_USERNAME }}
-          APEA_PASSWORD: ${{ secrets.PERF_PASSWORD }}
+          LTM_USERNAME: ${{ secrets.PERF_USERNAME }}
+          LTM_PASSWORD: ${{ secrets.PERF_PASSWORD }}
         run: |
-          python -m apea.cli --config "${{ github.event.inputs.config || 'perf-test.yml' }}" --check-sla | tee apea_output.txt
+          python -m ltmetrics.cli --config "${{ github.event.inputs.config || 'perf-test.yml' }}" --check-sla | tee ltm_output.txt
 
       - name: Upload performance reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apea-performance-reports
+          name: ltmetrics-performance-reports
           path: |
             projects/**/reports/performance_report.html
             projects/**/reports/performance_report.xlsx
             projects/**/results/locust_stats.csv
             projects/**/results/locust_failures.csv
-            apea_output.txt
+            ltm_output.txt
           if-no-files-found: warn
 
       - name: Summarize
         if: always()
         run: |
-          echo "### APEA Performance Test" >> $GITHUB_STEP_SUMMARY
+          echo "### LT Metrics Performance Test" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          cat apea_output.txt >> $GITHUB_STEP_SUMMARY || true
+          cat ltm_output.txt >> $GITHUB_STEP_SUMMARY || true
           echo '```' >> $GITHUB_STEP_SUMMARY

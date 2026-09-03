@@ -2,7 +2,7 @@
 
 **Status:** ✅ COMPLETE  
 **Date:** 2026-07-24  
-**Module:** `apea/agents/generator.py`  
+**Module:** `ltmetrics/agents/generator.py`  
 **Impact:** ALL future generated scripts will use optimal payment handling
 
 ---
@@ -37,7 +37,7 @@ Added **intelligent payment method detection and handling** to the generator:
 
 ### 1. New Function: `_detect_payment_method_from_recording()`
 
-**Location:** `apea/agents/generator.py` (lines ~631-721)
+**Location:** `ltmetrics/agents/generator.py` (lines ~631-721)
 
 **What it does:**
 - Scans flow_steps for payment method references
@@ -68,7 +68,7 @@ Added **intelligent payment method detection and handling** to the generator:
 
 ### 2. Updated `_assemble_flow_script()` Function
 
-**Location:** `apea/agents/generator.py` (lines ~723-747)
+**Location:** `ltmetrics/agents/generator.py` (lines ~723-747)
 
 **Changes:**
 - Now calls `_detect_payment_method_from_recording()` automatically
@@ -200,27 +200,27 @@ User can optionally:
 ### Scenario 1: Site With CyberSource
 ```bash
 # Upload recording with CyberSource
-# Run APEA generator
+# Run LT Metrics generator
 
 # Generated script will have:
 _FORCED_PAYMENT = 'netterms'  # Auto-detected and switched
-# [APEA Generator] Detected CyberSource (high confidence), 
+# [LT Metrics Generator] Detected CyberSource (high confidence), 
 # but defaulting to offline payment for load testing...
 ```
 
 ### Scenario 2: Site With Net Terms
 ```bash
 # Upload recording with netterms
-# Run APEA generator
+# Run LT Metrics generator
 
 # Generated script will have:
 _FORCED_PAYMENT = 'netterms'  # Auto-detected and used directly
-# [APEA Generator] Auto-selected payment method: netterms (detected from recording)
+# [LT Metrics Generator] Auto-selected payment method: netterms (detected from recording)
 ```
 
 ### Scenario 3: User Override
 ```bash
-# Command: apea.cli --url ... --payment-method purchaseorder
+# Command: ltmetrics.cli --url ... --payment-method purchaseorder
 # This overrides auto-detection
 
 # Generated script will have:
@@ -244,7 +244,7 @@ _FORCED_PAYMENT = 'purchaseorder'  # User explicitly set
 - Auto-detection builds knowledge of payment patterns
 - Easy to extend (add new gateway patterns to detection list)
 
-### ✅ For APEA Platform
+### ✅ For LT Metrics Platform
 - Reduces debugging time (clear detection logs)
 - Improves script generation quality
 - Enables automated payment method handling
@@ -293,7 +293,7 @@ This enhancement enables:
 ### 1. Generate a script from a CyberSource recording
 ```bash
 # Upload HAR/JMX with CyberSource payment
-python -m apea.cli --url https://example.com --discover --test-type smoke
+python -m ltmetrics.cli --url https://example.com --discover --test-type smoke
 ```
 
 ### 2. Check the generated script
@@ -308,8 +308,8 @@ grep "Auto-detected" locustfile.py
 
 ### 3. Run the generated script
 ```bash
-python -m apea.cli --url https://example.com --test-type smoke --users 1 --duration 60
-# Should show: [APEA] Orders created=1  (payment succeeded)
+python -m ltmetrics.cli --url https://example.com --test-type smoke --users 1 --duration 60
+# Should show: [LT Metrics] Orders created=1  (payment succeeded)
 ```
 
 ---
@@ -330,5 +330,5 @@ The **script generator is now intelligent about payment methods**:
 ---
 
 **Status:** Ready for production use  
-**Impact:** Affects all future APEA script generations  
+**Impact:** Affects all future LT Metrics script generations  
 **Testing:** See "How to Verify It Works" above

@@ -1,13 +1,13 @@
-# APEA — Autonomous Performance Engineering Agent
+# LT Metrics — Load Testing Reimagined
 
-Point APEA at **any URL** and it will crawl the target, model a realistic
+Point LT Metrics at **any URL** and it will crawl the target, model a realistic
 workload, generate a production-ready Locust script, run the load test, and
 produce JMeter-style reports with AI recommendations — all from a dead-simple
 web UI, with **zero performance-engineering knowledge required.**
 
 ## What it does
 
-APEA orchestrates six specialized agents behind one screen:
+LT Metrics orchestrates six specialized agents behind one screen:
 
 | Agent | Responsibility |
 |---|---|
@@ -47,15 +47,15 @@ Then in the browser:
 Run the entire pipeline without the UI and gate on the SLA result:
 
 ```bash
-python -m apea.cli --url https://example.com --test-type load \
+python -m ltmetrics.cli --url https://example.com --test-type load \
     --expected-users 100 --check-sla
 # exit code 0 = SLA passed, 1 = SLA breached, 2 = error
 ```
 
 Flags: `--test-type` (smoke|baseline|load|stress|spike|soak|capacity|volume),
 `--users`, `--duration` (seconds), `--spawn-rate`, `--workers`, `--username`,
-`--password`, `--check-sla`. Each flag also has an `APEA_*` environment-variable
-fallback (e.g. `APEA_TARGET_URL`, `APEA_USERS`) for CI.
+`--password`, `--check-sla`. Each flag also has an `LTM_*` environment-variable
+fallback (e.g. `LTM_TARGET_URL`, `LTM_USERS`) for CI.
 
 ## Distributed / multi-worker execution
 
@@ -64,21 +64,21 @@ run a Locust **master + N worker** processes and generate more load from one
 host:
 
 ```bash
-python -m apea.cli --url https://example.com --test-type stress \
+python -m ltmetrics.cli --url https://example.com --test-type stress \
     --users 500 --workers 4 --check-sla
 ```
 
 ## Docker
 
 ```bash
-docker build -t apea .
-docker run -p 8000:8000 -v "$PWD/projects:/app/projects" apea      # web UI
+docker build -t ltmetrics .
+docker run -p 8000:8000 -v "$PWD/projects:/app/projects" ltmetrics      # web UI
 # or headless in CI:
-docker run --rm -v "$PWD/projects:/app/projects" apea \
-    python -m apea.cli --url https://example.com --check-sla
+docker run --rm -v "$PWD/projects:/app/projects" ltmetrics \
+    python -m ltmetrics.cli --url https://example.com --check-sla
 ```
 
-Or with compose: `docker compose up apea` (UI) /
+Or with compose: `docker compose up ltmetrics` (UI) /
 `docker compose run --rm runner --url https://example.com --check-sla`.
 
 ## CI/CD
@@ -104,7 +104,7 @@ Performance Orchestration/
 ├─ docker-compose.yml     # web + headless runner services
 ├─ .github/workflows/     # GitHub Actions performance pipeline
 ├─ ci/Jenkinsfile         # Jenkins declarative pipeline
-├─ apea/
+├─ ltmetrics/
 │  ├─ server.py           # FastAPI orchestrator + REST API
 │  ├─ cli.py              # headless CLI runner (CI entry point)
 │  ├─ config.py           # paths, defaults, project isolation
@@ -120,7 +120,7 @@ Performance Orchestration/
 │     └─ analyzer.py      # RCA, SLA gate, recommendations, trends
 ├─ projects/              # per-run artifacts (auto-created)
 │  └─ <project>/<url-slug>/<run-id>/{scripts,data,results,reports}
-└─ apea_history.db        # SQLite ledger (auto-created)
+└─ ltmetrics_history.db        # SQLite ledger (auto-created)
 ```
 
 ## Notes

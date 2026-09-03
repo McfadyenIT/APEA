@@ -200,7 +200,7 @@ Result: Respects user choice
 
 ## Implementation Details
 
-**Files Modified:** `apea/agents/generator.py`
+**Files Modified:** `ltmetrics/agents/generator.py`
 
 **Changes:**
 - Detection logic: ✅ (unchanged, still works)
@@ -214,7 +214,7 @@ Result: Respects user choice
 
 ### Standard Load Test
 ```bash
-python -m apea.cli --url https://example.com --test-type load
+python -m ltmetrics.cli --url https://example.com --test-type load
 
 # Generator detects payment method from recording
 # But doesn't force it
@@ -225,7 +225,7 @@ python -m apea.cli --url https://example.com --test-type load
 
 ### Force Specific Method
 ```bash
-python -m apea.cli --url https://example.com --test-type load \
+python -m ltmetrics.cli --url https://example.com --test-type load \
     --payment-method purchaseorder
 
 # Script uses purchaseorder regardless of recording
@@ -235,7 +235,7 @@ python -m apea.cli --url https://example.com --test-type load \
 
 ### Test CyberSource with Browser
 ```bash
-python -m apea.cli --url https://example.com --test-type smoke \
+python -m ltmetrics.cli --url https://example.com --test-type smoke \
     --browser-payment
 
 # Script detects only CyberSource available

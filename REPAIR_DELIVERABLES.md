@@ -54,7 +54,7 @@ projects/test-radwell/mcstaging-radwell-eu/cb64e42b0101/
 Read in this order:
 1. **FINAL_REPAIR_SUMMARY.md** (this repo root) — 5 min
 2. **UPDATED_QUICK_START.md** (run dir) — 2 min
-3. Run: `python -m apea.cli --url https://mcstaging.radwell.eu --test-type smoke --users 1 --duration 60`
+3. Run: `python -m ltmetrics.cli --url https://mcstaging.radwell.eu --test-type smoke --users 1 --duration 60`
 
 ### 📖 If you want to **understand what was fixed**
 Read in this order:
@@ -70,7 +70,7 @@ Read in this order:
 
 ### 📊 If you want **comprehensive architecture reference**
 Read: **PLATFORM_ANALYSIS.md** (in repo root)
-- Full APEA platform overview
+- Full LT Metrics platform overview
 - Six agents explained
 - CI/CD integration
 - Scaling considerations
@@ -132,29 +132,29 @@ Line 1235-1250: Silent failure detection
 ### Smoke Test
 ```bash
 cd projects/test-radwell/mcstaging-radwell-eu/cb64e42b0101/
-python -m apea.cli --url https://mcstaging.radwell.eu \
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu \
     --test-type smoke --users 1 --duration 60 --check-sla
 ```
 
 **Expected output:**
 ```
-[APEA] Requests=20 Failures=0 (0.00%)
-[APEA] Orders created=1
-[APEA] Order ids: 100001234
-[APEA] Reached state: ORDER_CREATED
+[LT Metrics] Requests=20 Failures=0 (0.00%)
+[LT Metrics] Orders created=1
+[LT Metrics] Order ids: 100001234
+[LT Metrics] Reached state: ORDER_CREATED
 ```
 
 ### Load Test
 ```bash
-python -m apea.cli --url https://mcstaging.radwell.eu \
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu \
     --test-type load --users 10 --duration 300 --check-sla
 ```
 
 **Expected output:**
 ```
-[APEA] Requests=500 Failures=5 (1.00%)
-[APEA] Orders created=45
-[APEA] Reached state: ORDER_CREATED
+[LT Metrics] Requests=500 Failures=5 (1.00%)
+[LT Metrics] Orders created=45
+[LT Metrics] Reached state: ORDER_CREATED
 ```
 
 ---
@@ -266,7 +266,7 @@ CURRENT LOCATION: C:\Pradish\PerformanceTesting\PerformanceOrchestration\
 **If all checked:** Ready to execute! 🚀
 
 ```bash
-python -m apea.cli --url https://mcstaging.radwell.eu \
+python -m ltmetrics.cli --url https://mcstaging.radwell.eu \
     --test-type smoke --users 1 --duration 60 --check-sla
 ```
 

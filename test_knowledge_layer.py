@@ -1,4 +1,4 @@
-"""Offline self-test for APEA's Knowledge + Memory + Orchestrator layers.
+"""Offline self-test for LT Metrics's Knowledge + Memory + Orchestrator layers.
 
 Runs with NO server and NO network. From the project root:
 
@@ -10,9 +10,9 @@ never pollutes your real project data.
 """
 import sys
 
-from apea.knowledge import KB
-from apea import db, memory
-from apea.agents import orchestrator as orch
+from ltmetrics.knowledge import KB
+from ltmetrics import db, memory
+from ltmetrics.agents import orchestrator as orch
 
 _fails = 0
 
@@ -81,9 +81,9 @@ check("payment routing avoids hosted gateway",
       de.payment_policy("magento", ["paradoxlabs_cybersource", "checkmo"]).get("method") == "checkmo")
 
 print("\n6) New layers — Validation / Execution Engine / Recommendation")
-from apea.agents import validation as _val
-from apea.agents.engines import get_engine, available_engines
-from apea.agents import recommendation as _rec
+from ltmetrics.agents import validation as _val
+from ltmetrics.agents.engines import get_engine, available_engines
+from ltmetrics.agents import recommendation as _rec
 _bad = "def x(:\n  pass"            # deliberately broken
 check("validation flags a syntax error", not _val.validate(_bad)[0])
 _good = ("from locust import HttpUser, task, between\n"
@@ -99,7 +99,7 @@ check("recommendation flags high error rate (UI shape)",
       and all({"priority", "title", "impact", "effort", "detail"} <= set(r) for r in recs), recs)
 
 print("\n7) Platform registry (#6) + run-artifact history (#10)")
-from apea import platforms
+from ltmetrics import platforms
 check("detects Magento from REST path",
       platforms.detect({"flow": [{"path": "/uk/rest/uk/V1/carts/mine"}]}) == "magento")
 check("detects Shopify from cart/add.js",

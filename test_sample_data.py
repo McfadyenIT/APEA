@@ -13,7 +13,7 @@ Exits 0 if every check passes, 1 otherwise.
 """
 import sys
 
-from apea.agents import parameterization as pz
+from ltmetrics.agents import parameterization as pz
 
 _fails = 0
 

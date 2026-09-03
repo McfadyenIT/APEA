@@ -28,7 +28,7 @@ Repaired the generated script with:
 - **Switched to offline payment methods** (netterms, PO, etc.)
 
 ### Phase 3: Fixed The Generator (Root Cause)
-**File:** `GENERATOR_ENHANCEMENT.md` + code changes in `apea/agents/generator.py`
+**File:** `GENERATOR_ENHANCEMENT.md` + code changes in `ltmetrics/agents/generator.py`
 
 Made the generator **intelligent** about payment methods:
 - Auto-detect from recording
@@ -55,7 +55,7 @@ The generator now ensures **ALL future scripts** will:
 **Changes:** 4 critical fixes + improved validation
 
 ### 2. Smart Script Generator
-**Location:** `apea/agents/generator.py`
+**Location:** `ltmetrics/agents/generator.py`
 
 **New Capability:** Intelligent payment method detection  
 **Impact:** ALL future generated scripts  
@@ -85,7 +85,7 @@ All in repository root and test run directory:
 ### For Test Script Creators
 ```bash
 1. Upload recording with CyberSource
-2. Run: python -m apea.cli --url <target> --test-type load
+2. Run: python -m ltmetrics.cli --url <target> --test-type load
 3. Generator auto-detects CyberSource
 4. Generator switches to netterms (safe for load testing)
 5. Generated script works immediately ✅
@@ -93,7 +93,7 @@ All in repository root and test run directory:
 
 ### For QA Running Tests
 ```bash
-1. Run generated script: python -m apea.cli --url <target> --test-type load
+1. Run generated script: python -m ltmetrics.cli --url <target> --test-type load
 2. Payment uses netterms (pure HTTP, no iframe)
 3. >90% order success
 4. Full report with metrics
@@ -103,7 +103,7 @@ All in repository root and test run directory:
 ### For DevOps / CI Integration
 ```bash
 # GitHub Actions, Jenkins, etc.
-- Run: apea.cli --url <target> --test-type load --check-sla
+- Run: ltmetrics.cli --url <target> --test-type load --check-sla
 - Payment handled automatically (no token setup)
 - SLA gating works (accurate metrics)
 - Reports show real success rates
@@ -172,7 +172,7 @@ Use pure HTTP REST
 ### Scenario 1: Load Testing (Most Common)
 ```bash
 # Recording has CyberSource
-python -m apea.cli --url https://example.com --test-type load
+python -m ltmetrics.cli --url https://example.com --test-type load
 
 # What happens:
 # 1. Generator detects CyberSource
@@ -185,7 +185,7 @@ python -m apea.cli --url https://example.com --test-type load
 ### Scenario 2: Payment Gateway Integration Test
 ```bash
 # Recording has CyberSource
-python -m apea.cli --url https://example.com --test-type smoke --browser-payment
+python -m ltmetrics.cli --url https://example.com --test-type smoke --browser-payment
 
 # What happens:
 # 1. Generator detects CyberSource
@@ -198,7 +198,7 @@ python -m apea.cli --url https://example.com --test-type smoke --browser-payment
 ### Scenario 3: B2B Purchase Order Flow
 ```bash
 # Recording has Purchase Order payment
-python -m apea.cli --url https://example.com --test-type load
+python -m ltmetrics.cli --url https://example.com --test-type load
 
 # What happens:
 # 1. Generator detects Purchase Order (offline)
@@ -347,12 +347,12 @@ We've taken a **holistic approach** to fixing payment method handling:
 2. **Fixed the root cause** — Enhanced the generator to be intelligent about payment methods  
 3. **Fixed the platform** — Ensured ALL future scripts benefit from the improvement
 
-**Result:** A more reliable, intelligent APEA platform that generates production-ready scripts without manual payment setup.
+**Result:** A more reliable, intelligent LT Metrics platform that generates production-ready scripts without manual payment setup.
 
 ---
 
 **Status:** ✅ COMPLETE AND READY FOR PRODUCTION  
-**Scope:** Affects all future APEA script generations  
+**Scope:** Affects all future LT Metrics script generations  
 **Quality:** High confidence, well-tested approach  
 **Documentation:** Comprehensive (7+ detailed guides)  
 **Next Action:** Review documentation and run the test

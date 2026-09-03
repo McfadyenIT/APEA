@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from apea.agents import payment_replay  # noqa: E402
+from ltmetrics.agents import payment_replay  # noqa: E402
 
 
 # --- synthetic browser_track.json summaries (what Track B would have captured) ---

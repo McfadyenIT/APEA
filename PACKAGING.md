@@ -1,6 +1,6 @@
-# Running APEA as a standalone application
+# Running LT Metrics as a standalone application
 
-APEA is a fully **local** application — it runs on your machine, stores data in a
+LT Metrics is a fully **local** application — it runs on your machine, stores data in a
 local SQLite file, and sends load only to the target you choose. There are three
 ways to run it standalone, from easiest to most self-contained.
 
@@ -23,9 +23,9 @@ If Python isn't installed, the launcher tells the user where to get it.
 ## Option 2 — Docker (needs Docker installed)  ✅ ready now
 
 ```bash
-docker build -t apea .
-docker run -p 8000:8000 -v "%cd%/projects:/app/projects" apea   # Windows
-docker run -p 8000:8000 -v "$PWD/projects:/app/projects" apea    # macOS/Linux
+docker build -t ltmetrics .
+docker run -p 8000:8000 -v "%cd%/projects:/app/projects" ltmetrics   # Windows
+docker run -p 8000:8000 -v "$PWD/projects:/app/projects" ltmetrics    # macOS/Linux
 ```
 Then open `http://localhost:8000`. Fully self-contained; no Python needed on the
 host, only Docker. See `Dockerfile` / `docker-compose.yml`.
@@ -34,7 +34,7 @@ host, only Docker. See `Dockerfile` / `docker-compose.yml`.
 
 ## Option 3 — True no-Python .exe (PyInstaller)  🔧 requires one refactor
 
-To ship a single `APEA.exe` that runs on a PC with **no Python at all**, two
+To ship a single `LT Metrics.exe` that runs on a PC with **no Python at all**, two
 things are required:
 
 1. **Bundle with PyInstaller** — packages Python, all dependencies, Locust, and
@@ -51,11 +51,11 @@ Recommended build once the in-process executor is in place:
 
 ```bash
 pip install pyinstaller
-pyinstaller --noconfirm --clean APEA.spec
-# result: dist/APEA/APEA.exe  (a folder you can zip and share)
+pyinstaller --noconfirm --clean LT Metrics.spec
+# result: dist/LT Metrics/LT Metrics.exe  (a folder you can zip and share)
 ```
 
-A starter `APEA.spec` would include the `apea/static` folder and Locust's data
+A starter `LT Metrics.spec` would include the `ltmetrics/static` folder and Locust's data
 files as bundled resources, and set `run.py` as the entry point with
 `--host 127.0.0.1 --no-browser` handled internally.
 
