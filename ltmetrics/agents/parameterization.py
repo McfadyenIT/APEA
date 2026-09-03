@@ -240,6 +240,15 @@ def analyze(flow: list, selenium_inputs: list | None = None,
         # skip correlation fields — those are handled automatically
         if any(re.search(pat, low) for _, pat in _CORRELATION_KEYS):
             continue
+        # A field carrying a request body is not a field a value can be written
+        # into. GraphQL puts its whole document in one named "query", which
+        # matches the search pattern; binding search_keyword there replaced the
+        # query with the keyword and the call came back 400. Judged on the
+        # recorded VALUE, so a field the recording left empty still binds --
+        # that is the case the <<FILL: ...>> marker exists for.
+        _recorded = field_names.get(name)
+        if _recorded not in (None, "") and not _clean_sample(_recorded):
+            continue
         for pat, group, col, sample in _FIELD_MAP:
             if re.search(pat, low):
                 if col not in columns:

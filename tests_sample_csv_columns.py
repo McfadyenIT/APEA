@@ -85,5 +85,23 @@ check("a rejected value leaves the cell empty, which already means 'not "
       "supplied'", _cs("{}") == "")
 
 print()
+print("a column is not bound to a field that carries a request body")
+# GraphQL puts its whole document in a field named "query", which matches the
+# search pattern. search_keyword was bound to it, so filling that column
+# replaced the query with the keyword:
+#   POST graphql -> 400 Syntax Error: Unexpected Name "triamcinolone"
+# Stopping the blob appearing as a SAMPLE was not enough: the binding stayed,
+# so whatever the operator typed went to the same place.
+_PAR = io.open("ltmetrics/agents/parameterization.py", encoding="utf-8").read()
+check("the recorded value is judged before the column is bound",
+      "_recorded = field_names.get(name)" in _PAR
+      and "not _clean_sample(_recorded)" in _PAR)
+check("a field the recording left empty still binds",
+      '_recorded not in (None, "")' in _PAR)
+check("the guard runs inside the field loop, before the mapping",
+      _PAR.index("_recorded = field_names.get(name)")
+      < _PAR.index("for pat, group, col, sample in _FIELD_MAP"))
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
