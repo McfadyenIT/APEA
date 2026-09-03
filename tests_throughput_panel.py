@@ -172,11 +172,11 @@ check("and it is marked as worked out, not recorded",
       all(x["derived"] for x in _g))
 check("every step is accounted for",
       sum(x["count"] for x in _g) == len(_AMNEAL))
-check("every-page calls are separated from unnamed business calls",
-      "Every-page calls" in _names and "Other steps" in _names)
+check("background traffic is separated from unnamed business calls",
+      "Background traffic" in _names and "Unrecognised calls" in _names)
 check("and both come last, after the real steps",
-      _names.index("Every-page calls") == len(_names) - 1
-      and _names.index("Other steps") == len(_names) - 2)
+      _names.index("Background traffic") == len(_names) - 1
+      and _names.index("Unrecognised calls") == len(_names) - 2)
 check("the every-page ajax is one of them",
       _fd.is_every_page_call({"path": "/customer/section/load/"}))
 check("a checkout call is not",
@@ -194,7 +194,8 @@ check("its own transaction names win",
       [x["name"] for x in _r] == ["Login", "Add to cart", "Checkout"])
 check("nothing is marked as worked out", not any(x["derived"] for x in _r))
 check("and neither remainder appears",
-      not any(x["name"] in ("Other steps", "Every-page calls") for x in _r))
+      not any(x["name"] in ("Unrecognised calls", "Background traffic")
+              for x in _r))
 
 print()
 print("the journey and the traffic panel share one classifier")

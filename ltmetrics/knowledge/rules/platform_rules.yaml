@@ -89,7 +89,7 @@ generic:
       match: ["/checkout"]
       proves: "checkout"
 
-  # EVERY-PAGE CALLS -----------------------------------------------------------
+  # BACKGROUND TRAFFIC ---------------------------------------------------------
   # Calls a store makes on every page whatever the shopper is doing: the
   # customer-data ajax, banner loaders. They are real traffic and must still be
   # sent, but they are not a step of the journey, so they get their own group.

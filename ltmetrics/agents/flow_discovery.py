@@ -241,11 +241,12 @@ def api_call_groups(flow: list) -> list:
 
 # Everything the rules cannot name. Named plainly, and counted, so the panel
 # adds up to the journey rather than quietly showing a fraction of it.
-_OTHER = "Other steps"
+_OTHER = "Unrecognised calls"
 # Kept apart from _OTHER on purpose: this one is safe to turn down, and the
-# other is not. Named for what it is -- "Site furniture" is a page-design term
-# that had to be explained, which made it the wrong label for this screen.
-_EVERY_PAGE = "Every-page calls"
+# other is not. Both names were changed twice because the operator had to ask
+# what they meant: a label on this screen has to say what the thing IS, not
+# where it happens ("Every-page calls") or that it is a leftover ("Other").
+_EVERY_PAGE = "Background traffic"
 
 
 def _count_groups(names) -> list:

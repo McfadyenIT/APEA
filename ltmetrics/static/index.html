@@ -2744,19 +2744,19 @@ function renderAnalysis(a){
   if(src){
     const derived = ag.length && ag[0].derived;
     const find = n => ag.find(g=>g.name === n);
-    const furn = find('Every-page calls'), other = find('Other steps');
+    const furn = find('Background traffic'), other = find('Unrecognised calls');
     const bits = ['This recording did not name its steps, so these were worked '
                 + 'out from what each call does.'];
     // The two remainders are not interchangeable at the slider, so the
     // difference is spelt out rather than left to the names.
-    if(furn) bits.push('“Every-page calls” ' + (furn.count===1?'is the 1 call':
-        'are the ' + furn.count + ' calls') + ' this store makes on every page '
-      + 'whatever the shopper is doing, like refreshing the mini-cart — turn '
-      + 'that one down to cut background traffic.');
-    if(other) bits.push('“Other steps” is ' + other.count + ' call'
-      + (other.count===1?' the rules could not name':'s the rules could not name')
-      + ' — it may contain real checkout calls, so leave it at 100% unless you '
-      + 'have checked what is in it.');
+    if(furn) bits.push('“Background traffic” ' + (furn.count===1?'is 1 request':
+        'is ' + furn.count + ' requests') + ' the page sends by itself on every '
+      + 'page, like refreshing the mini-cart. Nobody clicks to cause them, so '
+      + 'this is the one group you can turn down safely.');
+    if(other) bits.push('“Unrecognised calls” ' + (other.count===1?'is 1 request':
+        'is ' + other.count + ' requests') + ' LT Metrics could not identify. '
+      + 'Some may be real checkout steps, so leave this at 100% unless you have '
+      + 'looked at what is in it.');
     src.style.display = derived ? '' : 'none';
     src.textContent = derived ? bits.join(' ') : '';
   }
