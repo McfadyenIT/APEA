@@ -43,6 +43,14 @@ _FIELD_MAP = [
      "Card", "payment_token", ""),
     # payment method selection (e.g. paymentMethod.method = paradoxlabs_cybersource)
     (r"(^method$|payment_?method|paymentmethod)", "Payment", "payment_method", ""),
+    # A price agreement chosen on the product page. B2B stores post the whole
+    # selection back -- id, price group, title and price -- and reject an add
+    # whose contract is no longer valid for the account. Recorded values go
+    # stale, so they are data rather than script.
+    (r"(^contract_?id$|contractid)", "Contract", "contract_id", ""),
+    (r"(^price_?group_?id$|pricegroupid)", "Contract", "price_group_id", ""),
+    (r"(^contract_?title$|contracttitle)", "Contract", "contract_title", ""),
+    (r"(^contract_?price$|contractprice)", "Contract", "contract_price", ""),
     (r"(shipping_?method_?code|method_?code)", "Payment", "shipping_method_code", ""),
     (r"(shipping_?carrier_?code|carrier_?code)", "Payment", "shipping_carrier_code", ""),
     # shipping / billing address
@@ -417,6 +425,10 @@ def _required_columns(columns: list) -> list:
 
 
 _GROUP_WHY = {
+    "Contract": "The price agreement this account buys under. B2B stores post "
+                "the whole selection with the add-to-cart and refuse one that "
+                "is no longer valid, so a recording's contract goes stale — "
+                "change it here rather than recording the journey again.",
     "Address": "delivery and billing details typed at checkout",
     "Credentials": "log in as different users (one account per concurrent user)",
     "Card": "supply test-mode card / stored-token details at payment",
