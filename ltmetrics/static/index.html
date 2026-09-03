@@ -2744,14 +2744,15 @@ function renderAnalysis(a){
   if(src){
     const derived = ag.length && ag[0].derived;
     const find = n => ag.find(g=>g.name === n);
-    const furn = find('Site furniture'), other = find('Other steps');
+    const furn = find('Every-page calls'), other = find('Other steps');
     const bits = ['This recording did not name its steps, so these were worked '
                 + 'out from what each call does.'];
     // The two remainders are not interchangeable at the slider, so the
     // difference is spelt out rather than left to the names.
-    if(furn) bits.push('“Site furniture” is the ' + furn.count + ' call'
-      + (furn.count===1?'':'s') + ' this store makes on every page whatever the '
-      + 'shopper is doing — turn that one down to cut background traffic.');
+    if(furn) bits.push('“Every-page calls” ' + (furn.count===1?'is the 1 call':
+        'are the ' + furn.count + ' calls') + ' this store makes on every page '
+      + 'whatever the shopper is doing, like refreshing the mini-cart — turn '
+      + 'that one down to cut background traffic.');
     if(other) bits.push('“Other steps” is ' + other.count + ' call'
       + (other.count===1?' the rules could not name':'s the rules could not name')
       + ' — it may contain real checkout calls, so leave it at 100% unless you '

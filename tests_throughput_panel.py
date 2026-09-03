@@ -172,15 +172,15 @@ check("and it is marked as worked out, not recorded",
       all(x["derived"] for x in _g))
 check("every step is accounted for",
       sum(x["count"] for x in _g) == len(_AMNEAL))
-check("page furniture is separated from unnamed business calls",
-      "Site furniture" in _names and "Other steps" in _names)
+check("every-page calls are separated from unnamed business calls",
+      "Every-page calls" in _names and "Other steps" in _names)
 check("and both come last, after the real steps",
-      _names.index("Site furniture") == len(_names) - 1
+      _names.index("Every-page calls") == len(_names) - 1
       and _names.index("Other steps") == len(_names) - 2)
-check("the every-page ajax is the furniture",
-      _fd.is_site_furniture({"path": "/customer/section/load/"}))
+check("the every-page ajax is one of them",
+      _fd.is_every_page_call({"path": "/customer/section/load/"}))
 check("a checkout call is not",
-      not _fd.is_site_furniture({"path": "/amnealcustomer/addressSelection/popupData"}))
+      not _fd.is_every_page_call({"path": "/amnealcustomer/addressSelection/popupData"}))
 check("and the address picker is named, not left in a bin",
       "Checkout" in _names)
 
@@ -194,7 +194,7 @@ check("its own transaction names win",
       [x["name"] for x in _r] == ["Login", "Add to cart", "Checkout"])
 check("nothing is marked as worked out", not any(x["derived"] for x in _r))
 check("and neither remainder appears",
-      not any(x["name"] in ("Other steps", "Site furniture") for x in _r))
+      not any(x["name"] in ("Other steps", "Every-page calls") for x in _r))
 
 print()
 print("the journey and the traffic panel share one classifier")
@@ -228,7 +228,7 @@ check("a KB that fails to load does not take the classifier with it",
 _kb = io.open("ltmetrics/knowledge/rules/platform_rules.yaml",
               encoding="utf-8").read()
 check("the stages are defined there", "journey_stages:" in _kb)
-check("so is the furniture", "site_furniture:" in _kb)
+check("so are the every-page calls", "every_page_calls:" in _kb)
 check("and the milestone flag is used, not just declared",
       "milestone: false" in _kb)
 

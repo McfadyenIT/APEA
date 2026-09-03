@@ -89,15 +89,15 @@ generic:
       match: ["/checkout"]
       proves: "checkout"
 
-  # PAGE FURNITURE -------------------------------------------------------------
+  # EVERY-PAGE CALLS -----------------------------------------------------------
   # Calls a store makes on every page whatever the shopper is doing: the
   # customer-data ajax, banner loaders. They are real traffic and must still be
   # sent, but they are not a step of the journey, so they get their own group.
   # Mixing them with unnamed business steps made one group that could not
-  # safely be turned down -- skipping the decoration would have skipped the
-  # address picker with it.
-  site_furniture: ["customer/section/load", "section/load", "banner/ajax",
-                   "/ajax/load"]
+  # safely be turned down -- skipping the background traffic would have skipped
+  # the address picker with it.
+  every_page_calls: ["customer/section/load", "section/load", "banner/ajax",
+                     "/ajax/load"]
 
   # STAGE LABELS FOR THE TOOL'S OWN CALLS --------------------------------------
   # A call carries a transaction group only if the recording wrapped it in one.

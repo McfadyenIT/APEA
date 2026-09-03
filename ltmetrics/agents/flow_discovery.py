@@ -136,7 +136,7 @@ _STAGE_RULES = (
 
 
 def _kb_rules():
-    """(stage rules, furniture patterns) from the KB, falling back to the tuple
+    """(stage rules, every-page patterns) from the KB, falling back to the tuple
     above. A YAML that fails to load must not take the classifier with it."""
     try:
         from ltmetrics.knowledge.kb import KB
@@ -149,7 +149,7 @@ def _kb_rules():
                 rules.append((stage, tuple(match), r.get("proves") or "",
                               bool(r.get("milestone", True))))
         if rules:
-            return rules, tuple(g.get("site_furniture") or ())
+            return rules, tuple(g.get("every_page_calls") or ())
     except Exception:
         pass
     return [(n, m, pr, True) for n, m, pr in _STAGE_RULES], ()
@@ -177,16 +177,17 @@ def stage_of_step(step, milestones_only: bool = False) -> tuple:
     return "", ""
 
 
-def is_site_furniture(step) -> bool:
+def is_every_page_call(step) -> bool:
     """A call the store makes on every page whatever the shopper is doing.
 
     Real traffic, still sent, but not a step -- so it is grouped apart from the
     business calls the rules could not name. One bucket holding both could not
-    be turned down safely: skipping the decoration skipped the address picker.
+    be turned down safely: skipping the background traffic skipped the address
+    picker with it.
     """
     p = ((step or {}).get("path") or "").lower()
-    _, furniture = _kb_rules()
-    return any(f in p for f in furniture)
+    _, every_page = _kb_rules()
+    return any(f in p for f in every_page)
 
 
 def _is_useful_group_name(name: str) -> bool:
@@ -223,18 +224,18 @@ def api_call_groups(flow: list) -> list:
 
     def _label(step):
         return (stage_of_step(step)[0]
-                or (_FURNITURE if is_site_furniture(step) else _OTHER))
+                or (_EVERY_PAGE if is_every_page_call(step) else _OTHER))
 
     derived = _count_groups(_label(s) for s in (flow or []))
-    named = [g for g in derived if g["name"] not in (_OTHER, _FURNITURE)]
+    named = [g for g in derived if g["name"] not in (_OTHER, _EVERY_PAGE)]
     if not named:
         # Nothing recognisable either way: better one honest group than none.
         return [dict(g, derived=False) for g in recorded]
     # The two remainders go last: they are what is left, not steps of the
-    # journey, and they are kept apart so the furniture can be turned down
-    # without taking an unnamed business call with it.
-    rest = [g for g in derived if g["name"] in (_OTHER, _FURNITURE)]
-    rest.sort(key=lambda g: g["name"] == _FURNITURE)
+    # journey, and they are kept apart so the background traffic can be turned
+    # down without taking an unnamed business call with it.
+    rest = [g for g in derived if g["name"] in (_OTHER, _EVERY_PAGE)]
+    rest.sort(key=lambda g: g["name"] == _EVERY_PAGE)
     return [dict(g, derived=True) for g in named + rest]
 
 
@@ -242,8 +243,9 @@ def api_call_groups(flow: list) -> list:
 # adds up to the journey rather than quietly showing a fraction of it.
 _OTHER = "Other steps"
 # Kept apart from _OTHER on purpose: this one is safe to turn down, and the
-# other is not.
-_FURNITURE = "Site furniture"
+# other is not. Named for what it is -- "Site furniture" is a page-design term
+# that had to be explained, which made it the wrong label for this screen.
+_EVERY_PAGE = "Every-page calls"
 
 
 def _count_groups(names) -> list:
