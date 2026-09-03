@@ -51,12 +51,15 @@ generic:
     - stage: "Search"
       match: ["catalogsearch", "q=", "/search"]
       proves: ""
-    - stage: "Product View"
-      match: ["/buy/", "/product/", "catalog/product/view"]
-      proves: ""
+    # Before Product View on purpose: Magento's storefront add is
+    # /checkout/cart/add/uenc/<blob>/product/429/, which contains "/product/"
+    # too. The more specific match has to win or every add is a page view.
     - stage: "Add to Cart"
       match: ["cart/add", "carts/mine/items", "add-to-cart", "add_to_cart"]
       proves: "cart"
+    - stage: "Product View"
+      match: ["/buy/", "/product/", "catalog/product/view"]
+      proves: ""
     - stage: "View Cart"
       match: ["checkout/cart"]
       proves: "cart"

@@ -234,5 +234,38 @@ check("and the milestone flag is used, not just declared",
       "milestone: false" in _kb)
 
 print()
+print("the noise filter keeps the journey, not a class of request")
+# "Only REST & API" ticked a call on its TRANSPORT. That kept a promo-banner
+# loader (tagged API) and dropped the purchase-order save, the address picker
+# and the stock check, which are ordinary storefront POSTs.
+_UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
+check("the row carries what the call does", 'data-stage="${_escAttr(c.stage' in _UI)
+check("and whether it is background", "data-background=" in _UI)
+check("background is dropped whatever it is tagged",
+      "if(el.dataset.background === '1'){ el.checked = false; return; }" in _UI)
+check("a named step is kept whatever it is tagged",
+      "el.checked = !!el.dataset.stage || k==='REST' || k==='API'" in _UI)
+_SRV = io.open("ltmetrics/server.py", encoding="utf-8").read()
+check("the server computes both, so the page holds no second copy of the rule",
+      "recording_agent.stage_of_step(s)[0]" in _SRV
+      and "recording_agent.is_every_page_call(s)" in _SRV)
+
+print()
+print("an add-to-cart is not a page view")
+# Magento's storefront add is /checkout/cart/add/uenc/<blob>/product/429/ --
+# it contains "/product/" too, and Product View was listed first, so every add
+# in every Magento recording was classified as a page view.
+check("the add wins on the more specific match",
+      _fd.stage_of_step({"path": "/checkout/cart/add/uenc/aB/product/429/"})[0]
+      == "Add to Cart")
+check("a real product view is untouched",
+      _fd.stage_of_step({"path": "/catalog/product/view/id/429"})[0]
+      == "Product View")
+check("and the order is recorded where it matters",
+      "Before Product View on purpose" in io.open(
+          "ltmetrics/knowledge/rules/platform_rules.yaml",
+          encoding="utf-8").read())
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

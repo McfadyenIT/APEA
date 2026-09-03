@@ -2144,7 +2144,7 @@ function renderCallSelector(calls, dropped){
       const why = crit ? (CRITICAL_WHY[c.critical] || 'Business critical.') : '';
       const flag = crit ? `<span class="kind REST" style="background:#3d1b1b;color:#ff9a9a" title="${_escAttr(why)}">KEEP</span>` : '';
       return `<label class="callItem">
-        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${_escAttr(c.critical||'')}" ${c.selected!==false?'checked':''}>
+        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${_escAttr(c.critical||'')}" data-stage="${_escAttr(c.stage||'')}" data-background="${c.background?'1':''}" ${c.selected!==false?'checked':''}>
         <span class="m">${_escHtml(c.method)}</span>
         <span class="kind ${k}">${_escHtml(k)}</span>
         <span class="p">${_escHtml(c.path)}</span>${grp}${flag}
@@ -2216,10 +2216,16 @@ function renderCallSelector(calls, dropped){
   if(bAll) bAll.onclick=()=>setAllCalls(true);
   if(bNone) bNone.onclick=()=>setAllCalls(false);
   if(bApi) bApi.onclick=()=>{ document.querySelectorAll('#anCalls .callChk').forEach(el=>{
-      const k=el.dataset.kind;
+      const k = el.dataset.kind;
       // Keep pricing-critical storefront calls: unticking them silently
       // produces 0-value orders that still report as a pass.
-      el.checked=(k==='REST'||k==='API'||!!el.dataset.critical); });
+      if(el.dataset.critical){ el.checked = true; return; }
+      // Background traffic goes whatever it is tagged. A promo-banner loader
+      // is an API call and still nothing to do with buying anything.
+      if(el.dataset.background === '1'){ el.checked = false; return; }
+      // Otherwise: a named step of the journey, or a call whose transport says
+      // it does work rather than render a page.
+      el.checked = !!el.dataset.stage || k==='REST' || k==='API'; });
     updateCallCount(); };
   updateCallCount();
 }

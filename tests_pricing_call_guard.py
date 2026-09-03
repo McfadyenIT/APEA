@@ -125,7 +125,13 @@ check("no regex in the page", "PRICING_CRITICAL_RE" not in html, True)
 check("it reads the server's flag instead", "c && c.critical" in html, True)
 check("rows carry the KIND, not a boolean",
       "data-critical=\"${_escAttr(c.critical||'')}\"" in html, True)
-check("bulk select honours it", "!!el.dataset.critical" in html, True)
+# Still the same rule, written differently: critical is now decided FIRST, so
+# a pricing call cannot be dropped by any later branch of the filter.
+check("bulk select honours it",
+      "if(el.dataset.critical){ el.checked = true; return; }" in html, True)
+check("and it is decided before anything else",
+      html.index("if(el.dataset.critical){ el.checked = true; return; }")
+      < html.index("el.dataset.background === '1'"), True)
 check("the warning explains the actual kind", "CRITICAL_WHY[kind]" in html, True)
 
 srv = (ROOT / "ltmetrics" / "server.py").read_text(encoding="utf-8")
