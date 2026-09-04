@@ -216,5 +216,22 @@ check("and the replay loop uses the same test",
       'if not _places_orders(s.get("path")):' in _GEN)
 
 print()
+print("both order paths accept the terms and conditions")
+# Two code paths place an order over REST. Only the main one sent the checkout
+# agreement ids, so every attempt on the other came back
+#   400 "The order wasn't placed. First, agree to the terms and conditions"
+# while the ids sat in a constant the tool had harvested from the recording.
+check("there is one implementation", _GEN.count("def _agreement_ids(self)") == 1)
+check("and both callers use it", _GEN.count("self._agreement_ids()") == 2)
+check("the fallback path attaches them to the payment method",
+      'pm["extension_attributes"] = {"agreement_ids": _agr}' in _GEN)
+check("the recorded ids are preferred over a REST lookup",
+      "RECORDING-FIRST" in _GEN and "_AGREEMENT_IDS" in _GEN)
+check("the lookup is cached, not repeated per order",
+      "_agr_cache" in _GEN)
+check("no caller keeps its own copy of the lookup",
+      _GEN.count('_EP["agreements_fallback"]') == 1)
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

@@ -2961,24 +2961,7 @@ __BROWSE_TASKS__
         # store config captured in the recorded place-order body, and the REST
         # agreements endpoints are often not exposed (404) — so prefer the recorded
         # ids and only hit REST as a fallback when the recording has none.
-        _agr = [int(a) if str(a).isdigit() else a for a in _AGREEMENT_IDS]
-        if _agr:
-            _clog("Checkout agreements", "", "", 200, 0, "", True,
-                  extra="from recording: agreement_ids=%s" % _agr)
-        else:
-            for _ep in (_EP["agreements"], _EP["agreements_fallback"]):
-                _ok_a, _st_a, _body_a = self._rc("Checkout agreements", "GET",
-                                                 _REST_PREFIX + _ep, headers=auth)
-                if _ok_a:
-                    try:
-                        for _a in (json.loads(_body_a or "[]") or []):
-                            _aid = _a.get("agreement_id", _a.get("agreementId"))
-                            if _aid is not None and _a.get("is_active", True):
-                                _agr.append(int(_aid) if str(_aid).isdigit() else str(_aid))
-                    except Exception:
-                        pass
-                if _agr:
-                    break
+        _agr = self._agreement_ids()
         if _agr:
             pm["extension_attributes"] = {"agreement_ids": _agr}
             _clog_annotate("accepted agreement_ids=%s" % _agr)
@@ -3122,6 +3105,41 @@ __BROWSE_TASKS__
             pass                                # non-int (e.g. NUTS code) -> omit
         return {k: v for k, v in addr.items() if v is not None}
 
+    def _agreement_ids(self):
+        """Checkout agreement (T&C) ids this store requires with an order.
+
+        RECORDING-FIRST: the ids are stable store config captured in the
+        recorded place-order body, and the REST agreements endpoints are
+        frequently not exposed (404 on both, on two stores so far). Cached per
+        user so a fallback lookup happens at most once.
+        """
+        _c = getattr(self, "_agr_cache", None)
+        if _c is not None:
+            return _c
+        agr = [int(a) if str(a).isdigit() else a for a in _AGREEMENT_IDS]
+        if agr:
+            _clog("Checkout agreements", "", "", 200, 0, "", True,
+                  extra="from recording: agreement_ids=%s" % agr)
+        else:
+            auth = ({"Authorization": "Bearer %s" % self._token}
+                    if getattr(self, "_token", None) else None)
+            for _ep in (_EP["agreements"], _EP["agreements_fallback"]):
+                _ok_a, _st_a, _body_a = self._rc("Checkout agreements", "GET",
+                                                 _REST_PREFIX + _ep, headers=auth)
+                if _ok_a:
+                    try:
+                        for _a in (json.loads(_body_a or "[]") or []):
+                            _aid = _a.get("agreement_id", _a.get("agreementId"))
+                            if _aid is not None and _a.get("is_active", True):
+                                agr.append(int(_aid) if str(_aid).isdigit()
+                                           else str(_aid))
+                    except Exception:
+                        pass
+                if agr:
+                    break
+        self._agr_cache = agr
+        return agr
+
     def _rest_place_order(self):
         auth = {"Authorization": "Bearer %s" % self._token}
         method, codes = None, []
@@ -3158,6 +3176,12 @@ __BROWSE_TASKS__
         # unless _PAY_API is configured and a token was minted for this user).
         if _PAY_API and getattr(self, "_payment_token", None) and _PAY_API.get("inject_field"):
             pm.setdefault("additional_data", {})[_PAY_API["inject_field"]] = self._payment_token
+        # The order is refused without the terms accepted, exactly as on the main
+        # path. This one was missing it, and every attempt came back
+        # "First, agree to the terms and conditions".
+        _agr = self._agreement_ids()
+        if _agr:
+            pm["extension_attributes"] = {"agreement_ids": _agr}
         payload = {"paymentMethod": pm}
         if self._billing:
             payload["billingAddress"] = self._addr()      # camelCase — correct regionId
