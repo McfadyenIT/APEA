@@ -12,6 +12,11 @@ env/
 
 # Caches
 .apea_llm_cache/
+# Renaming APEA to LT Metrics moved this out from under the rule above, the
+# same way it moved the token store and the run-history database. Generated
+# cache of AI responses -- never in git.
+.ltm_llm_cache/
+ltmetrics_error.log
 .pytest_cache/
 .mypy_cache/
 
