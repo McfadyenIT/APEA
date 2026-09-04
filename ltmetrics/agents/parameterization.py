@@ -396,7 +396,7 @@ def analyze(flow: list, selenium_inputs: list | None = None,
         r"url$|^url|uri$|timestamp|_ts$|nonce|captcha|recaptcha|gtm|analytics"
         r"|user(name)?$|^login|pass(word|wd)?$|email"
         r"|^(value|id|item|data|type|code|key|name|action|mode|page)$", re.I)
-    _others = []
+    _others, _offered_only = [], set()
     for _name in field_names:
         if _name in _known_ff or _SKIP_NAME.search(_name):
             continue
@@ -424,6 +424,7 @@ def analyze(flow: list, selenium_inputs: list | None = None,
                       "you can change it here instead of recording again."}
         for _col, _name, _val in _others[:12]:
             columns.append(_col)
+            _offered_only.add(_col)
             _og["fields"].append({"column": _col, "from_field": _name,
                                   "sample": _val, "evidence": "submitted"})
         group_list.append(_og)
@@ -445,6 +446,12 @@ def analyze(flow: list, selenium_inputs: list | None = None,
     # annotate each field so the UI/report can highlight required vs optional and
     # show WHERE the sample came from (recorded vs still needs input)
     required_cols = set(_required_columns(columns))
+    # Columns that are OFFERED rather than demanded: they came pre-filled from
+    # the recording, so omitting one replays the recorded value. Requiring them
+    # blocked every data file written before they existed.
+    required_cols -= _offered_only
+    required_cols -= {"contract_id", "price_group_id", "contract_title",
+                      "contract_price"}
     if sku_required:
         required_cols.add("sku")          # configurable product -> sku is blocking
     for g in group_list:
@@ -572,12 +579,19 @@ def _recorded_sku(flow):
     return None
 
 
-def validate(columns_required: list, rows: list) -> dict:
+def validate(columns_required: list, rows: list,
+             required: list | None = None) -> dict:
     """Validate an uploaded CSV against the required columns, separating BLOCKING
     issues (missing/empty required values that would break the run) from optional
     fields LT Metrics auto-handles. Returns {ok, blocking, missing_columns,
     empty_columns, warnings, row_count, messages}. `ok` gates test generation."""
-    required = list(columns_required or [])
+    all_cols = list(columns_required or [])
+    # What actually blocks a run is decided by analyze(), which knows which
+    # columns are pre-filled from the recording and therefore optional. Falling
+    # back to the fixed name list is what refused a data file for not having a
+    # column called super_attribute_553.
+    _blocking = set(required) if required is not None else None
+    required = all_cols
     present = set()
     for r in (rows or []):
         present.update(k for k in r.keys() if k)
@@ -599,7 +613,8 @@ def validate(columns_required: list, rows: list) -> dict:
     for c in required:
         if c in _PRODUCT_COLUMNS:
             continue                       # handled as a group below
-        opt = c in _OPTIONAL_COLUMNS
+        opt = (c not in _blocking) if _blocking is not None \
+            else (c in _OPTIONAL_COLUMNS)
         if c not in present:
             (warnings if opt else missing).append(c)
         elif _empty(c):

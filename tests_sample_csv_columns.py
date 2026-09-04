@@ -163,5 +163,36 @@ check("and the list is capped so the file stays readable",
       "_others[:12]" in _PAR2)
 
 print()
+print("a column pre-filled from the recording does not block a run")
+# Offering the contract fields and the other recorded values made every one of
+# them REQUIRED, because anything off a fixed optional list blocks. An existing
+# Radwell data file was refused for not having a column called
+# super_attribute_553 -- a column that had not existed until that morning.
+_flow = [{"method": "POST", "path": "/checkout/cart/add",
+          "body": {"product": "429", "qty": "1", "contract_id": "VIZDSHNPBIO",
+                   "super_attribute_553": "77", "backorder": "0"}},
+         {"method": "POST", "path": "/customer/account/loginPost",
+          "body": {"login[username]": "a@b.com", "login[password]": "x"}}]
+_res = _pm.analyze(_flow, None)
+_req = set(_res.get("required_columns") or [])
+check("the offered columns are not required",
+      not ({"super_attribute_553", "backorder"} & _req))
+check("nor are the contract fields",
+      not ({"contract_id", "price_group_id"} & _req))
+check("credentials still are", {"username", "password"} <= _req)
+
+# validate() re-derived blocking from its own list, so correcting analyze alone
+# left the uploader still refusing the file. One place decides now.
+_rows = [{"username": "a@b.com", "password": "x", "product_id": "429",
+          "sku": "ABC"}]
+_v = _pm.validate(_res.get("columns"), _rows,
+                  required=_res.get("required_columns"))
+check("so a file without them validates", _v.get("ok") is True)
+check("and nothing blocks", _v.get("blocking") is False)
+_old = _pm.validate(_res.get("columns"), _rows)
+check("called without it, the old behaviour is unchanged",
+      isinstance(_old.get("ok"), bool))
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

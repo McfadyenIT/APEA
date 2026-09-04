@@ -988,14 +988,18 @@ def crawl_record(req: CrawlRecordReq):
 def validate_data(req: ValidateReq):
     """Validate an uploaded data CSV against the columns the recording needs."""
     from .agents import parameterization
-    required = []
+    required, blocking = [], None
     if req.recording:
         rec = recording_agent.parse_recording(req.recording)
-        required = parameterization.analyze(
+        _an = parameterization.analyze(
             rec.get("flow") or [], rec.get("selenium_inputs"),
-            rec.get("ui_steps")).get("columns", [])
+            rec.get("ui_steps"))
+        required = _an.get("columns", [])
+        # Which of those actually block is analyze's call: it knows the ones it
+        # pre-filled from the recording, which replay fine when left out.
+        blocking = _an.get("required_columns")
     headers, rows = _read_csv_rows(req.data_csv)
-    result = parameterization.validate(required, rows)
+    result = parameterization.validate(required, rows, required=blocking)
     # What the file can actually SUPPORT, for the readiness panel: distinct
     # logins bound safe concurrency, and a card needs a token per account.
     try:
