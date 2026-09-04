@@ -247,5 +247,36 @@ check("a checkout that DID fill a cart still falls back",
       "self._place_order()" in _GEN)
 
 print()
+print("both order paths accept the terms and conditions")
+# Two code paths place an order over REST. Only the main one sent the checkout
+# agreement ids, so every attempt on the other came back
+#   400 "The order wasn't placed. First, agree to the terms and conditions"
+# while the ids sat in a constant the tool had harvested from the recording.
+check("there is one implementation", _GEN.count("def _agreement_ids(self)") == 1)
+check("and both callers use it", _GEN.count("self._agreement_ids()") == 2)
+check("the fallback path attaches them to the payment method",
+      'pm["extension_attributes"] = {"agreement_ids": _agr}' in _GEN)
+check("the recorded ids are preferred over a REST lookup",
+      "RECORDING-FIRST" in _GEN and "_AGREEMENT_IDS" in _GEN)
+check("the lookup is cached, not repeated per order",
+      "_agr_cache" in _GEN)
+check("no caller keeps its own copy of the lookup",
+      _GEN.count('_EP["agreements_fallback"]') == 1)
+
+print()
+print("an expected 404 is not a load failure")
+# An Amneal run placed six orders and still reported 10.7% errors. Eight of the
+# fourteen failures could not have succeeded and were never required to.
+check("carts/mine/totals is skipped when the validator drives checkout",
+      '"carts/mine/totals"' in _GEN)
+check("and the reason is recorded where the list is",
+      "Current customer does not have an active cart" in _GEN)
+check("the agreements call is marked as the probe it is",
+      'self._rc("Checkout agreements", "GET",' in _GEN
+      and "soft=True)" in _GEN)
+check("soft still means what it said it meant",
+      "NOT counted as a load" in _GEN)   # the docstring wraps mid-phrase
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

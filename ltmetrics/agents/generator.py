@@ -2177,8 +2177,12 @@ class WebsiteUser(HttpUser):
                     r.failure("customer profile %s" % r.status_code)
 
     # recorded REST-checkout POSTs we replace with a clean API sequence
+    # Recorded checkout calls the REST validator replaces with its own sequence.
+    # "carts/mine/totals" is separate from "carts/mine/totals-information" and
+    # was missing: replayed in recorded order it runs before the validator has
+    # a cart, and answers "Current customer does not have an active cart".
     _REST_CHECKOUT_STEPS = ("carts/mine/shipping-information", "estimate-shipping",
-                            "carts/mine/totals-information", "set-payment-information",
+                            "carts/mine/totals", "set-payment-information",
                             "carts/mine/payment-information")
 
 __BROWSE_TASKS__
@@ -3135,8 +3139,12 @@ __BROWSE_TASKS__
             auth = ({"Authorization": "Bearer %s" % self._token}
                     if getattr(self, "_token", None) else None)
             for _ep in (_EP["agreements"], _EP["agreements_fallback"]):
+                # A PROBE: asking whether this store exposes the endpoint at
+                # all. Magento answers 404 on both when it does not, which is
+                # the probe succeeding, not the run failing.
                 _ok_a, _st_a, _body_a = self._rc("Checkout agreements", "GET",
-                                                 _REST_PREFIX + _ep, headers=auth)
+                                                 _REST_PREFIX + _ep, headers=auth,
+                                                 soft=True)
                 if _ok_a:
                     try:
                         for _a in (json.loads(_body_a or "[]") or []):
