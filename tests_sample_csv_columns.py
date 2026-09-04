@@ -194,5 +194,21 @@ check("called without it, the old behaviour is unchanged",
       isinstance(_old.get("ok"), bool))
 
 print()
+print("every gate asks analyze what blocks, none keeps its own copy")
+# Fixing the uploader was not enough: the gate that blocks a RUN does its own
+# analyze and its own validate, so pressing Run still failed on columns that
+# were offered rather than demanded. Two places became three.
+_SRV = io.open("ltmetrics/server.py", encoding="utf-8").read()
+import re as _re2
+_calls = _re2.findall(r"(?:_pz|parameterization)\.validate\([^)]*\)", _SRV,
+                      _re2.S)
+check("there are exactly two callers", len(_calls) == 2)
+check("and both pass the blocking set",
+      all("required=" in c for c in _calls))
+check("neither re-derives it from the column list",
+      "validate(_req_cols, _raw_rows)" not in _SRV
+      and "validate(required, rows)" not in _SRV)
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)

@@ -1437,9 +1437,14 @@ def run(req: RunReq):
                     if req.recording else None
             except Exception:
                 _sel = None
-            _req_cols = _pz.analyze(disc.get("flow") or [], _sel,
-                                    disc.get("ui_steps")).get("columns", [])
-            _v = _pz.validate(_req_cols, _raw_rows)
+            _pa = _pz.analyze(disc.get("flow") or [], _sel,
+                              disc.get("ui_steps"))
+            _req_cols = _pa.get("columns", [])
+            # Which of those block is analyze's call, not a second copy of the
+            # rule here: the columns it pre-filled from the recording replay
+            # fine when a data file predates them.
+            _v = _pz.validate(_req_cols, _raw_rows,
+                              required=_pa.get("required_columns"))
             if not _v.get("ok"):
                 raise HTTPException(status_code=400,
                                     detail="Data CSV has blocking issues — "
