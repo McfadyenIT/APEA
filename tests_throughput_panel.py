@@ -63,25 +63,76 @@ check("the label is short enough to be shouted in capitals",
 check("the explanation is NOT inside the label",
       "multiply" not in lab and "request count is fixed" not in lab)
 check("it lives in a hint paragraph instead",
-      'class="hint"' in blk and "multiply" in blk)
+      'class="hint"' in blk and "every virtual user walks that group" in blk)
+# The sentence about the count multiplying went with the column it described --
+# the canvas's row carries a name, a slider and a percentage. Comments are not
+# copy, so they are stripped before reading what the panel actually says.
+_said = re.sub(r"<!--.*?-->", "", blk, flags=re.S)
+check("and says nothing about a count beside each row",
+      "multiply" not in _said and "request count" not in _said)
 check("and hint paragraphs are not uppercased",
       not re.search(r"p\.hint\{[^}]*text-transform", UI))
 check("while labels are, which is why it had to move",
       re.search(r"\blabel\{[^}]*text-transform:uppercase", UI) is not None)
 
 print()
-print("it names the unit and shows what the slider costs")
-check("rows say 'request', not 'call'",
-      "${g.count} request${g.count==1?'':'s'}" in UI)
-check("each row has a cost read-out", "thrEach" in UI)
-check("there is a total line", 'id="thrTotal"' in UI)
-check("the cost is computed from count x percent",
-      "g.count * pct / 100" in UI)
+print("a row is a name, a slider and a percentage -- the canvas's shape")
+check("one bordered list, hairline between rows", ".thrList{border:1px solid" in UI)
+check("the row carries the journey's severity bar",
+      "border-left-color:var(--sev" in UI)
+check("the slider is the canvas's 170px", ".thrRange{width:170px" in UI)
+# The field rule outranks a class selector, so without excluding range the
+# slider was stretched to its container and the names beside it wrapped.
+check("and a range is not sized like a text field",
+      "input:not([type=checkbox]):not([type=radio]):not([type=range]),select{" in UI
+      and "input[type=range]{accent-color:var(--accent)}" in UI)
+check("no per-row cost column", "thrEach" not in UI)
+
+print()
+print("a share can be set roughly or exactly")
+# The canvas only offers the slider, at 5% steps. That cannot express 37%, so
+# the step is 1 and the number box is back alongside it.
+check("the slider moves a point at a time", 'step="1" value="100"' in UI)
+check("and there is a box to type the number into",
+      'class="thrNum"' in UI and 'type="number" min="0" max="100"' in UI)
+# The field rule is input:not(...), which outranks a bare class whatever the
+# source order -- unscoped, the box came out 937px wide.
+check("the box is sized past the field rule, not by a bare class",
+      "#anThroughput input.thrNum{width:84px" in UI)
+# The native stepper is drawn inside the field's right edge, so a right-aligned
+# value ran underneath it. The right padding is what the stepper sits in.
+check("and the value clears its own stepper",
+      "padding:0 24px 0 10px" in UI)
+check("and the name keeps a floor so it is never crushed",
+      ".thrName{font-size:14px;flex:1 1 auto;min-width:200px" in UI)
+check("both are labelled for a screen reader",
+      "share of traffic" in UI and "share, per cent" in UI)
+check("one setter owns the value, so the two cannot disagree",
+      "const _thrSet = (i, pct)=>" in UI
+      and "if(r && +r.value !== pct) r.value = pct;" in UI
+      and "if(n && +n.value !== pct) n.value = pct;" in UI)
+check("it clamps what is typed rather than trusting it",
+      "Math.max(0, Math.min(100, Math.round(+pct || 0)))" in UI)
+check("a half-typed number is not corrected mid-keystroke",
+      "if(el.value !== '') _thrSet" in UI and "el.onchange = ()=> _thrSet" in UI)
+check("and the plan writes the box as well as the slider",
+      "if(n) n.value=pct;" in UI)
+# The total survives the row it used to sit beside: it is the only statement of
+# what a full pass actually sends, and it carries the checkout warning.
+check("there is still a total line", 'id="thrTotal"' in UI)
+check("computed from count x percent", "g.count * pct / 100" in UI)
 
 print()
 print("the read-outs cannot go stale")
 _hooks = UI.count("renderThroughputCost()")
-check("the slider refreshes them", "renderThroughputCost(); };" in UI)
+# Both controls go through _thrSet, so the refresh sits there once rather than
+# being repeated in each handler.
+_set = UI[UI.index("const _thrSet = (i, pct)=>"):]
+_set = _set[:_set.index(chr(10) + "  };") + 5]
+check("the shared setter refreshes them", "renderThroughputCost();" in _set)
+check("and both controls go through it",
+      "_thrSet(+el.dataset.i, el.value)" in UI
+      and UI.count("_thrSet(+el.dataset.i") >= 3)
 check("so does typing a percentage", _hooks >= 3, "only %d call sites" % _hooks)
 check("and they are painted before anything is touched",
       "renderThroughputCost();                    // paint" in UI
