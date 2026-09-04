@@ -2254,6 +2254,17 @@ __BROWSE_TASKS__
         if self._order_placed:
             self._orders_done = getattr(self, "_orders_done", 0) + 1
         elif not self._order_placed:
+            # Nothing to place an order against. The checkout stopped before the
+            # cart held anything, so trying anyway produces a second and third
+            # failure -- "firstname is required" from an address that was never
+            # read -- and buries the reason it really stopped.
+            _st = (_FLOW.get("checkout_state") or {})
+            if _st.get("stopped_at") and not _st.get("item_count"):
+                _clog_annotate("no cart to order from (stopped at %s: %s) — "
+                               "not attempting an order"
+                               % (_st.get("stopped_at"),
+                                  _st.get("stop_reason") or "no reason given"))
+                return
             # The recorded order step belongs to a group that the loop already
             # timed. Wrapping it again would double-count that group.
             self._place_order()

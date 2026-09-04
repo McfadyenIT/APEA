@@ -233,5 +233,19 @@ check("no caller keeps its own copy of the lookup",
       _GEN.count('_EP["agreements_fallback"]') == 1)
 
 print()
+print("no cart, no order attempt")
+# One Radwell iteration failed at Cart created ("The quote can't be created")
+# and the run tried to place an order anyway, twice, on a cart that did not
+# exist. Both came back "firstname is required" -- read from an address that
+# was never fetched. One real failure became four reported ones, and the two
+# loudest pointed at data that was complete.
+check("the state machine is consulted before attempting an order",
+      'if _st.get("stopped_at") and not _st.get("item_count"):' in _GEN)
+check("and the reason it really stopped is what gets said",
+      "not attempting an order" in _GEN and "stop_reason" in _GEN)
+check("a checkout that DID fill a cart still falls back",
+      "self._place_order()" in _GEN)
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
