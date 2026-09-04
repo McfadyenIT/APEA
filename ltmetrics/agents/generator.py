@@ -1809,6 +1809,26 @@ def _clean_token(txt):
     return None
 
 
+# A JSON null or boolean is not an identifier. "increment_id": null in an
+# address payload was read as an order id and reported as a placed order.
+_NOT_AN_ID = {"", "0", "null", "none", "nil", "undefined", "false", "true"}
+
+
+def _is_real_id(v) -> bool:
+    return str(v or "").strip().lower() not in _NOT_AN_ID
+
+
+# A page can carry a marker where a value will go. Magento writes
+# /uenc/%25uenc%25/ into cart links for its own JavaScript to replace, and a
+# correlation extractor cannot tell that from a real capture without looking.
+_PLACEHOLDER_RE = re.compile(r"^(%25|%|\$\{|\{\{|__)[A-Za-z0-9_]+(%25|%|\}|\}\}|__)$")
+
+
+def _is_placeholder(v) -> bool:
+    v = str(v or "").strip()
+    return bool(v) and bool(_PLACEHOLDER_RE.match(v))
+
+
 def _extract_order_id(txt):
     """Pull a real order/quote id from a place-order or quote-submit response.
 
@@ -1823,7 +1843,7 @@ def _extract_order_id(txt):
                 r'"order_id"\s*:\s*"?(\d+)',
                 r'"entity_id"\s*:\s*"?(\d+)'):
         m = re.search(pat, t)
-        if m:
+        if m and _is_real_id(m.group(1)):
             return m.group(1)
     # B2B negotiable-quote / RFQ submission returns a quote id / number.
     for pat in (r'"quote_id"\s*:\s*"?([A-Za-z0-9_-]+)',
@@ -1859,19 +1879,53 @@ def _confirm_order(url, status, txt):
     low = (txt or "").lower()
     if '"error"' in low or "exception" in low or '"errors":true' in low:
         return None
-    oid = _extract_order_id(txt)
-    if oid:
-        return oid
     u = (url or "").lower()
-    if any(s in u for s in _ORDER_URL_SIGNALS):
-        return "confirmed"
-    if "thank you for your order" in low or "your order number" in low:
-        return "confirmed"
-    # B2B quote submission confirmations (order-without-payment path).
-    if ("quote has been submitted" in low or "quote request" in low
-            or "your quote" in low or "quote submitted" in low):
-        return "confirmed"
-    return None
+    # Something other than the id has to say this is an order. Scraping an id
+    # out of any response counted a billing-address popup as a placed order:
+    # its payload carries "increment_id" and "entity_id" like an order does.
+    confirms = (any(s in u for s in _ORDER_URL_SIGNALS)
+                or "thank you for your order" in low
+                or "your order number" in low
+                # B2B quote submission (the order-without-payment path).
+                or "quote has been submitted" in low or "quote request" in low
+                or "your quote" in low or "quote submitted" in low)
+    if not confirms:
+        return None
+    # Only now is an id in the body worth reading.
+    return _extract_order_id(txt) or "confirmed"
+
+
+# An application error carried inside a 200. Matched on JSON shapes rather than
+# the word "error" anywhere, so a product description mentioning it is safe --
+# and "error": false has to stay a pass.
+_BODY_ERROR_RE = re.compile(
+    r'"error"\s*:\s*true'
+    r'|"isError"\s*:\s*true'
+    r'|"success"\s*:\s*false'
+    r'|"error_messages"\s*:\s*\[\s*[^\]\s]'
+    r'|"errors"\s*:\s*\[\s*\{'
+    # Salesforce Commerce (OCAPI) answers a refusal with a fault object.
+    r'|"fault"\s*:\s*\{'
+    # SOAP, still the wire format for a good deal of enterprise middleware.
+    r'|<(?:\w+:)?Fault[\s>]'
+    r'|<faultstring>', re.I)
+_BODY_ERROR_MSG_RE = re.compile(
+    r'"(?:error_messages|message|error|description)"\s*:\s*\[?\s*"([^"]{3,200})"'
+    r'|<faultstring>([^<]{3,200})</faultstring>', re.I)
+
+
+def _body_error(txt):
+    """The store's own error message when a 2xx body says the request failed,
+    else "". A refused add-to-cart answers 200 on this platform and several
+    others; taking the status line at face value reported it as a success."""
+    t = (txt or "")[:4000]
+    if not t or not _BODY_ERROR_RE.search(t):
+        return ""
+    m = _BODY_ERROR_MSG_RE.search(t)
+    if not m:
+        return "the response body reports an error"
+    return (m.group(1) or m.group(2) or "").strip() or \
+        "the response body reports an error"
 
 
 def _looks_like_order(path, status, txt):
@@ -2227,6 +2281,9 @@ __BROWSE_TASKS__
                                  headers=hdrs or None, catch_response=True, **req) as r:
             txt = r.text or ""
             ok = r.status_code < 400
+            _berr = _body_error(txt) if ok else ""
+            if _berr:
+                ok = False
             for a in step.get("asserts", []):
                 if a and a not in txt:
                     ok = False
@@ -3148,7 +3205,14 @@ __BROWSE_TASKS__
 
     def _capture(self, text):
         """JMeter-style extractor: pull correlation values out of a response into
-        self._vars using the configured regexes (first match wins per variable)."""
+        self._vars using the configured regexes (first match wins per variable).
+
+        A match that is itself a template placeholder is skipped. Magento
+        renders cart-add links with /uenc/%25uenc%25/ in them for its own
+        JavaScript to fill in; capturing that and injecting it downstream sent
+        uenc=%2525uenc%2525 and the store answered "Selected contract is not
+        valid." The recorded value is kept instead, which is a real one.
+        """
         if not (_CORRELATIONS and text):
             return
         for c in _CORRELATIONS:
@@ -3157,6 +3221,11 @@ __BROWSE_TASKS__
                     m = re.search(pat, text)
                 except Exception:
                     continue
+                if m and _is_placeholder(m.group(1)):
+                    _clog_annotate("%s looked like a placeholder in the page "
+                                   "(%s) — keeping the recorded value"
+                                   % (c["name"], m.group(1)[:40]))
+                    continue           # keep looking; a later pattern may be real
                 if m:
                     self._vars[c["name"]] = m.group(1)
                     break
@@ -3282,6 +3351,12 @@ __BROWSE_TASKS__
             txt = r.text or ""
             self._capture(txt)                # harvest correlation vars from response
             ok = r.status_code < 400
+            # A 200 whose body says the request was refused is not a success.
+            _berr = _body_error(txt) if ok else ""
+            if _berr:
+                ok = False
+                _clog_annotate("%s answered 200 but refused it: %s"
+                               % (step.get("name") or path, _berr))
             for a in step.get("asserts", []):
                 if a and a not in txt:
                     ok = False

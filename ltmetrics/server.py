@@ -194,6 +194,12 @@ def _build_calls(rec: dict, platform: str = "") -> list:
             # HERE, from the KB, so the browser does not carry a second copy of
             # the rule that can drift out of step with the server's.
             "critical": _critical_kind(path, platform),
+            # What this call DOES, from the same classifier the traffic groups
+            # use. The filter needs the journey, not a class of request: a
+            # promo-banner loader is tagged API and a purchase-order save is an
+            # ordinary POST, so transport alone kept the wrong one.
+            "stage": recording_agent.stage_of_step(s)[0],
+            "background": recording_agent.is_every_page_call(s),
             "selected": True,
         })
     return out

@@ -78,6 +78,21 @@ def _rows_from(existing_rows):
     return [dict(r) for r in (existing_rows or []) if isinstance(r, dict)]
 
 
+# Characters that never appear in a sku or a search term, and always appear in
+# the code that carried one. A recording hands us request bodies as readily as
+# values, and a GraphQL query reached a sample CSV as the search keyword.
+_NOT_A_VALUE = set('{}()[]<>"\'\\\n\r\t')
+
+
+def _plausible(value, limit=60) -> bool:
+    """Does this look like a value someone would type, rather than a fragment
+    of the request it came from?"""
+    v = str(value or "").strip()
+    if not v or len(v) > limit:
+        return False
+    return not any(c in _NOT_A_VALUE for c in v)
+
+
 def _skus(app_knowledge, existing_rows):
     biz = ((app_knowledge or {}).get("business_objects") or {}).get("products") or {}
     skus = list(biz.get("discovered_skus") or [])
@@ -86,14 +101,14 @@ def _skus(app_knowledge, existing_rows):
             v = str(r.get(k) or "").strip()
             if v and v not in skus:
                 skus.append(v)
-    return [s for s in skus if s] or ["SAMPLE-SKU-1"]
+    return [s for s in skus if _plausible(s)] or ["SAMPLE-SKU-1"]
 
 
 def _search_terms(existing_rows, app_knowledge):
     terms = []
     for r in _rows_from(existing_rows):
         v = str(r.get("search_keyword") or "").strip()
-        if v and v not in terms:
+        if v and v not in terms and _plausible(v):
             terms.append(v)
     return terms or _skus(app_knowledge, existing_rows)[:5]
 

@@ -27,6 +27,9 @@ UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
 
 FAILURES = []
 
+_FD_SRC = io.open("ltmetrics/agents/flow_discovery.py",
+                  encoding="utf-8").read()
+
 
 def check(name, cond, detail=""):
     print("  %-60s %s%s" % (name[:60], "ok" if cond else "FAIL",
@@ -131,6 +134,159 @@ check("crediting both reasons: the ticked calls and correlation",
       "ticked" in _dl and "correlates" in _dl)
 check("the misleading phrasing is gone",
       "on average per iteration" not in UI)
+
+print()
+print("a recording that names nothing still gets real groups")
+# Amneal's recorder wrapped all 195 requests in one transaction it called
+# "Test" and labelled every nested request with its own URL, so the panel
+# offered a single meaningless slider. There was nothing to expand into: the
+# stages had to come from what each call does.
+import sys as _sys
+_sys.path.insert(0, ".")
+from ltmetrics.agents import flow_discovery as _fd
+
+
+def _flow(*paths):
+    return [{"path": p} for p in paths]
+
+
+_AMNEAL = _flow(
+    "/amnealajaxlogin/account/login",
+    "/buy/product/429",
+    "/rest/default/V1/carts/mine/shipping-information",
+    "/rest/default/V1/carts/mine/payment-information",
+    "/customer/section/load/",
+    "/amnealcustomer/addressSelection/popupData",
+    "//graphql",          # the one call in the real recording nothing can name
+)
+_g = _fd.api_call_groups(_AMNEAL)
+_names = [x["name"] for x in _g]
+check("one useless wrapper is not accepted as a group",
+      not _fd._is_useful_group_name("Test"))
+check("nor a label that is really a URL",
+      not _fd._is_useful_group_name("https://shop.example.com/customer/section/load/"))
+check("the stages are recovered from the calls",
+      set(["Login", "Product View", "Shipping", "Payment / Place Order"])
+      <= set(_names))
+check("and it is marked as worked out, not recorded",
+      all(x["derived"] for x in _g))
+check("every step is accounted for",
+      sum(x["count"] for x in _g) == len(_AMNEAL))
+check("background traffic is a group of its own",
+      "Background traffic" in _names)
+check("and it comes last, after the real steps",
+      _names.index("Background traffic") == len(_names) - 1)
+check("a call the stage rules cannot name is named from its URL",
+      "Graphql" in _names and "Unrecognised calls" not in _names)
+check("the every-page ajax is one of them",
+      _fd.is_every_page_call({"path": "/customer/section/load/"}))
+check("a checkout call is not",
+      not _fd.is_every_page_call({"path": "/amnealcustomer/addressSelection/popupData"}))
+check("and the address picker is named, not left in a bin",
+      "Checkout" in _names)
+
+print()
+print("an application that is not a shop still gets real groups")
+# The stage rules are e-commerce vocabulary. A logistics journey matches none
+# of it, and used to produce no groups at all -- nine calls, nothing on screen.
+_FEDEX = _flow("/auth/oauth/v2/token", "/track/v1/trackingnumbers",
+               "/rate/v1/rates/quotes", "/api/session/refresh")
+_f = [x["name"] for x in _fd.api_call_groups(_FEDEX)]
+check("every call is grouped", sum(x["count"] for x in _fd.api_call_groups(_FEDEX))
+      == len(_FEDEX))
+check("named from the part of the URL that says what it is for",
+      _f == ["Auth", "Track", "Rate", "Session"])
+check("version markers are not group names",
+      _fd.path_group({"path": "/track/v1/trackingnumbers"}) == "Track")
+check("nor is the transport prefix",
+      _fd.path_group({"path": "/api/session/refresh"}) == "Session")
+check("a recording that names its own steps still wins",
+      [x["name"] for x in _fd.api_call_groups(
+          [{"path": "/track/v1/x", "group": "Track shipment"},
+           {"path": "/rate/v1/y", "group": "Get a rate"}])]
+      == ["Track shipment", "Get a rate"])
+
+print()
+print("a recording that DOES name its steps keeps its own names")
+_RADWELL = [{"path": "/customer/account/loginPost/", "group": "Login"},
+            {"path": "/checkout/cart/add/", "group": "Add to cart"},
+            {"path": "/rest/V1/carts/mine/payment-information", "group": "Checkout"}]
+_r = _fd.api_call_groups(_RADWELL)
+check("its own transaction names win",
+      [x["name"] for x in _r] == ["Login", "Add to cart", "Checkout"])
+check("nothing is marked as worked out", not any(x["derived"] for x in _r))
+check("and neither remainder appears",
+      not any(x["name"] in ("Unrecognised calls", "Background traffic")
+              for x in _r))
+
+print()
+print("the journey and the traffic panel share one classifier")
+# They used to be two copies of the same if/elif chain, free to drift apart and
+# name the same call two different things.
+check("the journey asks the classifier",
+      "stage_of_step(s, milestones_only=True)" in _FD_SRC)
+check("so do the groups", "stage_of_step(step)[0]" in _FD_SRC)
+_name, _ms = _fd._derive_journey(_AMNEAL)
+check("the journey still names itself from the same pass", _name == "Checkout")
+check("and lists the stages it saw",
+      _ms == ["Login", "Product View", "Shipping", "Payment / Place Order"])
+
+print()
+print("a supporting call is grouped without rewriting the journey")
+# Marking cart-totals a milestone put "Cart" after "Shipping" on a store that
+# reads totals late. Grouping it is useful; naming it in the journey was not.
+_TOTALS = [{"path": "/rest/V1/carts/mine/totals"}]
+check("it still gets a stage for grouping",
+      _fd.stage_of_step(_TOTALS[0])[0] == "Cart")
+check("but the journey does not name it",
+      _fd.stage_of_step(_TOTALS[0], milestones_only=True)[0] == "")
+check("so a late totals read cannot reorder the milestones",
+      _fd._derive_journey(_AMNEAL + _TOTALS)[1] == _ms)
+
+print()
+print("the rules live in the knowledge base, with the code as a fallback")
+check("they are read from the KB", "KB.platform_rules(\"generic\")" in _FD_SRC)
+check("a KB that fails to load does not take the classifier with it",
+      "except Exception:" in _FD_SRC and "return [(n, m, pr, True)" in _FD_SRC)
+_kb = io.open("ltmetrics/knowledge/rules/platform_rules.yaml",
+              encoding="utf-8").read()
+check("the stages are defined there", "journey_stages:" in _kb)
+check("so are the every-page calls", "every_page_calls:" in _kb)
+check("and the milestone flag is used, not just declared",
+      "milestone: false" in _kb)
+
+print()
+print("the noise filter keeps the journey, not a class of request")
+# "Only REST & API" ticked a call on its TRANSPORT. That kept a promo-banner
+# loader (tagged API) and dropped the purchase-order save, the address picker
+# and the stock check, which are ordinary storefront POSTs.
+_UI = io.open("ltmetrics/static/index.html", encoding="utf-8").read()
+check("the row carries what the call does", 'data-stage="${_escAttr(c.stage' in _UI)
+check("and whether it is background", "data-background=" in _UI)
+check("background is dropped whatever it is tagged",
+      "if(el.dataset.background === '1'){ el.checked = false; return; }" in _UI)
+check("a named step is kept whatever it is tagged",
+      "el.checked = !!el.dataset.stage || k==='REST' || k==='API'" in _UI)
+_SRV = io.open("ltmetrics/server.py", encoding="utf-8").read()
+check("the server computes both, so the page holds no second copy of the rule",
+      "recording_agent.stage_of_step(s)[0]" in _SRV
+      and "recording_agent.is_every_page_call(s)" in _SRV)
+
+print()
+print("an add-to-cart is not a page view")
+# Magento's storefront add is /checkout/cart/add/uenc/<blob>/product/429/ --
+# it contains "/product/" too, and Product View was listed first, so every add
+# in every Magento recording was classified as a page view.
+check("the add wins on the more specific match",
+      _fd.stage_of_step({"path": "/checkout/cart/add/uenc/aB/product/429/"})[0]
+      == "Add to Cart")
+check("a real product view is untouched",
+      _fd.stage_of_step({"path": "/catalog/product/view/id/429"})[0]
+      == "Product View")
+check("and the order is recorded where it matters",
+      "Before Product View on purpose" in io.open(
+          "ltmetrics/knowledge/rules/platform_rules.yaml",
+          encoding="utf-8").read())
 
 print()
 print("FAILURES: %d" % len(FAILURES))

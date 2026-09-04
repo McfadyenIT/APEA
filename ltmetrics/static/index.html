@@ -616,6 +616,7 @@
       <p class="hint" style="margin:2px 0 8px">How much of the traffic goes to each part of the
         journey. 100% means every virtual user walks that group every iteration. The request count
         beside each one is fixed — it is what the browser actually sent — so the two multiply.</p>
+      <p class="hint" id="thrSource" style="margin:2px 0 8px;display:none"></p>
       <div id="anThroughput"><p class="muted">Analyze a recording (Section 1) to see its transaction groups.</p></div>
 
       <label>Test type</label>
@@ -2143,7 +2144,7 @@ function renderCallSelector(calls, dropped){
       const why = crit ? (CRITICAL_WHY[c.critical] || 'Business critical.') : '';
       const flag = crit ? `<span class="kind REST" style="background:#3d1b1b;color:#ff9a9a" title="${_escAttr(why)}">KEEP</span>` : '';
       return `<label class="callItem">
-        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${_escAttr(c.critical||'')}" ${c.selected!==false?'checked':''}>
+        <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${_escAttr(c.critical||'')}" data-stage="${_escAttr(c.stage||'')}" data-background="${c.background?'1':''}" ${c.selected!==false?'checked':''}>
         <span class="m">${_escHtml(c.method)}</span>
         <span class="kind ${k}">${_escHtml(k)}</span>
         <span class="p">${_escHtml(c.path)}</span>${grp}${flag}
@@ -2215,10 +2216,16 @@ function renderCallSelector(calls, dropped){
   if(bAll) bAll.onclick=()=>setAllCalls(true);
   if(bNone) bNone.onclick=()=>setAllCalls(false);
   if(bApi) bApi.onclick=()=>{ document.querySelectorAll('#anCalls .callChk').forEach(el=>{
-      const k=el.dataset.kind;
+      const k = el.dataset.kind;
       // Keep pricing-critical storefront calls: unticking them silently
       // produces 0-value orders that still report as a pass.
-      el.checked=(k==='REST'||k==='API'||!!el.dataset.critical); });
+      if(el.dataset.critical){ el.checked = true; return; }
+      // Background traffic goes whatever it is tagged. A promo-banner loader
+      // is an API call and still nothing to do with buying anything.
+      if(el.dataset.background === '1'){ el.checked = false; return; }
+      // Otherwise: a named step of the journey, or a call whose transport says
+      // it does work rather than render a page.
+      el.checked = !!el.dataset.stage || k==='REST' || k==='API'; });
     updateCallCount(); };
   updateCallCount();
 }
@@ -2736,6 +2743,29 @@ function renderAnalysis(a){
   const ag = a.api_groups || [];
   _agNames = ag.map(g=>g.name);
   window._agCounts = ag;
+  // A recording that names its transactions needs no explanation. One that
+  // does not gets its groups worked out from what each call does, and the
+  // reader should be told that rather than left wondering.
+  const src = $('#thrSource');
+  if(src){
+    const derived = ag.length && ag[0].derived;
+    const find = n => ag.find(g=>g.name === n);
+    const furn = find('Background traffic'), other = find('Unrecognised calls');
+    const bits = ['This recording did not name its steps, so these were worked '
+                + 'out from what each call does.'];
+    // The two remainders are not interchangeable at the slider, so the
+    // difference is spelt out rather than left to the names.
+    if(furn) bits.push('“Background traffic” ' + (furn.count===1?'is 1 request':
+        'is ' + furn.count + ' requests') + ' the page sends by itself on every '
+      + 'page, like refreshing the mini-cart. Nobody clicks to cause them, so '
+      + 'this is the one group you can turn down safely.');
+    if(other) bits.push('“Unrecognised calls” ' + (other.count===1?'is 1 request':
+        'is ' + other.count + ' requests') + ' LT Metrics could not identify. '
+      + 'Some may be real checkout steps, so leave this at 100% unless you have '
+      + 'looked at what is in it.');
+    src.style.display = derived ? '' : 'none';
+    src.textContent = derived ? bits.join(' ') : '';
+  }
   $('#anThroughput').innerHTML = ag.length
     ? ag.map((g,i)=>{ apiThroughput[g.name]=100; return `
         <div class="rec" style="display:flex;align-items:center;gap:10px">

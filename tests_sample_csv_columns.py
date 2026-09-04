@@ -60,8 +60,107 @@ check("an Address group explanation exists", '"Address":' in SRC)
 check("the Card group already existed", '"Card":' in SRC)
 
 print()
-print("the existing sku guarantee is untouched")
-check("sku is still always offered", 'if "sku" not in columns:' in SRC)
+print("the sku guarantee now asks whether there is a basket")
+# It used to be unconditional, which offered a stored-card token and a sku to a
+# bank transfer. The guarantee it was written for -- a run needs something to
+# put in a basket even when the recording names it oddly -- still holds
+# wherever there IS a basket.
+check("sku is offered whenever the recording has a cart or a checkout",
+      'if _sells and "sku" not in columns:' in SRC)
+check("and what counts as a basket is spelt out",
+      '"cart", "basket", "checkout", "catalog", "/product"' in SRC)
+check("a payment endpoint alone is deliberately not enough",
+      "a bank transfer posts to" in SRC)
+
+print()
+print("a sample value has to be a value")
+# The Amneal sample CSV carried a GraphQL query body as its search keyword:
+#   {       cmsBlocks(identifiers: ["no-search-category-block"]) {   items {
+# _clean_sample flattened the newlines and cut it to 80 characters, which is
+# how a request body came to look like something a person had typed.
+import sys as _sys
+_sys.path.insert(0, ".")
+from ltmetrics.agents.parameterization import _clean_sample as _cs
+
+check("a request body is not offered as a sample",
+      _cs('{  cmsBlocks(identifiers: ["no-search-category-block"]) { items {') == "")
+check("nor is JSON", _cs('{"query":"x"}') == "")
+check("nor is markup", _cs("<div>hi</div>") == "")
+check("a recorded telephone number survives its brackets",
+      _cs("+1 (354) 643-6356") == "+1 (354) 643-6356")
+check("so does an ordinary address", _cs("1000 QUALITY DRIVE") == "1000 QUALITY DRIVE")
+check("and an email", _cs("dartmouth@yopmail.com") == "dartmouth@yopmail.com")
+check("a rejected value leaves the cell empty, which already means 'not "
+      "supplied'", _cs("{}") == "")
+
+print()
+print("a column is not bound to a field that carries a request body")
+# GraphQL puts its whole document in a field named "query", which matches the
+# search pattern. search_keyword was bound to it, so filling that column
+# replaced the query with the keyword:
+#   POST graphql -> 400 Syntax Error: Unexpected Name "triamcinolone"
+# Stopping the blob appearing as a SAMPLE was not enough: the binding stayed,
+# so whatever the operator typed went to the same place.
+_PAR = io.open("ltmetrics/agents/parameterization.py", encoding="utf-8").read()
+check("the recorded value is judged before the column is bound",
+      "_recorded = field_names.get(name)" in _PAR
+      and "not _clean_sample(_recorded)" in _PAR)
+check("a field the recording left empty still binds",
+      '_recorded not in (None, "")' in _PAR)
+check("the guard runs inside the field loop, before the mapping",
+      _PAR.index("_recorded = field_names.get(name)")
+      < _PAR.index("for pat, group, col, sample in _FIELD_MAP"))
+
+print()
+print("a value the recording submitted is offered, whatever its name")
+# contract_id was not a known field name, so nothing offered it and every run
+# posted a contract the store had stopped accepting. The same trap waits for
+# every field the name-map does not know.
+from ltmetrics.agents import parameterization as _pm
+
+
+def _an(steps):
+    r = _pm.analyze(steps, None)
+    return r.get("columns") or [], [g.get("group") for g in (r.get("groups") or [])]
+
+_fed, _fedg = _an([
+    {"method": "POST", "path": "/ship/v1/shipments",
+     "body": {"accountNumber": "510087020", "serviceType": "PRIORITY_OVERNIGHT",
+              "packageWeight": "2.5"}},
+    {"method": "POST", "path": "/track/v1/trackingnumbers",
+     "body": {"trackingNumber": "794658123456"}}])
+check("a logistics recording gets its own fields",
+      {"accountNumber", "serviceType", "trackingNumber"} <= set(_fed))
+check("a 12-digit tracking number is not mistaken for a timestamp",
+      "trackingNumber" in _fed)
+check("they are grouped as what they are",
+      "Other recorded values" in _fedg)
+check("and it is not offered a basket it does not have",
+      not ({"sku", "payment_token", "product_id"} & set(_fed)))
+
+_bank, _ = _an([{"method": "POST", "path": "/payments/new",
+                 "body": {"fromAccount": "12345678", "sortCode": "20-00-00",
+                          "amount": "150.00"}}])
+check("a bank transfer gets its own fields",
+      {"fromAccount", "sortCode", "amount"} <= set(_bank))
+check("a payment endpoint alone is not a shop",
+      not ({"sku", "payment_token"} & set(_bank)))
+
+_shop, _ = _an([
+    {"method": "POST", "path": "/customer/account/loginPost",
+     "body": {"login[username]": "a@b.com", "login[password]": "x"}},
+    {"method": "POST", "path": "/checkout/cart/add",
+     "body": {"product": "429", "qty": "1"}}])
+check("a real shop still gets the commerce columns",
+      {"sku", "product_id", "search_keyword", "payment_token"} <= set(_shop))
+
+_PAR2 = io.open("ltmetrics/agents/parameterization.py", encoding="utf-8").read()
+check("URLs are not offered as values", '"://" in _val' in _PAR2)
+check("nor epochs", 'len(_val) in (10, 13)' in _PAR2)
+check("nor a second copy of the credentials",
+      "pass(word|wd)?$|email" in _PAR2)
+check("and the list is capped so the file stays readable",
+      "_others[:12]" in _PAR2)
 
 print()
 print("FAILURES: %d" % len(FAILURES))

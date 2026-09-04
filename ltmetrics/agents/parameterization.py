@@ -43,6 +43,14 @@ _FIELD_MAP = [
      "Card", "payment_token", ""),
     # payment method selection (e.g. paymentMethod.method = paradoxlabs_cybersource)
     (r"(^method$|payment_?method|paymentmethod)", "Payment", "payment_method", ""),
+    # A price agreement chosen on the product page. B2B stores post the whole
+    # selection back -- id, price group, title and price -- and reject an add
+    # whose contract is no longer valid for the account. Recorded values go
+    # stale, so they are data rather than script.
+    (r"(^contract_?id$|contractid)", "Contract", "contract_id", ""),
+    (r"(^price_?group_?id$|pricegroupid)", "Contract", "price_group_id", ""),
+    (r"(^contract_?title$|contracttitle)", "Contract", "contract_title", ""),
+    (r"(^contract_?price$|contractprice)", "Contract", "contract_price", ""),
     (r"(shipping_?method_?code|method_?code)", "Payment", "shipping_method_code", ""),
     (r"(shipping_?carrier_?code|carrier_?code)", "Payment", "shipping_carrier_code", ""),
     # shipping / billing address
@@ -84,10 +92,32 @@ def _is_fill_placeholder(v) -> bool:
     return str(v or "").strip().startswith(_FILL_SENTINEL)
 
 
+# Characters that belong to the syntax carrying a value, not to the value. A
+# GraphQL body reached a sample CSV as the search keyword because nothing here
+# asked the question. Parentheses are absent on purpose: a recorded telephone
+# number is "+1 (354) 643-6356".
+_NOT_A_VALUE = set('{}[]<>"\\')
+
+
+def _looks_like_a_value(s: str) -> bool:
+    """Is this something a person would type into a field, or a piece of the
+    request it was captured from?"""
+    if not s:
+        return False
+    if any(c in _NOT_A_VALUE for c in s):
+        return False
+    return "  " not in s          # runs of whitespace mean formatted source
+
+
 def _clean_sample(v) -> str:
-    """A recorded value trimmed to a CSV-friendly single-line sample."""
+    """A recorded value trimmed to a CSV-friendly single-line sample.
+
+    Returns "" for anything that is not a value: an empty cell is already how
+    this tool says the recording did not supply one, and a required column then
+    shows its <<FILL: ...>> marker rather than a plausible-looking blob.
+    """
     s = "" if v is None else str(v).replace("\r", " ").replace("\n", " ").strip()
-    return s[:80]
+    return s[:80] if _looks_like_a_value(s) else ""
 
 # Values that are DYNAMIC (server-issued) and must be correlated, not parameterized.
 _CORRELATION_KEYS = [
@@ -218,6 +248,15 @@ def analyze(flow: list, selenium_inputs: list | None = None,
         # skip correlation fields — those are handled automatically
         if any(re.search(pat, low) for _, pat in _CORRELATION_KEYS):
             continue
+        # A field carrying a request body is not a field a value can be written
+        # into. GraphQL puts its whole document in one named "query", which
+        # matches the search pattern; binding search_keyword there replaced the
+        # query with the keyword and the call came back 400. Judged on the
+        # recorded VALUE, so a field the recording left empty still binds --
+        # that is the case the <<FILL: ...>> marker exists for.
+        _recorded = field_names.get(name)
+        if _recorded not in (None, "") and not _clean_sample(_recorded):
+            continue
         for pat, group, col, sample in _FIELD_MAP:
             if re.search(pat, low):
                 if col not in columns:
@@ -281,13 +320,24 @@ def analyze(flow: list, selenium_inputs: list | None = None,
                 value_by_col[col] = real
                 source_by_col[col] = "recorded"
 
+    # Does this recording actually sell anything? The columns below exist so a
+    # run has something to put in a basket, which is meaningless for a journey
+    # that has no basket -- a bank transfer was being offered a card token.
+    # A cart or a checkout is what makes a journey a purchase. "payment" and
+    # "order" are not enough on their own: a bank transfer posts to
+    # /payments/new and was being offered a stored-card token because of it.
+    _sells = any(
+        any(k in (str(_s.get("path") or "")).lower() for k in (
+            "cart", "basket", "checkout", "catalog", "/product"))
+        for _s in (flow or []))
+
     # --- product-identifier columns must ALWAYS be offered -------------------
     # A load test always needs something to put in the cart, so `search_keyword`
     # and `product_id` are guaranteed in the sample CSV even if the recording
     # surfaced the value under an unmatched field name. (Fixes a regression where
     # the search term, typed via a UI field the field-map didn't classify, dropped
     # the search_keyword column entirely.)
-    for _pc in ("search_keyword", "product_id"):
+    for _pc in (("search_keyword", "product_id") if _sells else ()):
         if _pc not in columns:
             columns.append(_pc)
             _psg = next((g for g in group_list if g["group"] == "Search"), None)
@@ -310,7 +360,7 @@ def analyze(flow: list, selenium_inputs: list | None = None,
                         for c in ("search_keyword", "product_id")}
         if _rec_sku not in _search_vals:
             sku_required = True
-    if "sku" not in columns:
+    if _sells and "sku" not in columns:
         columns.append("sku")
         _sg = next((g for g in group_list if g["group"] == "Search"), None)
         if _sg is None:
@@ -337,8 +387,50 @@ def analyze(flow: list, selenium_inputs: list | None = None,
     # Empty is correct here. company has a runtime default; payment_token cannot
     # be invented for an account and a blank one makes the run fail closed rather
     # than quietly pay another way. enrol_cards.py fills it.
-    for _extra, _grp, _why in (("company", "Address", "business name, required by some checkouts"),
-                               ("payment_token", "Card", "stored-card token, one per account")):
+    # Anything the recording submitted that the names above did not recognise.
+    # Without this a value stays in the script until someone records again --
+    # which is how a stale contract went on being posted for weeks.
+    _known_ff = {f.get("from_field") for g in group_list for f in g.get("fields", [])}
+    # Names that are noise even when offered, or already have a column.
+    _SKIP_NAME = re.compile(
+        r"url$|^url|uri$|timestamp|_ts$|nonce|captcha|recaptcha|gtm|analytics"
+        r"|user(name)?$|^login|pass(word|wd)?$|email"
+        r"|^(value|id|item|data|type|code|key|name|action|mode|page)$", re.I)
+    _others = []
+    for _name in field_names:
+        if _name in _known_ff or _SKIP_NAME.search(_name):
+            continue
+        if any(re.search(_pat, _name.lower()) for _, _pat in _CORRELATION_KEYS):
+            continue                      # server-issued: correlated, not typed
+        _val = _clean_sample(field_names.get(_name))
+        if not _val:
+            continue                      # nothing usable was recorded for it
+        if "://" in _val or _val.startswith("/") or len(_val) > 40:
+            continue                      # a location or a payload, not a value
+        # An epoch, not merely a long number: a 12-digit tracking number is the
+        # value the run needs to vary, and "10 or more digits" discarded it.
+        if _val.isdigit() and len(_val) in (10, 13) and _val[0] == "1":
+            continue
+        _col = re.sub(r"[^0-9A-Za-z_]+", "_", _name).strip("_")[:40]
+        if not _col or _col in columns:
+            continue
+        _others.append((_col, _name, _val))
+    if _others:
+        _og = {"group": "Other recorded values", "fields": [],
+               "why": "Values this recording submitted that LT Metrics does not "
+                      "recognise by name. They are replayed exactly as recorded, "
+                      "so leaving them alone changes nothing — but if one of them "
+                      "goes stale (a contract, an account number, a service code) "
+                      "you can change it here instead of recording again."}
+        for _col, _name, _val in _others[:12]:
+            columns.append(_col)
+            _og["fields"].append({"column": _col, "from_field": _name,
+                                  "sample": _val, "evidence": "submitted"})
+        group_list.append(_og)
+
+    for _extra, _grp, _why in ((("company", "Address", "business name, required by some checkouts"),
+                                ("payment_token", "Card", "stored-card token, one per account"))
+                               if _sells else ()):
         if _extra in columns:
             continue
         columns.append(_extra)
@@ -386,6 +478,10 @@ def _required_columns(columns: list) -> list:
 
 
 _GROUP_WHY = {
+    "Contract": "The price agreement this account buys under. B2B stores post "
+                "the whole selection with the add-to-cart and refuse one that "
+                "is no longer valid, so a recording's contract goes stale — "
+                "change it here rather than recording the journey again.",
     "Address": "delivery and billing details typed at checkout",
     "Credentials": "log in as different users (one account per concurrent user)",
     "Card": "supply test-mode card / stored-token details at payment",

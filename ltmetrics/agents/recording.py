@@ -22,7 +22,9 @@ from __future__ import annotations
 
 # Public API ---------------------------------------------------------------- #
 from .parser import parse_recording
-from .flow_discovery import merge_into_discovery, _derive_journey, api_call_groups
+from .flow_discovery import (merge_into_discovery, _derive_journey,
+                             api_call_groups, stage_of_step,
+                             is_every_page_call)
 
 # Internal helpers re-exported for backward compatibility (tests / callers that
 # reach into the private surface). Same objects, same behavior — just relocated.
@@ -56,6 +58,8 @@ __all__ = [
     "merge_into_discovery",
     "_derive_journey",
     "api_call_groups",
+    "stage_of_step",
+    "is_every_page_call",
     "_extract_agreement_ids",
     "_extract_selenium_inputs",
     "_extract_selenium_steps",

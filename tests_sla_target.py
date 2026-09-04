@@ -10,6 +10,7 @@ regression that reintroduces the constant fails here.
 
 Run:  ./.venv/bin/python tests_sla_target.py     # expect FAILURES: 0
 """
+import io
 import sys
 
 sys.path.insert(0, ".")
@@ -80,6 +81,115 @@ for bad in ({}, {"max_p95_ms": None}, {"max_p95_ms": ""}, None):
     except Exception as exc:
         ok, detail = False, str(exc)[:60]
     check("sla=%r is survivable" % (bad,), ok, "" if ok else detail)
+
+print()
+print("an id in a response is not evidence of an order")
+# A run that stopped at 'Items added' and never reached checkout reported one
+# order created, id "null". The call responsible was a billing-address popup:
+#   POST /amnealcustomer/addressSelection/popupData
+#   {"billingAddresses":[{"entity_id":"106","increment_id":null,...}]}
+# _confirm_order scraped an id out of any body, and "increment_id": null
+# matched. Rejecting nulls alone would not have been enough -- "entity_id":
+# "106" in the same payload matches the next pattern.
+import re as _re
+_GEN = io.open("ltmetrics/agents/generator.py", encoding="utf-8").read()
+_ns = {"re": _re}
+_ns["_ORDER_URL_SIGNALS"] = ["checkout/success", "onepage/success"]
+_ns["_ORDER_PLACE_PATTERNS"] = ["payment-information", "placeorder"]
+exec(_re.search(r"^_NOT_AN_ID = (.+)$", _GEN, _re.M).group(0), _ns)
+for _fn in ("_is_real_id", "_extract_order_id", "_confirm_order",
+            "_looks_like_order"):
+    exec(_re.search(r"^def %s\(.*?(?=^def |^class |^_[A-Z])" % _fn, _GEN,
+                    _re.M | _re.S).group(0), _ns)
+
+_addr = ('{"billingAddresses":[{"entity_id":"106","increment_id":null,'
+         '"parent_id":"40"}]}')
+check("an address popup is not an order",
+      _ns["_confirm_order"]("https://s/amnealcustomer/addressSelection/popupData",
+                            200, _addr) is None)
+check("nor is a cart id that happens to be a number",
+      _ns["_confirm_order"]("https://s/rest/V1/carts/mine", 200, "15277") is None)
+check("a JSON null is not an id", not _ns["_is_real_id"]("null"))
+check("nor a boolean", not _ns["_is_real_id"]("false"))
+check("a real id still is", _ns["_is_real_id"]("000001672"))
+
+check("a place-order call with a real id is still counted",
+      _ns["_looks_like_order"]("/rest/V1/carts/mine/payment-information",
+                               200, "63022") == "63022")
+check("a success page with no id in the body is still counted",
+      _ns["_confirm_order"]("https://s/checkout/success/", 200,
+                            "Thank you for your order") == "confirmed")
+check("something other than the id has to say it is an order",
+      "if not confirms:" in _GEN and "confirms = (any(s in u" in _GEN)
+
+print()
+print("a page placeholder is not a captured value")
+# Amneal's add-to-cart was rejected with "Selected contract is not valid."
+# Every contract field was correct; uenc went out as %2525uenc%2525. Magento
+# renders cart links containing a literal /uenc/%25uenc%25/ for its own
+# JavaScript to fill in, and the extractor captured that marker and injected
+# it downstream, overwriting the real value the recording held.
+exec(_re.search(r"^_PLACEHOLDER_RE = .+$", _GEN, _re.M).group(0), _ns)
+exec(_re.search(r"^def _is_placeholder.*?(?=^def |^_[A-Z])", _GEN,
+                _re.M | _re.S).group(0), _ns)
+check("Magento's own uenc marker is recognised",
+      _ns["_is_placeholder"]("%25uenc%25"))
+check("so is the undecoded form", _ns["_is_placeholder"]("%uenc%"))
+check("and a templating marker", _ns["_is_placeholder"]("${uenc}"))
+check("a real uenc is not a placeholder",
+      not _ns["_is_placeholder"]("aHR0cHM6Ly9tY3N0YWdpbmcuYW1uZWFsLmNvbQ"))
+check("nor a form key", not _ns["_is_placeholder"]("MX3ZhFaJ4MTpGWzC"))
+check("the capture skips it rather than storing it",
+      "if m and _is_placeholder(m.group(1)):" in _GEN)
+check("and says so, instead of failing silently",
+      "keeping the recorded value" in _GEN)
+
+print()
+print("a 200 that refuses the request is not a success")
+# The add-to-cart answered
+#   HTTP 200 {"error":true,"error_messages":["Selected contract is not valid."]}
+# and the report showed it green: 1 sample, 0 fails. The one call that broke
+# the run was the one call the report said was fine.
+for _c in ("_BODY_ERROR_RE", "_BODY_ERROR_MSG_RE"):
+    exec(_re.search(r"^%s = re\.compile\(.*?\)\n" % _c, _GEN,
+                    _re.M | _re.S).group(0), _ns)
+exec(_re.search(r"^def _body_error.*?(?=^def |^_[A-Z])", _GEN,
+                _re.M | _re.S).group(0), _ns)
+
+check("a refused add-to-cart fails",
+      _ns["_body_error"]('{"error":true,"error_messages":'
+                         '["Selected contract is not valid."]}')
+      == "Selected contract is not valid.")
+check("and the store's own words are carried into the failure",
+      "Selected contract" in _ns["_body_error"](
+          '{"error":true,"error_messages":["Selected contract is not valid."]}'))
+check("a GraphQL errors array fails too",
+      _ns["_body_error"]('{"errors":[{"message":"Syntax Error"}]}') != "")
+check("a success body passes",
+      _ns["_body_error"]('{"success":true,"message":"Purchase order saved."}') == "")
+check("error: false is not an error", _ns["_body_error"]('{"error":false}') == "")
+check("nor is prose that mentions the word",
+      _ns["_body_error"]("<p>An error occurred in our warehouse description</p>")
+      == "")
+check("Salesforce Commerce answers a refusal with a fault object",
+      _ns["_body_error"]('{"fault":{"type":"X","message":"No such product"}}')
+      == "No such product")
+check("SOAP with a Fault element",
+      _ns["_body_error"]("<soap:Fault><faultstring>Contract expired"
+                         "</faultstring></soap:Fault>") == "Contract expired")
+# Deliberately absent: {"status":"FAILED"}. It reads like an error envelope and
+# appears just as often as data -- a list of past orders where one of them
+# failed -- so matching it would fail steps that succeeded.
+check("a list containing a failed order is not a failed request",
+      _ns["_body_error"]('{"orders":[{"id":1,"status":"FAILED"}]}') == "")
+check("nor is a field merely named faultTolerance",
+      _ns["_body_error"]('{"faultTolerance":3}') == "")
+check("an address payload is not an error",
+      _ns["_body_error"]('{"billingAddresses":[{"entity_id":"106"}]}') == "")
+check("both recorded-step paths apply it",
+      _GEN.count("_berr = _body_error(txt) if ok else \"\"") == 2)
+check("and the run says so rather than failing three steps later",
+      "answered 200 but refused it" in _GEN)
 
 print()
 print("FAILURES: %d" % len(FAILURES))
