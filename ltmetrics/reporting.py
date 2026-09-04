@@ -92,18 +92,21 @@ def _fallback_html(analysis: dict, exc: Exception, tb: str) -> str:
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
         "<title>LT Metrics Performance Report (fallback)</title>"
-        "<style>body{font-family:system-ui,Arial,sans-serif;margin:32px;background:#0b0b0c;"
-        "color:#f4f4f6}table{border-collapse:collapse;margin:16px 0}td{border:1px solid #2c2c30;"
-        "padding:8px 12px}h1{color:#e11627}pre{background:#161618;border:1px solid #2c2c30;"
-        "padding:12px;border-radius:8px;overflow:auto;color:#e6a700;font-size:12px}</style></head>"
+        "<style>body{font-family:Aptos,Inter,'Segoe UI',system-ui,sans-serif;"
+        "margin:32px;background:#0A0A0A;color:#F4F4F4;line-height:1.5}"
+        "table{border-collapse:collapse;margin:16px 0}td{border:1px solid #2A2A2A;"
+        "padding:9px 12px}h1{font-size:30px;font-weight:300;margin:0 0 6px}"
+        "pre{background:#000;border:1px solid #2A2A2A;padding:12px;overflow:auto;"
+        "color:#EDEDED;font-size:12px;font-family:'JetBrains Mono',Consolas,monospace}"
+        "</style></head>"
         "<body><h1>LT Metrics Performance Report</h1>"
-        "<p style='color:#9a9aa4'>The full report couldn't be rendered for this run "
+        "<p style='color:#ABABAB'>The full report couldn't be rendered for this run "
         "(likely an aborted / 0-order / payment-failed edge). Key results below; the "
         "error is included so it can be fixed.</p>"
         "<table>" + rows + "</table>"
-        "<h2 style='color:#e11627'>Rendering error</h2>"
+        "<h2 style='color:var(--accent)'>Rendering error</h2>"
         "<p>%s</p><pre>%s</pre>"
-        "<p style='color:#9a9aa4'>All raw results (locust_stats.csv, ltm_flow.json, "
+        "<p style='color:#ABABAB'>All raw results (locust_stats.csv, ltm_flow.json, "
         "browser_track.json, ltm_calls*.jsonl) are intact in this run's results folder.</p>"
         "</body></html>" % (html.escape(str(exc)), html.escape(tb)))
 
@@ -111,7 +114,10 @@ def _fallback_html(analysis: dict, exc: Exception, tb: str) -> str:
 # --------------------------------------------------------------------------- #
 # HTML
 # --------------------------------------------------------------------------- #
-def _kpi(label, value, sub="", accent="#e11627"):
+# A tile's value is plain text unless the caller has something to say about
+# it. The default used to be the brand red, so every figure on the page read
+# as an alarm -- including "Total Requests".
+def _kpi(label, value, sub="", accent="var(--txt)"):
     return f'''<div class="kpi"><div class="kpi-label">{label}</div>
       <div class="kpi-value" style="color:{accent}">{value}</div>
       <div class="kpi-sub">{sub}</div></div>'''
@@ -122,19 +128,19 @@ def _html(a: dict, history: list[dict]) -> str:
     sla = a["sla"]
     plan = a["plan"]
     gate_pass = sla["pass"]
-    gate_color = "#2ecc71" if gate_pass else "#e74c3c"
+    gate_color = "var(--ok)" if gate_pass else "var(--sev3)"
     gate_text = "PASS ✅" if gate_pass else "FAIL ❌"
 
     kpis = "".join([
         _kpi("Total Requests", f"{o['total_requests']:,}"),
         _kpi("Failures", f"{o['total_failures']:,}",
-             f"{o['error_rate']}%", "#e74c3c" if o["error_rate"] > 0 else "#2ecc71"),
+             f"{o['error_rate']}%", "var(--sev3)" if o["error_rate"] > 0 else "var(--ok)"),
         _kpi("Error Rate", f"{o['error_rate']}%", f"budget {sla['max_error_rate_pct']}%",
-             "#2ecc71" if sla["error_gate"] else "#e74c3c"),
+             "var(--ok)" if sla["error_gate"] else "var(--sev3)"),
         _kpi("Throughput", f"{o['throughput']}", "req/s"),
         _kpi("Avg Response", f"{o['avg_response']} ms"),
         _kpi("p95 Response", f"{o['p95']} ms", f"target {int(sla['max_p95_ms'])} ms",
-             "#2ecc71" if sla["p95_gate"] else "#e74c3c"),
+             "var(--ok)" if sla["p95_gate"] else "var(--sev3)"),
         _kpi("p99 Response", f"{o['p99']} ms"),
         _kpi("Max Response", f"{o['max_response']} ms"),
     ])
@@ -154,19 +160,19 @@ def _html(a: dict, history: list[dict]) -> str:
         _avg_order = round(order_value_total / len(_order_values), 2) if _order_values else 0
         flow_html = ("<h2>Checkout Flow</h2><div class=\"kpis\">"
                      + _kpi("Orders Created", orders, "confirmed order ids",
-                            "#2ecc71" if orders else "#e6a23c")
+                            "var(--ok)" if orders else "var(--sev1)")
                      + (_kpi("Order Value (total)", order_value_total,
-                             "sum of base_grand_total across orders", "#2ecc71")
+                             "sum of base_grand_total across orders", "var(--ok)")
                         + _kpi("Avg Order Value", _avg_order,
-                               "mean order value at checkout", "#4f8cff")
+                               "mean order value at checkout", "var(--sev0)")
                         if order_value_total is not None else "")
-                     + _kpi("Login Success", lok, "valid credentials", "#2ecc71")
+                     + _kpi("Login Success", lok, "valid credentials", "var(--ok)")
                      + _kpi("Login Failed", lfail, "rejected logins",
-                            "#e11627" if lfail else "#8ba0bd")
+                            "var(--accent)" if lfail else "var(--mut)")
                      + _kpi("Auto-heals", heals, "run-time self-corrections",
-                            "#4f8cff" if heals else "#8ba0bd")
+                            "var(--sev0)" if heals else "var(--mut)")
                      + _kpi("CAPTCHA hits", captcha, "challenges blocking the flow",
-                            "#e11627" if captcha else "#8ba0bd")
+                            "var(--accent)" if captcha else "var(--mut)")
                      + "</div>")
         # Effective run configuration — the profile the script ACTUALLY ran with,
         # so the report is self-describing and comparable across runs. Highlights
@@ -174,8 +180,8 @@ def _html(a: dict, history: list[dict]) -> str:
         _eff = flow.get("effective_profile") or {}
         if _eff:
             _strict_on = bool(_eff.get("strict"))
-            _badge = ("<b style=\"color:#2ecc71\">STRICT / reproducible</b>" if _strict_on
-                      else "<b style=\"color:#8ba0bd\">adaptive (default)</b>")
+            _badge = ("<b style=\"color:var(--ok)\">STRICT / reproducible</b>" if _strict_on
+                      else "<b style=\"color:var(--mut)\">adaptive (default)</b>")
             _parts = [
                 "users=%s" % html.escape(str(_eff.get("users", "-"))),
                 "duration=%s" % html.escape(str(_eff.get("duration", "-"))),
@@ -194,7 +200,7 @@ def _html(a: dict, history: list[dict]) -> str:
             flow_html += ("<p class=\"muted\" style=\"margin-top:8px\"><b>Order ids created:</b> "
                           + html.escape(", ".join(str(x) for x in oids[:60])) + "</p>")
         if captcha:
-            flow_html += ("<p class=\"muted\" style=\"margin-top:8px;color:#e11627\">"
+            flow_html += ("<p class=\"muted\" style=\"margin-top:8px;color:var(--accent)\">"
                           "<b>CAPTCHA blocked the flow.</b> A CAPTCHA cannot be solved by a "
                           "load test. Disable it on the test environment, use the provider's "
                           "test keys, allowlist the load-generator IPs, or supply a bypass "
@@ -251,7 +257,7 @@ def _html(a: dict, history: list[dict]) -> str:
                 _bits.append("order # <b>%s</b>" % html.escape(str(_oc["order_number"])))
             if _oc.get("url"):
                 _bits.append(html.escape(str(_oc["url"])))
-            _oc_html = ("<p style=\"color:#3ddc97;font-size:13px\">Order-confirmation "
+            _oc_html = ("<p style=\"color:var(--ok);font-size:13px\">Order-confirmation "
                         "assertion observed by the browser: %s. Ensure this signal is in "
                         "<code>platform_rules.order_url_signals</code> so the HTTP load "
                         "script asserts order completion the same way.</p>"
@@ -269,10 +275,10 @@ def _html(a: dict, history: list[dict]) -> str:
     business_html = ""
     _bd = a.get("business_data")
     if _bd and _bd.get("dependencies"):
-        _cls_color = {"PARAMETER": "#4f8cff", "CORRELATION": "#3ddc97",
-                      "RUNTIME_DERIVED": "#e6a700", "CLIENT_CALCULATED": "#ff6b9a",
-                      "SERVER_GENERATED": "#8f9bb3", "BUSINESS_REFERENCE": "#c9c9d2",
-                      "STATIC": "#8f9bb3", "UNKNOWN": "#e11627"}
+        _cls_color = {"PARAMETER": "var(--sev0)", "CORRELATION": "var(--ok)",
+                      "RUNTIME_DERIVED": "var(--sev1)", "CLIENT_CALCULATED": "var(--sev2)",
+                      "SERVER_GENERATED": "var(--mut)", "BUSINESS_REFERENCE": "var(--txt)",
+                      "STATIC": "var(--mut)", "UNKNOWN": "var(--accent)"}
         _rows = ""
         for d in _bd["dependencies"]:
             cls = str(d.get("classification", "UNKNOWN"))
@@ -286,11 +292,11 @@ def _html(a: dict, history: list[dict]) -> str:
             _rows += ("<tr><td>%s</td><td><span style=\"color:%s;font-weight:700\">%s</span></td>"
                       "<td>%s</td><td>%s%s</td></tr>" % (
                           html.escape(str(d.get("name", ""))),
-                          _cls_color.get(cls, "#c9c9d2"), html.escape(cls),
+                          _cls_color.get(cls, "var(--txt)"), html.escape(cls),
                           html.escape(str(origin)), html.escape(str(shown)), flag))
         _gate = _bd.get("gate") or {}
         _gate_html = ("" if _gate.get("ok", True) else
-                      "<p style=\"color:#ff6b9a;font-size:13px\"><b>Fidelity gate:</b> %s</p>"
+                      "<p style=\"color:var(--sev2);font-size:13px\"><b>Fidelity gate:</b> %s</p>"
                       % html.escape(str(_gate.get("reason", ""))))
         business_html = (
             "<h2>Business Data Dependencies</h2>"
@@ -306,8 +312,8 @@ def _html(a: dict, history: list[dict]) -> str:
     _pr = a.get("payment_replay")
     if _pr:
         _rv = _pr.get("replayable")
-        _rv_color = {True: "#3ddc97", "true": "#3ddc97", "conditional": "#e6a700",
-                     False: "#e11627", "false": "#e11627"}.get(_rv, "#8f9bb3")
+        _rv_color = {True: "var(--ok)", "true": "var(--ok)", "conditional": "var(--sev1)",
+                     False: "var(--accent)", "false": "var(--accent)"}.get(_rv, "var(--mut)")
         _rv_label = {True: "REPLAYABLE", "true": "REPLAYABLE", "conditional": "CONDITIONAL",
                      False: "NOT REPLAYABLE", "false": "NOT REPLAYABLE"}.get(_rv, "UNDETERMINED")
         _cap_rows = ""
@@ -354,8 +360,8 @@ def _html(a: dict, history: list[dict]) -> str:
     payment_profile_html = ""
     _pp = a.get("payment_profile")
     if _pp:
-        _strat_color = {"api_replay": "#3ddc97", "browser_assisted": "#e6a700",
-                        "hybrid": "#ff6b9a", "offline": "#8f9bb3"}.get(_pp.get("strategy"), "#8f9bb3")
+        _strat_color = {"api_replay": "var(--ok)", "browser_assisted": "var(--sev1)",
+                        "hybrid": "var(--sev2)", "offline": "var(--mut)"}.get(_pp.get("strategy"), "var(--mut)")
         _corr = _pp.get("correlation") or {}
         _tok = _pp.get("token") or {}
         _corr_line = ""
@@ -439,7 +445,7 @@ def _html(a: dict, history: list[dict]) -> str:
         msg = html.escape(str(f['error'])).replace("\n", "<br>")
         fails += (f"<tr><td>{html.escape(str(f['name']))}</td>"
                   f"<td style='white-space:pre-wrap;word-break:break-word;"
-                  f"font-family:monospace;font-size:11px'>{msg}</td>"
+                  f"font-family:var(--mono);font-size:11px'>{msg}</td>"
                   f"<td class='num'>{f['occurrences']}</td></tr>")
     fails = fails or "<tr><td colspan='3' class='ok'>No failures recorded.</td></tr>"
 
@@ -483,48 +489,117 @@ def _html(a: dict, history: list[dict]) -> str:
 <title>LT Metrics Performance Report — {_target}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Aptos is the design system's face and ships with Office/Windows, so it
+     is not fetched here; Inter is the system's own next choice and needs 300
+     for the Light headings. Space Grotesk is gone -- display type shares the
+     body stack and differs from it only by weight. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root{{--bg:#0b0b0c;--card:#161618;--line:#2c2c30;--txt:#f4f4f6;--mut:#9a9aa4;}}
+  /* AIBP Design System V2.0 / canvas 9a -- the same tokens the console uses,
+     so a report reads as the same product and not a cousin of it. */
+  :root{{
+    --bg:#0A0A0A;--panel:#131313;--panel2:#1C1C1C;--line:#767676;--hair:#2A2A2A;
+    --txt:#F4F4F4;--mut:#ABABAB;--accent:#C91A12;--green:#23674A;--orange:#EF9253;
+    --ok:#5CD68F;--eyebrow:#EF9253;--mcf-red:#E00000;--logbg:#000000;
+    --sev0:#8E93B4;--sev1:#C6BF52;--sev2:#E0834A;--sev3:#FF7B70;--sev4:#C0392B;
+    --head:Aptos,Inter,'Segoe UI',system-ui,-apple-system,Helvetica,Arial,sans-serif;
+    --mono:'JetBrains Mono','SF Mono',Consolas,'Liberation Mono',monospace;
+    --ls-overline:.20em;--ls-caps:.08em;--fw-light:300;--fw-bold:700;
+  }}
   *{{box-sizing:border-box}}
-  body{{margin:0;background:var(--bg);color:var(--txt);
-    font-family:'Inter','Segoe UI',system-ui,sans-serif;padding:28px}}
-  h1,h2,h3{{font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif;letter-spacing:-.01em}}
-  h1{{margin:0 0 4px}} h2{{margin:32px 0 12px;border-bottom:1px solid var(--line);
-    padding-bottom:6px}}
-  .sub{{color:var(--mut);margin-bottom:8px}}
-  .gate{{display:inline-block;padding:8px 18px;border-radius:8px;font-weight:700;
-    font-size:18px;background:{gate_color};color:#06121f}}
-  .kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-    gap:14px;margin:20px 0}}
-  .kpi{{background:var(--card);border:1px solid var(--line);border-radius:12px;
-    padding:16px}}
-  .kpi-label{{color:var(--mut);font-size:12px;text-transform:uppercase;
-    letter-spacing:.5px}}
-  .kpi-value{{font-size:26px;font-weight:700;margin:6px 0}}
-  .kpi-sub{{color:var(--mut);font-size:12px}}
-  table{{width:100%;border-collapse:collapse;background:var(--card);
-    border-radius:10px;overflow:hidden;font-size:14px}}
-  th,td{{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}}
-  th{{background:#1e2b42;color:var(--mut);font-weight:600}}
-  td.num{{text-align:right;font-variant-numeric:tabular-nums}}
+  body{{margin:0;background:var(--bg);color:var(--txt);font-family:var(--head);
+    font-size:16px;line-height:1.5;border-top:3px solid var(--accent)}}
+  .masthead{{display:flex;align-items:baseline;gap:14px;padding:14px 28px;
+    background:var(--green);color:#fff;flex-wrap:wrap}}
+  .masthead .mk{{font-family:var(--mono);font-size:17px;letter-spacing:.1em;
+    font-weight:var(--fw-bold);line-height:1}}
+  .masthead .ms{{font-size:12px;font-weight:var(--fw-bold);text-transform:uppercase;
+    letter-spacing:.16em;line-height:1;color:var(--orange)}}
+  .wrap{{padding:28px}}
+  /* Display headings Light, structural ones Bold -- the system's own split. */
+  h1{{font-size:30px;font-weight:var(--fw-light);line-height:1.2;
+    letter-spacing:-.02em;margin:0 0 6px;max-width:640px}}
+  h3{{font-size:20px;font-weight:var(--fw-bold);line-height:1.15;margin:0 0 6px}}
+  /* A section heading is the canvas's eyebrow: caps, tracked, and led by the
+     node-chain mark. It replaces the underlined h2 this page used. */
+  h2{{font-size:12px;font-weight:var(--fw-bold);text-transform:uppercase;
+    letter-spacing:var(--ls-overline);color:var(--eyebrow);
+    display:flex;align-items:center;gap:14px;margin:32px 0 10px}}
+  h2::before{{content:"";display:block;flex:none;width:58px;height:12px;
+    background:
+      radial-gradient(circle, var(--mcf-red) 5px, transparent 5px) 0 0/12px 12px no-repeat,
+      linear-gradient(var(--mcf-red),var(--mcf-red)) 12px 5px/6px 2px no-repeat,
+      radial-gradient(circle, var(--mcf-red) 5px, transparent 5px) 18px 0/12px 12px no-repeat,
+      linear-gradient(var(--mcf-red),var(--mcf-red)) 30px 5px/6px 2px no-repeat,
+      radial-gradient(circle, rgba(224,0,0,.45) 5px, transparent 5px) 36px 0/12px 12px no-repeat,
+      linear-gradient(rgba(224,0,0,.6),rgba(224,0,0,.6)) 48px 5px/6px 2px no-repeat,
+      radial-gradient(circle, var(--txt) 5px, transparent 5px) 54px 0/12px 12px no-repeat;
+  }}
+  a{{color:var(--txt);text-decoration:underline;text-underline-offset:2px}}
+  a:hover{{color:var(--accent)}}
+  .sub{{color:var(--mut);margin-bottom:14px;font-size:14px}}
+  /* Square and 44px, like every control in the console. */
+  .gate{{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;
+    font-family:var(--mono);font-weight:var(--fw-bold);font-size:14px;
+    text-transform:uppercase;letter-spacing:var(--ls-caps);
+    background:{gate_color};color:#191919}}
+  /* Four-up, separated by a 1px rule rather than a gap. */
+  .kpis{{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+    background:var(--hair);border:1px solid var(--hair);margin:20px 0}}
+  .kpi{{background:var(--panel2);padding:15px}}
+  .kpi-label{{color:var(--mut);font-size:11px;text-transform:uppercase;
+    letter-spacing:var(--ls-caps)}}
+  .kpi-value{{font-size:23px;font-weight:var(--fw-bold);margin:4px 0 0}}
+  .kpi-sub{{color:var(--mut);font-size:11px;margin-top:4px}}
+  table{{width:100%;border-collapse:collapse;background:var(--panel);
+    font-size:13px;border:1px solid var(--hair)}}
+  th,td{{padding:9px 12px;text-align:left;border-bottom:1px solid var(--hair)}}
+  th{{background:var(--panel2);color:var(--mut);font-weight:600;font-size:11px;
+    text-transform:uppercase;letter-spacing:var(--ls-caps)}}
+  /* A right-aligned column needs a right-aligned heading, or every word sits a
+     column away from its own figures. */
+  th.num,td.num{{text-align:right}}
+  td.num{{font-variant-numeric:tabular-nums;font-family:var(--mono)}}
+  tr:last-child td{{border-bottom:none}}
   .grid2{{display:grid;grid-template-columns:1fr 1fr;gap:20px}}
-  .chart-card{{background:var(--card);border:1px solid var(--line);
-    border-radius:12px;padding:16px}}
-  .rec{{background:var(--card);border:1px solid var(--line);border-left:4px solid #e11627;
-    border-radius:8px;padding:12px 14px;margin:10px 0}}
-  .rec-detail{{color:var(--mut);margin-top:6px;font-size:14px}}
-  .badge{{font-weight:700;padding:2px 8px;border-radius:6px;margin-right:8px;font-size:12px}}
-  .b-P1{{background:#e74c3c;color:#fff}} .b-P2{{background:#e67e22;color:#fff}}
-  .b-P3{{background:#f1c40f;color:#222}} .b-P4{{background:#2ecc71;color:#06121f}}
-  .tag{{background:#22304a;color:var(--mut);border-radius:6px;padding:2px 8px;
-    font-size:12px;margin-right:6px}}
-  .ok{{color:#2ecc71}} .jira{{background:#0b1220;border:1px solid var(--line);
-    padding:14px;border-radius:8px;white-space:pre-wrap;color:#cfe3ff}}
-  footer{{margin-top:36px;color:var(--mut);font-size:12px;text-align:center}}
+  .chart-card{{background:var(--panel2);border:1px solid var(--hair);padding:18px}}
+  .rec{{background:var(--panel2);border:1px solid var(--hair);
+    border-left:4px solid var(--accent);padding:12px 14px;margin:10px 0;
+    font-size:14px}}
+  .rec-detail,.d{{color:var(--mut);margin-top:6px;font-size:13px}}
+  /* Priorities ride the severity ladder instead of five unrelated hues. */
+  .badge{{font-family:var(--mono);font-weight:var(--fw-bold);padding:3px 9px;
+    margin-right:8px;font-size:11px;color:#191919}}
+  .b-P1{{background:var(--sev3)}} .b-P2{{background:var(--sev2)}}
+  .b-P3{{background:var(--sev1)}} .b-P4{{background:var(--ok)}}
+  .tag{{background:var(--panel);border:1px solid var(--hair);color:var(--mut);
+    padding:2px 8px;font-size:12px;margin-right:6px;font-family:var(--mono)}}
+  .ok{{color:var(--ok)}}
+  .jira{{background:var(--logbg);border:1px solid var(--hair);padding:14px;
+    white-space:pre-wrap;color:#EDEDED;font-family:var(--mono);font-size:12px}}
+  footer{{margin:36px 28px 0;color:var(--mut);font-size:12px;text-align:center;
+    border-top:1px solid var(--hair);padding:14px 0 28px}}
+  @media(max-width:900px){{.kpis{{grid-template-columns:repeat(2,1fr)}}}}
+  @media(max-width:520px){{.kpis{{grid-template-columns:1fr}}}}
   @media(max-width:800px){{.grid2{{grid-template-columns:1fr}}}}
+  /* A report gets printed and mailed on. On paper the console's dark ground
+     wastes ink and reads badly, so print takes the light half of the same
+     palette rather than a different design. */
+  @media print{{
+    :root{{--bg:#FFFFFF;--panel:#FBEEE3;--panel2:#F4EDE5;--line:#B49A82;
+      --hair:#E2D3C4;--txt:#191919;--mut:#5A4A3F;--eyebrow:#B34E14;
+      --ok:#157347;--logbg:#191919;
+      --sev0:#5C607A;--sev1:#8E8931;--sev2:#B4551F;--sev3:#C91A12;--sev4:#8A120C;}}
+    body{{border-top:none}}
+    .masthead{{color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    h2{{break-after:avoid}}
+    table,.chart-card,.rec,.kpis{{break-inside:avoid}}
+  }}
 </style></head>
 <body>
+  <div class="masthead"><span class="mk">LT METRICS</span>
+    <span class="ms">Load Testing Reimagined</span></div>
+  <div class="wrap">
   <h1>LT Metrics Performance Report</h1>
   <div class="sub">{_target} · {_domain}
     · {_plabel} · {_pusers} users · {_pdur}</div>
@@ -570,24 +645,32 @@ def _html(a: dict, history: list[dict]) -> str:
 
   {jira}
 
+  </div>
   <footer>Generated by LT Metrics — Load Testing Reimagined</footer>
 
 <script>
 const mk=(id,cfg)=>{{const el=document.getElementById(id);if(el)new Chart(el,cfg);}};
-const gopt=t=>({{responsive:true,plugins:{{title:{{display:true,text:t,color:'#e6ecf5'}},legend:{{labels:{{color:'#8ba0bd'}}}}}},scales:{{x:{{ticks:{{color:'#8ba0bd',maxTicksLimit:8}},grid:{{color:'#26324a'}}}},y:{{ticks:{{color:'#8ba0bd'}},grid:{{color:'#26324a'}}}}}}}});
+// Chart.js draws to a canvas, which cannot read a CSS custom property, so the
+// tokens are resolved once here. Same assignment as the console: sev0 for
+// volume, sev3 for latency, muted for users, a dashed line for a target.
+const T=(n,f)=>(getComputedStyle(document.documentElement).getPropertyValue(n)||'').trim()||f;
+const C={{txt:T('--txt','#F4F4F4'),mut:T('--mut','#ABABAB'),hair:T('--hair','#2A2A2A'),
+  sev0:T('--sev0','#8E93B4'),sev1:T('--sev1','#C6BF52'),sev2:T('--sev2','#E0834A'),
+  sev3:T('--sev3','#FF7B70'),accent:T('--accent','#C91A12')}};
+const gopt=t=>({{responsive:true,plugins:{{title:{{display:true,text:t,color:C.txt}},legend:{{labels:{{color:C.mut}}}}}},scales:{{x:{{ticks:{{color:C.mut,maxTicksLimit:8}},grid:{{color:C.hair}}}},y:{{ticks:{{color:C.mut}},grid:{{color:C.hair}}}}}}}});
 mk('latency',{{type:'line',data:{{labels:{labels},datasets:[
-  {{label:'p50 (ms)',data:{p50},borderColor:'#e11627',tension:.3}},
-  {{label:'p95 (ms)',data:{p95},borderColor:'#e67e22',tension:.3}}]}},
+  {{label:'p50 (ms)',data:{p50},borderColor:C.sev1,tension:.3,pointRadius:0}},
+  {{label:'p95 (ms)',data:{p95},borderColor:C.sev3,borderWidth:2.5,tension:.3,pointRadius:0}}]}},
   options:gopt('Response Time Over Time')}});
 mk('load',{{type:'line',data:{{labels:{labels},datasets:[
-  {{label:'Users',data:{users},borderColor:'#2ecc71',tension:.3}},
-  {{label:'Requests/s',data:{rps},borderColor:'#8f9bb3',tension:.3}},
-  {{label:'Failures/s',data:{fps},borderColor:'#e74c3c',tension:.3}}]}},
+  {{label:'Users',data:{users},borderColor:C.mut,borderDash:[6,4],tension:.3,pointRadius:0}},
+  {{label:'Requests/s',data:{rps},borderColor:C.sev0,tension:.3,pointRadius:0}},
+  {{label:'Failures/s',data:{fps},borderColor:C.sev3,tension:.3,pointRadius:0}}]}},
   options:gopt('Load & Throughput Over Time')}});
 mk('epchart',{{type:'bar',data:{{labels:{ep_labels},datasets:[
-  {{label:'p95 (ms)',data:{ep_p95},backgroundColor:'#e11627'}},
-  {{label:'SLA target (ms)',data:{ep_target},backgroundColor:'#e74c3c',type:'line',
-    borderColor:'#e74c3c',pointRadius:0}}]}},
+  {{label:'p95 (ms)',data:{ep_p95},backgroundColor:C.sev0}},
+  {{label:'SLA target (ms)',data:{ep_target},type:'line',borderColor:C.sev3,
+    borderDash:[4,4],borderWidth:1,pointRadius:0}}]}},
   options:gopt('p95 per Transaction vs SLA')}});
 </script>
 </body></html>'''

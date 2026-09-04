@@ -1,41 +1,91 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- Dark is the default, set here so the first paint is already dark; initTheme()
+     replaces it with a stored choice if there is one. -->
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LT Metrics — Load Testing Reimagined</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Aptos is the design system's typeface and is installed with Office/Windows,
+     so it is not fetched here. Inter is the system's own next choice and covers
+     machines without Aptos; it needs weight 300 for the Light headings. Space
+     Grotesk is gone -- the system sets display type to the same stack as body,
+     so there is no second face any more. -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
+  /* 9a's palette, both halves. Dark is the default the canvas opens in; light
+     is the warm cream half of the same system, not a bleached copy of it --
+     its panels are cream and its greys run brown, which is why --mut and
+     --line move too and not just the backgrounds. */
   :root{
-    /* LT Metrics -- light by default, as approved */
-    --bg:#FFFFFF;--panel:#FFFFFF;--panel2:#FAF7F2;--line:#EDEDED;
-    --txt:#191919;--mut:#767676;--accent:#C91A12;--accent-hi:#8A120C;
-    --ok:#0E8A4F;--bad:#E00000;--warn:#B4551F;
-    --green:#23674A;--cream:#FBEADB;--peach:#FBD9BE;--orange:#EF9253;
-    --rail:#FBF4EC;--hair:#E4E4E4;
-    --head:'Inter','Aptos','Segoe UI',system-ui,sans-serif;
-    --body:'Inter','Aptos','Segoe UI',system-ui,-apple-system,sans-serif;
-    --mono:'JetBrains Mono','Consolas',ui-monospace,monospace;
-    --mcf-red:#E00000;--ls-overline:.20em;
+    /* Two border weights, as 9a has them: --line draws an element's own edge
+       (cards, inputs, chips, tiles), --hair the rules inside it (table rows,
+       list separators). One value for both flattened the cards. */
+    --bg:#FFFFFF;--panel:#FBEEE3;--panel2:#F4EDE5;--line:#B49A82;
+    --txt:#191919;--mut:#5A4A3F;--accent:#C91A12;--accent-hi:#8A120C;
+    --ok:#157347;--bad:#E00000;--warn:#8A5A00;
+    --green:#23674A;--cream:#FBEEE3;--peach:#FBD9BE;--orange:#EF9253;
+    --rail:#FBF4EC;--hair:#E2D3C4;--logbg:#191919;
+    /* Half-transparent surfaces, so the doodle reads through a section rather
+       than stopping at its edge. Applied to the background rather than to the
+       element's opacity -- fading the element would fade its text with it. */
+    --panel-a:rgba(251,238,227,.5);--panel2-a:rgba(244,237,229,.5);
+    /* 9a's severity ladder, worn as a 4px bar down the left of a row. Six
+       steps, both halves taken from the canvas rather than guessed at: the
+       journey deepens through it, and a run's gate picks a rung. */
+    --sev0:#5C607A;--sev1:#8E8931;--sev2:#B4551F;--sev3:#C91A12;
+    --sev4:#8A120C;--sev5:#767676;
+    /* The tints those bars sit on, for a panel that carries a verdict. */
+    --ok-tint:#E8F3EC;--sev3-tint:#FBEAE9;--tag-ink:#FFFFFF;
+    /* The backdrop is one 300px tile of line art, repeated. Light leaves the
+       strokes dark; dark inverts them so they read light on black. */
+    --doodle:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22300%22%20height%3D%22300%22%20viewBox%3D%220%200%20300%20300%22%20fill%3D%22none%22%20stroke%3D%22%23191919%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%2060%20L40%2060%20L52%2034%20L66%2086%20L80%2048%20L92%2060%20L124%2060%22%2F%3E%3Ccircle%20cx%3D%22196%22%20cy%3D%2252%22%20r%3D%2224%22%2F%3E%3Cpath%20d%3D%22M196%2052%20L196%2036%22%2F%3E%3Cpath%20d%3D%22M196%2052%20L208%2060%22%2F%3E%3Cpath%20d%3D%22M188%2022%20h16%22%2F%3E%3Cpath%20d%3D%22M244%2076%20v-34%20M258%2076%20v-22%20M272%2076%20v-46%22%2F%3E%3Cpath%20d%3D%22M238%2082%20h40%22%2F%3E%3Cpath%20d%3D%22M30%20150%20a30%2030%200%200%201%2060%200%22%2F%3E%3Cpath%20d%3D%22M60%20150%20L78%20132%22%2F%3E%3Cpath%20d%3D%22M120%20168%20h56%20M120%20152%20h40%20M120%20136%20h56%22%2F%3E%3Cpath%20d%3D%22M214%20128%20l14%2014%20-14%2014%20M234%20128%20l14%2014%20-14%2014%22%2F%3E%3Cpath%20d%3D%22M20%20244%20h44%20v22%20h-44z%22%2F%3E%3Cpath%20d%3D%22M42%20244%20v-20%22%2F%3E%3Cpath%20d%3D%22M28%20224%20h28%22%2F%3E%3Cpath%20d%3D%22M96%20268%20L118%20268%20L130%20240%20L144%20284%20L156%20252%20L168%20268%20L196%20268%22%2F%3E%3Ccircle%20cx%3D%22240%22%20cy%3D%22228%22%20r%3D%2220%22%2F%3E%3Cpath%20d%3D%22M240%20228%20L254%20218%22%2F%3E%3Cpath%20d%3D%22M228%20268%20h44%20M228%20282%20h28%22%2F%3E%3Cpath%20d%3D%22M150%2092%20v22%20M162%20100%20l-12%2014%20-12%20-14%22%2F%3E%3C%2Fsvg%3E");
+    --doodle-op:.07;--doodle-invert:none;
+    /* AIBP Design System V2.0, verbatim. Aptos leads -- it is the system's
+       typeface and ships with Office/Windows; Inter is its own second choice,
+       which is why the webfont below is still loaded. --font-display is
+       var(--font-sans) in the system, so headings and body share one stack and
+       differ only by weight. */
+    --head:Aptos,Inter,'Segoe UI',system-ui,-apple-system,Helvetica,Arial,sans-serif;
+    --body:Aptos,Inter,'Segoe UI',system-ui,-apple-system,Helvetica,Arial,sans-serif;
+    --mono:'JetBrains Mono','SF Mono',Consolas,'Liberation Mono',monospace;
+    --mcf-red:#E00000;--ls-overline:.20em;--ls-caps:.08em;--ls-display:-.02em;
+    /* Display headings are Light, structural ones Bold -- the system's rule,
+       and what 9a does at 30px and 20px respectively. */
+    --fw-light:300;--fw-bold:700;
+    /* 9a draws no rounded corner anywhere. Controls are 44px tall and square. */
+    --ctl-h:44px;
     /* The mark is red; the words are burnt orange. 9a sets them separately. */
     --eyebrow:#B34E14;
   }
-  /* The previous look, kept whole so the toggle has somewhere to go. */
   html[data-theme="dark"]{
-    --bg:#0b0b0c;--panel:#161618;--panel2:#1f1f22;--line:#2c2c30;
-    --txt:#f4f4f6;--mut:#9a9aa4;--accent:#e11627;--accent-hi:#f5333f;
-    --ok:#37c871;--bad:#e11627;--warn:#e6a23c;
-    --green:#1b4d37;--cream:#221c17;--peach:#FBD9BE;--orange:#B4551F;
+    --bg:#0A0A0A;--panel:#131313;--panel2:#1C1C1C;--line:#767676;
+    --txt:#F4F4F4;--mut:#ABABAB;--accent:#C91A12;--accent-hi:#E4362C;
+    --ok:#5CD68F;--bad:#FF7B70;--warn:#C6BF52;
+    --green:#23674A;--cream:#1C1C1C;--peach:#FBD9BE;--orange:#EF9253;
+    --rail:#131313;--hair:#2A2A2A;--logbg:#000000;
+    --panel-a:rgba(19,19,19,.5);--panel2-a:rgba(28,28,28,.5);
+    --sev0:#8E93B4;--sev1:#C6BF52;--sev2:#E0834A;--sev3:#FF7B70;
+    --sev4:#C0392B;--sev5:#ABABAB;
+    --ok-tint:rgba(92,214,143,.14);--sev3-tint:rgba(255,123,112,.16);
+    --tag-ink:#191919;
+    --doodle-op:.10;--doodle-invert:invert(1);
     --eyebrow:#EF9253;
-    --rail:#141416;--hair:#2c2c30;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--body);
     border-top:3px solid var(--accent)}
-  h1,h2,h3{font-family:var(--head);letter-spacing:-.01em}
+  /* The pattern reads only through the page surface: it sits behind every
+     in-flow element, so the green header and the phase strip -- both opaque --
+     cover it, and it shows in the gaps around the cards. Fixed, so it does
+     not slide under a long results table. */
+  body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:var(--doodle) repeat;background-size:300px 300px;
+    opacity:var(--doodle-op);filter:var(--doodle-invert)}
+  h1,h2,h3{font-family:var(--head)}
   /* --- header: flat green bar, no gradient, per the approved canvas ------ */
   header{display:flex;align-items:center;gap:16px;padding:14px 28px;
     background:var(--green);color:#fff}
@@ -66,23 +116,58 @@
   #phases .ph-s{font-size:13px;color:var(--mut);line-height:1.4}
   #phases button.active .ph-s{color:#5A2E0B}
 
-  nav{display:flex;gap:2px;padding:0 28px;border-bottom:1px solid var(--line);
-    background:var(--rail);position:sticky;top:0;z-index:5}
-  nav button{background:none;border:none;color:var(--mut);padding:13px 16px;cursor:pointer;
-    font-size:13px;font-weight:600;border-bottom:2px solid transparent;font-family:var(--head)}
-  nav button:hover{color:var(--txt)}
-  nav button.active{color:var(--txt);border-bottom-color:var(--accent)}
+  /* --- the dock ---------------------------------------------------------- */
+  /* 9a has no tab strip. The run is the page; the library and the question box
+     are a drawer you pull over it and close again, so leaving either one never
+     costs you the setup you were part-way through. */
+  #dock[hidden]{display:none}
+  #dockScrim{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:5;border:none;
+    padding:0;margin:0;width:100%;cursor:pointer}
+  #dockPanel{position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100vw;
+    background:var(--bg);border-left:1px solid var(--line);
+    box-shadow:-18px 0 48px rgba(0,0,0,.34);z-index:6;
+    display:flex;flex-direction:column;overflow:hidden}
+  #dockHead{display:flex;align-items:center;gap:12px;padding:14px 20px;
+    border-bottom:1px solid var(--hair);background:var(--panel);flex:none}
+  #dockTitle{font-size:15px;font-weight:700}
+  #dockClose{margin-left:auto;background:transparent;border:1px solid var(--line);
+    color:var(--txt);padding:0 18px;min-height:44px;font-size:13px;font-weight:700;
+    cursor:pointer;font-family:var(--body)}
+  #dockClose:hover{background:var(--panel2)}
+  #dockBody{padding:22px 24px;overflow:auto;flex:1}
+  /* Inside the drawer a card is already framed by the panel itself. */
+  #dockBody > section > .card{background:transparent;border:none;padding:0;
+    margin:0 0 26px}
+  #dockBody section.hidden{display:none}
+  /* A library row: one line, a name and a single value. The bar down the left
+     carries the state -- amber for the script in use, the severity ladder for
+     a run's gate. */
+  .dockList{border:1px solid var(--hair)}
+  .dockList > *{display:flex;align-items:center;gap:12px;padding:12px 15px;
+    border-left:4px solid transparent;border-bottom:1px solid var(--hair);
+    font-size:13px;width:100%;text-align:left;background:none;color:var(--txt);
+    font-family:var(--body)}
+  .dockList > :last-child{border-bottom:none}
+  .dockList button{cursor:pointer;border-top:none;border-right:none}
+  .dockList button:hover{background:var(--panel2)}
+  .dockList .nm{flex:1;font-family:var(--mono);font-size:13px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dockList .val{font-family:var(--mono);color:var(--mut);flex:none}
+  .dockList .st{color:var(--mut);flex:none}
+  .dockList .none{color:var(--mut);border-left-color:transparent}
 
   /* A card that this phase does not own. Hidden, never removed -- the JS still
      finds every element it addresses. */
   .card[data-phase].phase-off{display:none}
 
   /* --- phase 1: setup rail + findings ------------------------------------ */
-  #phaseGrid{display:grid;grid-template-columns:322px minmax(0,1fr);
+  #phaseGrid{display:grid;grid-template-columns:308px minmax(0,1fr);
     align-items:start;gap:0}
   #phaseGrid.rail-shut{grid-template-columns:46px minmax(0,1fr)}
   #setupRail{background:var(--rail);border-right:1px solid var(--hair);
-    min-height:calc(100vh - 190px);position:sticky;top:46px;align-self:stretch}
+    /* The 46px tab strip it used to hang below is gone, so it sticks to the
+       top of the scroller and reclaims that height. */
+    min-height:calc(100vh - 144px);position:sticky;top:0;align-self:stretch}
   #railToggle{display:flex;align-items:center;justify-content:center;gap:8px;
     width:100%;background:transparent;border:none;
     border-bottom:1px solid var(--hair);color:var(--accent);min-height:44px;
@@ -114,19 +199,182 @@
       radial-gradient(circle, var(--txt) 5px, transparent 5px) 54px 0/12px 12px no-repeat;
   }
   .eyebrow i,.railEyebrow i{display:none}
-  .ask{font-size:26px;font-weight:700;line-height:1.25;margin:0 0 4px;
-    max-width:34ch;font-family:var(--head)}
-  #dataSteps{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0}
-  #dataSteps .st{border:1px solid var(--line);border-radius:10px;
-    padding:14px 16px;background:var(--panel)}
-  #dataSteps .st h3{font-size:14px;margin:0 0 8px;font-weight:700}
-  #dataSteps .st .cols{font-family:var(--mono);font-size:12px;color:var(--mut);
-    margin-bottom:10px;word-break:break-word}
+  /* The statement heading: 30px Light, per 9a's h2. It was 26px Bold, which is
+     the single loudest difference from the canvas. */
+  .ask{font-size:30px;font-weight:var(--fw-light);line-height:1.2;
+    letter-spacing:var(--ls-display);margin:0 0 4px;max-width:640px;
+    font-family:var(--head)}
+  /* --- what the analysis is doing, while it does it ---------------------- */
+  .progNow{display:flex;align-items:center;gap:12px;font-size:20px;
+    font-weight:var(--fw-bold);line-height:1.25}
+  .progNow .spin{width:20px;height:20px;border-width:2px;margin:0;flex:none}
+  .progNow .el{font-family:var(--mono);font-size:13px;color:var(--mut);
+    font-weight:400}
+  .progStep{font-family:var(--mono);font-size:12px;font-weight:var(--fw-bold);
+    text-transform:uppercase;letter-spacing:var(--ls-caps);color:var(--orange);
+    margin-bottom:8px}
+  .progDone{color:var(--ok);font-size:13px;margin-top:7px}
+  #analysisProgress{margin-top:2px}
+
+  /* --- the checkout timeline --------------------------------------------- */
+  /* This section had grown a type of its own: bold sans on identifiers, an
+     emoji per row, and a blue-grey from a palette the app no longer uses.
+     Values are mono, labels are muted caps, one weight carries emphasis. */
+  .tlMeta{font-family:var(--mono);font-size:12px;color:var(--mut);
+    line-height:1.6;margin:0 0 10px;word-break:break-word}
+  .tlRow{background:var(--panel2-a);border:1px solid var(--hair);
+    border-left:4px solid var(--hair);padding:11px 15px;margin:9px 0}
+  .tl-h{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .tl-i{font-family:var(--mono);font-weight:var(--fw-bold);flex:none;font-size:13px}
+  .tl-s{font-size:14px;font-weight:var(--fw-bold)}
+  .tl-m{font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .tl-x{font-family:var(--mono);font-size:12px;color:var(--txt);margin-top:6px;
+    white-space:pre-wrap;word-break:break-word}
+  .tl-b{font-family:var(--mono);font-size:12px;color:var(--mut);margin-top:4px;
+    white-space:pre-wrap;word-break:break-word}
+  /* The state report reads as label/value pairs, aligned in two columns. */
+  .tlState{background:var(--panel2-a);border:1px solid var(--hair);
+    border-left:4px solid var(--sev0);padding:12px 15px;margin:9px 0}
+  .tlState .r{display:grid;grid-template-columns:170px minmax(0,1fr);gap:12px;
+    padding:5px 0;font-size:13px;align-items:baseline}
+  .tlState .r > .l{color:var(--mut);text-transform:uppercase;
+    letter-spacing:var(--ls-caps);font-size:12px}
+  .tlState .r > .v{font-family:var(--mono);word-break:break-word}
+  .tlState .r + .r{border-top:1px solid var(--hair)}
+  .tlState.mismatch{border-left-color:var(--sev3)}
+  .tlStop{margin-top:8px;padding-top:8px;border-top:1px solid var(--hair);
+    font-size:13px}
+  .tlStop .k{font-family:var(--mono);font-size:12px;
+    font-weight:var(--fw-bold);color:var(--sev3);text-transform:uppercase;
+    letter-spacing:var(--ls-caps)}
+  @media(max-width:700px){
+    .tlState .r{grid-template-columns:1fr;gap:2px}
+  }
+
+  /* --- the test plan, to the canvas's measurements ----------------------- */
+  .thrList{border:1px solid var(--hair);margin-bottom:26px}
+  .thrRow{display:flex;align-items:center;gap:14px;padding:11px 16px;
+    border-left:4px solid var(--sev0);border-bottom:1px solid var(--hair)}
+  .thrList .thrRow:last-child{border-bottom:none}
+  /* The name gets the room. It had been wrapping to three lines because the
+     slider was stretching over it; it also gets a floor so a narrow window
+     shortens the slider rather than crushing the words. */
+  .thrName{font-size:14px;flex:1 1 auto;min-width:200px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .thrRange{width:170px;flex:none}
+  /* The slider is for a rough share; this is for an exact one. Scoped through
+     the panel's id on purpose: the field rule is `input:not(...)`, which
+     outranks a bare class whatever the source order, and a plain .thrNum came
+     out 937px wide and squeezed the name to its floor. */
+  /* The native stepper is drawn inside the field's right edge, so a
+     right-aligned value ran straight underneath it. The padding is what the
+     stepper sits in. */
+  #anThroughput input.thrNum{width:84px;flex:none;text-align:right;
+    font-family:var(--mono);font-size:13px;padding:0 24px 0 10px;
+    min-height:34px}
+  .thrPct{font-size:13px;color:var(--mut);width:12px;flex:none}
+  @media(max-width:700px){
+    .thrRange{width:110px}
+    .thrName{min-width:120px}
+  }
+
+  /* --- file pickers ------------------------------------------------------ */
+  /* The recording gets the canvas's drop target; the data and credentials CSVs
+     are secondary, so they stay one-line pickers -- but they were rendering as
+     the raw browser control, which is the one place the operating system's own
+     styling leaked through. Same square 44px box and the same secondary button
+     as every other control. */
+  input[type=file]{padding:0;display:flex;align-items:center;
+    font-size:13px;color:var(--mut);cursor:pointer}
+  input[type=file]::file-selector-button{margin:0 12px 0 0;height:calc(var(--ctl-h) - 2px);
+    padding:0 14px;background:transparent;border:none;
+    border-right:1px solid var(--line);color:var(--txt);font-size:13px;
+    font-weight:var(--fw-bold);font-family:var(--body);cursor:pointer}
+  input[type=file]::file-selector-button:hover{background:var(--panel)}
+  .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+    overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  #dropRec{border:2px dashed var(--line);background:var(--panel2);
+    padding:20px 16px;display:flex;flex-direction:column;align-items:center;
+    gap:10px;text-align:center;margin-top:10px}
+  #dropRec.over{border-color:var(--accent);background:var(--panel)}
+  #dropRec.locked,#recUploaded.locked{opacity:.45;pointer-events:none}
+  #dropRec .dz-t{font-size:15px;font-weight:var(--fw-bold);line-height:1.35}
+  #dropRec .dz-s{font-size:13px;color:var(--mut);line-height:1.55}
+  /* The uploaded state, to the canvas's measurements: a solid 2px box where
+     the dashed one was, so the swap does not move anything around it. */
+  #recUploaded{border:2px solid var(--hair);background:var(--panel2);
+    padding:15px 16px;display:flex;flex-direction:column;gap:9px;margin-top:10px}
+  /* .hidden is a class; these are ids, so it loses on specificity and the
+     two states rendered on top of each other. */
+  #recUploaded.hidden,#dropRec.hidden,#startFrom.hidden{display:none}
+  .ru-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .ru-l{font-size:12px;color:var(--mut);text-transform:uppercase;
+    letter-spacing:var(--ls-caps)}
+  .ru-tag{font-family:var(--mono);font-size:12px;background:var(--orange);
+    color:#191919;padding:3px 9px;font-weight:var(--fw-bold)}
+  .ru-tag.hidden{display:none}
+  .ru-name{font-family:var(--mono);font-size:13px;line-height:1.5;
+    word-break:break-all}
+  .ru-stats{font-size:13px;color:var(--mut);line-height:1.6;margin:0}
+  .ru-stats:empty{display:none}
+  .ru-acts{display:flex;gap:9px;flex-wrap:wrap;margin-top:2px}
+  .ru-acts button{padding:0 15px}
+  .ru-acts button.hidden{display:none}
+  #startFrom{display:flex;flex-direction:column;gap:9px;margin-top:16px}
+  #startFrom .sf-l{font-size:12px;color:var(--mut);text-transform:uppercase;
+    letter-spacing:var(--ls-caps)}
+  #startFrom button{display:flex;align-items:center;gap:10px;text-align:left;
+    width:100%}
+  #startFrom .sf-i{font-family:var(--mono);color:var(--eyebrow)}
+  #startFrom .sf-h{font-size:13px;color:var(--mut);line-height:1.6}
+  /* --- the CSV verdict, as the canvas states it -------------------------- */
+  .checkStrip{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    border:1px solid var(--hair);padding:11px 14px}
+  .checkStrip.good{background:var(--ok-tint);border-left:4px solid var(--ok)}
+  .checkStrip.bad{background:var(--sev3-tint);border-left:4px solid var(--sev3)}
+  .cs-tag{font-family:var(--mono);font-size:12px;font-weight:var(--fw-bold);
+    padding:4px 10px;white-space:nowrap;color:var(--tag-ink)}
+  .checkStrip.good .cs-tag{background:var(--ok)}
+  .checkStrip.bad .cs-tag{background:var(--sev3)}
+  .cs-h{font-size:15px;font-weight:var(--fw-bold)}
+  .checkBody{font-size:14px;color:var(--mut);line-height:1.65;
+    border:1px solid var(--hair);border-top:none;padding:12px 14px}
+  .checkBody:empty{display:none}
+  .checkBody > div + div{margin-top:4px}
+
+  /* --- test data: get the template, then drop the filled CSV ------------- */
+  #dataSteps{display:grid;grid-template-columns:1fr 1fr;gap:14px;
+    margin:10px 0 14px;align-items:stretch}
+  #dataSteps .st{border:1px solid var(--hair);background:var(--panel2);
+    padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+  #dataSteps .st.hidden{display:none}
+  #dataSteps .st-t{font-size:15px;font-weight:var(--fw-bold)}
+  #dataSteps .st .cols{font-family:var(--mono);font-size:13px;color:var(--mut);
+    line-height:1.6;word-break:break-word;margin:0}
+  /* The button sits on the box's floor so both cells line up whatever the
+     text above them does. */
+  #dataSteps .st > button{margin-top:auto;align-self:flex-start}
+  /* Cell 2 before a file: the same dashed target as the recording. */
+  #dataSteps .st.dz{border:2px dashed var(--line);align-items:center;
+    justify-content:center;text-align:center;padding:20px 18px}
+  #dataSteps .st.dz.over{border-color:var(--accent);background:var(--panel)}
+  #dataSteps .st.dz > button{margin-top:0;align-self:center}
+  #dataSteps .dz-t{font-size:15px;font-weight:var(--fw-bold);line-height:1.35}
+  #dataSteps .dz-s{font-size:13px;color:var(--mut);line-height:1.55}
   @media(max-width:900px){#dataSteps{grid-template-columns:1fr}}
+  /* The credentials CSV is the quieter of the two, so the canvas gives it a
+     dashed strip rather than a box of its own. */
+  #dropUsers{border:2px dashed var(--hair);padding:14px 18px;font-size:14px;
+    color:var(--mut);line-height:1.6;display:flex;align-items:center;
+    gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  #dropUsers.over{border-color:var(--accent);background:var(--panel2)}
+  #dropUsers span{flex:1;min-width:260px}
+  #dropUsers p{margin:0;flex-basis:100%}
+  #dropUsers p:empty{display:none}
   #trafficPresets{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
     margin:10px 0}
   #trafficPresets button{text-align:left;background:var(--panel);
-    border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+    border:1px solid var(--line);border-radius:0;padding:14px 16px;
     cursor:pointer;font-family:var(--body);color:var(--txt)}
   #trafficPresets button:hover{background:var(--panel2)}
   #trafficPresets button.on{border-color:var(--accent);border-width:2px;
@@ -136,25 +384,13 @@
     margin-top:4px}
   #trafficSays{font-size:13px;color:var(--mut);margin:2px 0 16px}
   .railEyebrow{margin:16px 0 6px}
+  /* A checkbox and its short label on one line; the explanation goes in the
+     .railNote beneath, as everything else in the rail does. */
+  .optRow{display:flex;align-items:center;gap:9px;font-size:13px;
+    text-transform:none;letter-spacing:normal;color:var(--txt);
+    margin:12px 0 4px;cursor:pointer}
+  .optRow + .railNote{margin-top:0}
   .railNote{font-size:12px;color:var(--mut);line-height:1.5;margin:0 0 10px}
-  #railLinks{margin-top:14px;padding-top:12px;border-top:1px solid var(--hair)}
-  #railLinks button{display:block;width:100%;text-align:left;background:none;
-    border:1px solid var(--line);border-radius:8px;padding:9px 12px;
-    margin-bottom:8px;font-size:12px;color:var(--txt);cursor:pointer;
-    font-family:var(--body)}
-  #railLinks button:hover{background:var(--panel2)}
-  #railSummary{font-size:12px;margin-top:4px}
-  #railSummary div{display:grid;grid-template-columns:64px 1fr;gap:10px;
-    padding:6px 0}
-  #railSummary b{color:var(--mut);font-weight:600;text-transform:uppercase;
-    letter-spacing:.08em;font-size:10px;padding-top:3px}
-  /* 9a sets these in mono. In sans they read as prose; in mono they read as
-     values, which is what they are. */
-  #railSummary span{font-family:var(--mono);font-size:12.5px}
-  #railWill{border-left:3px solid var(--orange);border-top:none;
-    padding:10px 0 10px 12px;margin-top:14px;color:var(--txt);font-size:12.5px}
-  #railWill{font-size:12px;color:var(--mut);line-height:1.5;margin-top:10px;
-    padding-top:10px;border-top:1px solid var(--hair)}
   @media(max-width:900px){#trafficPresets{grid-template-columns:1fr}}
   /* Panels split out of the old single card. The heading a block already
      carried becomes the panel's heading, so nothing is retitled. */
@@ -162,19 +398,30 @@
   #resultsGrid{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;
     align-items:start}
   /* --- phase 4: where the time went -------------------------------------- */
-  #stageBar{display:flex;height:26px;border-radius:6px;overflow:hidden;
+  #stageBar{display:flex;height:26px;border-radius:0;overflow:hidden;
     border:1px solid var(--line);margin:12px 0 6px}
   #stageBar span{display:block;min-width:2px}
   #stageBar span[title]{cursor:default}
   #stageLegend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;
     color:var(--mut);margin-bottom:14px}
-  #stageLegend i{display:inline-block;width:10px;height:10px;border-radius:2px;
+  #stageLegend i{display:inline-block;width:10px;height:10px;border-radius:0;
     margin-right:5px;vertical-align:-1px;font-style:normal}
+  /* A heading that carries its own controls. The controls used to be floated,
+     which took them out of flow and let them ride over the card's edge. */
+  label.withTools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  label.withTools .tools{margin-left:auto;display:flex;align-items:center;
+    gap:10px;text-transform:none;letter-spacing:normal;font-weight:400}
+  label.withTools .opt{display:flex;align-items:center;gap:7px;
+    text-transform:none;letter-spacing:normal;font-weight:400;
+    color:var(--txt);font-size:12px;cursor:pointer}
   #stageTable{width:100%;border-collapse:collapse;font-size:13px}
   #stageTable th{text-align:left;color:var(--mut);font-weight:600;
-    font-size:11px;text-transform:uppercase;letter-spacing:.05em;
-    padding:6px 8px;border-bottom:1px solid var(--line)}
-  #stageTable td{padding:7px 8px;border-bottom:1px solid var(--line)}
+    font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+    padding:6px 8px;border-bottom:1px solid var(--hair)}
+  #stageTable td{padding:7px 8px;border-bottom:1px solid var(--hair)}
+  /* A numeric column is right-aligned, so its heading has to be too --
+     left-aligned headings sat a column's width away from their figures. */
+  #stageTable th.n{text-align:right}
   #stageTable td.n{text-align:right;font-variant-numeric:tabular-nums}
   #stageTable tr.lead td{font-weight:700}
   #stageTable tr.stage-row{cursor:pointer}
@@ -183,13 +430,13 @@
   #stageTable tr.calls td{background:var(--panel2);padding:0}
   #stageTable table.inner{width:100%;border-collapse:collapse;
     font-size:12px;margin:0}
-  #stageTable table.inner td{border-bottom:1px solid var(--line);
+  #stageTable table.inner td{border-bottom:1px solid var(--hair);
     padding:5px 8px}
   #stageTable table.inner tr:last-child td{border-bottom:none}
   #stageTable .bad{color:var(--bad);font-weight:700}
   .rung{display:inline-flex;align-items:center;gap:6px;font-weight:700;
     font-size:12px;white-space:nowrap}
-  .rung::before{content:"";width:10px;height:10px;border-radius:2px;
+  .rung::before{content:"";width:10px;height:10px;border-radius:0;
     background:currentColor;flex:none}
   .rung-Healthy{color:#5C607A}
   .rung-Watch{color:#8E8931}
@@ -201,8 +448,8 @@
   #stageTiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
     gap:12px;margin:12px 0 18px}
   #stageTiles .t{border:1px solid var(--line);border-top:3px solid var(--line);
-    border-radius:8px;padding:12px 14px;background:var(--panel)}
-  #stageTiles .t .n{font-size:11px;color:var(--mut);text-transform:uppercase;
+    border-radius:0;padding:12px 14px;background:var(--panel)}
+  #stageTiles .t .n{font-size:12px;color:var(--mut);text-transform:uppercase;
     letter-spacing:.08em;font-weight:700}
   #stageTiles .t .v{font-size:26px;font-weight:700;margin:6px 0 4px;
     font-family:var(--head)}
@@ -212,35 +459,45 @@
   #stageTiles .t.Failing{border-top-color:#C91A12}
   #stageTiles .t.Critical{border-top-color:#8A120C}
   #ladderKey{display:flex;flex-wrap:wrap;gap:16px;align-items:center;
-    background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:0;
     padding:10px 14px;margin:10px 0 14px;font-size:12px}
   #ladderKey .lk{color:var(--mut);text-transform:uppercase;
-    letter-spacing:.08em;font-weight:700;font-size:11px}
+    letter-spacing:.08em;font-weight:700;font-size:12px}
   /* Long blocks open on demand. The canvas shows four call rows, not four
      hundred lines of recorded selectors. */
-  details.quiet{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  details.quiet{margin-top:12px;border-top:1px solid var(--hair);padding-top:10px}
   /* A section that happens to be collapsed is still a section, so it carries
      the same mark and the same words as any other heading. */
   details.quiet > summary{cursor:pointer;list-style:none}
   details.quiet > summary::-webkit-details-marker{display:none}
-  details.quiet > summary::after{content:'\25B8';font-size:10px;
+  details.quiet > summary::after{content:'\25B8';font-size:12px;
     color:var(--eyebrow);margin-left:4px}
   details.quiet[open] > summary::after{content:'\25BE'}
   details.quiet > summary:hover{color:var(--accent-hi)}
   details.quiet > summary .n{margin-left:auto;text-transform:none;
     letter-spacing:0;font-weight:400;color:var(--mut);font-size:12px}
   details.quiet > *:not(summary){margin-top:10px}
-  #chartMode{display:inline-flex;border:1px solid var(--line);border-radius:8px;
+  #chartHead{margin:22px 0 12px;flex-wrap:wrap}
+  #chartMode{display:inline-flex;border:1px solid var(--line);border-radius:0;
     overflow:hidden;margin-left:auto}
-  #chartMode button{background:transparent;border:none;padding:5px 14px;
-    font-size:12px;font-weight:700;cursor:pointer;color:var(--mut);
-    font-family:var(--body)}
+  /* Inside an .eyebrow, so the caps and tracking have to be undone. */
+  #chartMode button{background:transparent;border:none;padding:0 20px;
+    min-height:var(--ctl-h);font-size:13px;font-weight:var(--fw-bold);
+    cursor:pointer;color:var(--mut);font-family:var(--body);
+    text-transform:none;letter-spacing:normal}
+  #chartMode button + button{border-left:1px solid var(--line)}
   #chartMode button.on{background:var(--green);color:#fff}
+  #chartBox{border:1px solid var(--hair);background:var(--panel2);
+    padding:18px 18px 12px;margin-bottom:26px}
+  #chartFoot{display:flex;gap:24px;font-family:var(--mono);font-size:13px;
+    color:var(--mut);margin-top:10px;flex-wrap:wrap;
+    border-top:1px solid var(--hair);padding-top:10px}
+  #chartFoot:empty{display:none}
   #liveJourney .jr{display:grid;grid-template-columns:1fr auto auto;gap:14px;
     align-items:center;padding:9px 12px;border-left:3px solid var(--line);
-    border-bottom:1px solid var(--line);font-size:13px}
+    border-bottom:1px solid var(--hair);font-size:13px}
   #liveJourney .jr:last-child{border-bottom:none}
-  #liveJourney .jr .ms{font-family:var(--mono);font-size:12.5px}
+  #liveJourney .jr .ms{font-family:var(--mono);font-size:13px}
   #liveJourney .jr.Healthy{border-left-color:#5C607A}
   #liveJourney .jr.Watch{border-left-color:#8E8931}
   #liveJourney .jr.Strained{border-left-color:#B4551F}
@@ -248,7 +505,7 @@
   #liveJourney .jr.Critical{border-left-color:#8A120C}
   #noiseChips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px}
   #noiseChips span{display:inline-flex;align-items:center;gap:6px;
-    border:1px solid var(--line);border-radius:20px;padding:4px 12px;
+    border:1px solid var(--line);border-radius:0;padding:4px 12px;
     font-size:12px;color:var(--mut)}
   #noiseChips b{color:var(--txt);font-weight:700}
   #liveLeft{font-weight:400;font-size:13px;color:var(--mut);margin-left:8px}
@@ -258,11 +515,19 @@
     font-size:12px;color:var(--mut);margin:6px 0 16px}
   /* 9a gives each tile a coloured top edge and a line saying whether the
      number is good. A bare figure makes the reader do that work. */
+  /* What the run is doing, said once and said clearly. The badge is the
+     machine state; the line beside it is the sentence. It used to be a 13px
+     muted hint under the badge, and when the server's phase was "Done" it
+     simply repeated the COMPLETED badge next to it. */
+  #liveState{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    margin:10px 0 4px}
+  #livePhase{margin:0;font-size:16px;color:var(--txt);max-width:640px}
+  #livePhase:empty{display:none}
   #liveKpis .k,#resKpis .k{border-top:3px solid var(--line);position:relative}
   #liveKpis .k.ok,#resKpis .k.ok{border-top-color:var(--ok)}
   #liveKpis .k.warn,#resKpis .k.warn{border-top-color:var(--warn)}
   #liveKpis .k.bad,#resKpis .k.bad{border-top-color:var(--bad)}
-  #liveKpis .k .sub,#resKpis .k .sub{font-size:11px;color:var(--mut);
+  #liveKpis .k .sub,#resKpis .k .sub{font-size:12px;color:var(--mut);
     margin-top:4px;line-height:1.4}
   @media(max-width:900px){#resultsGrid{grid-template-columns:1fr}}
   /* Inside the rail the cards are already framed by the rail itself. */
@@ -279,92 +544,231 @@
     #setupRail{position:static;min-height:0;border-right:none;
       border-bottom:1px solid var(--hair)}
   }
-  main{max-width:1080px;margin:0 auto;padding:28px}
-  /* The run tab carries the rail, so it spans the window; the reading width
-     comes back inside #phaseMain rather than around the whole layout. */
+  main{margin:0 auto;padding:28px}
+  /* The canvas is full-bleed: the grids and tile rows use the whole width and
+     only prose is held to a reading measure. Capping the column at 1080px left
+     two thirds of a wide screen empty, and squeezed the two-column results
+     grid into the left half of it. */
   body.has-rail main{max-width:none;padding:0}
-  body.has-rail #phaseMain{max-width:1080px;padding:24px 28px}
-  body.has-rail #tab-saved,body.has-rail #tab-history,
-  body.has-rail #tab-projects,body.has-rail #tab-ask{
-    max-width:1080px;margin:0 auto;padding:28px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  body.has-rail #phaseMain{padding:24px 28px}
+  /* Prose keeps the canvas's measure -- it is the paragraphs that need a limit,
+     not the layout around them. */
+  .card p.hint,.card p.railNote{max-width:640px}
+  .card{background:var(--panel-a);border:1px solid var(--line);border-radius:0;
     padding:22px;margin-bottom:18px}
-  .card h2{margin:0 0 6px;font-size:18px;font-weight:700}
+  /* A card title is structural, so it stays Bold -- 20px, as 9a's h3. */
+  .card h2{margin:0 0 6px;font-size:20px;font-weight:var(--fw-bold);
+    line-height:1.15}
   .card p.hint{color:var(--mut);margin:0 0 16px;font-size:13px;line-height:1.5}
+  /* Field label and control, to 9a's measurements: 12px caps at .08em over a
+     square 44px control. */
   label{display:block;font-size:12px;color:var(--mut);margin:12px 0 6px;
-    text-transform:uppercase;letter-spacing:.06em}
-  input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
-    padding:11px 13px;border-radius:8px;font-size:14px;font-family:var(--body)}
+    text-transform:uppercase;letter-spacing:var(--ls-caps)}
+  /* A label wrapping a checkbox is a sentence, not a field name. Caps at .08em
+     turned these into shouted paragraphs. */
+  label:has(> input[type=checkbox]){text-transform:none;letter-spacing:normal;
+    font-size:13px;line-height:1.5;color:var(--txt)}
+  /* Text fields and selects only. A checkbox is an input too, and this rule
+     was stretching every one of them to the full width of its container and
+     44px tall -- the tick beside "errors only" came out as a white block. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),select{
+    width:100%;box-sizing:border-box;background:var(--panel2);
+    border:1px solid var(--line);color:var(--txt);padding:10px 12px;
+    border-radius:0;font-size:14px;min-height:var(--ctl-h);
+    font-family:var(--body)}
+  input[type=checkbox],input[type=radio]{width:auto;min-height:0;flex:none;
+    accent-color:var(--accent)}
+  /* A range carries its own width. This rule outranks a class selector, so
+     without the exclusion every slider was stretched to its container and the
+     stage names beside them wrapped onto three lines. */
+  input[type=range]{accent-color:var(--accent)}
   input:focus,select:focus{outline:none;border-color:var(--accent)}
+  /* The system's focus ring -- keyboard only, so mouse users are unaffected. */
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  :focus:not(:focus-visible){outline:none}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
-  button.btn{background:var(--accent);color:#fff;border:none;padding:12px 22px;
-    border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;font-family:var(--head)}
+  /* One CTA shape everywhere: square, 44px tall, 13px Bold. The canvas uses
+     these two variants and nothing else -- solid red for the primary action,
+     a hairline outline for every secondary one. */
+  button.btn{background:var(--accent);color:#fff;border:none;padding:0 20px;
+    min-height:var(--ctl-h);border-radius:0;font-weight:var(--fw-bold);
+    cursor:pointer;font-size:13px;font-family:var(--body)}
   button.btn:hover{background:var(--accent-hi)}
-  button.btn.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+  button.btn.ghost{background:transparent;color:var(--txt);
+    border:1px solid var(--line);padding:0 14px}
   button.btn.ghost:hover{border-color:var(--accent)}
   button.btn:disabled{opacity:.5;cursor:not-allowed}
   .btns{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
-  .grid-k{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
-  .k{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:15px}
-  .k .l{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
-  .k .v{font-size:23px;font-weight:700;margin-top:4px;font-family:var(--head)}
+  /* The canvas sets these four-up and separates them with a 1px rule rather
+     than a gap, so the row reads as one instrument panel. */
+  .grid-k{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+    background:var(--hair);border:1px solid var(--hair)}
+  @media(max-width:900px){.grid-k{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.grid-k{grid-template-columns:1fr}}
+  /* The grid's 1px background draws the rules between tiles, so a tile with
+     its own border would double every line. */
+  .k{background:var(--panel2-a);border:none;border-radius:0;padding:15px}
+  .k .l{color:var(--mut);font-size:12px;text-transform:uppercase;
+    letter-spacing:var(--ls-caps)}
+  .k .v{font-size:23px;font-weight:var(--fw-bold);margin-top:4px;
+    font-family:var(--head)}
+  /* A tile holding a number wears 23px bold. A tile holding an identifier -- a
+     hostname, a file type -- cannot: 23px in a 130px column clipped the target
+     mid-word. Those read as values, so they take the mono face at a size that
+     fits. A host also gets two columns, because breaking one across lines
+     ("radwel / l.eu") is barely better than cutting it; anywhere-wrapping is
+     kept only as the last resort for a host too long even for that. */
+  .k .v.ident{font-size:14px;font-weight:600;font-family:var(--mono);
+    line-height:1.4;overflow-wrap:anywhere;margin-top:6px}
+  /* The target no longer needs two columns: on a full-bleed page a quarter
+     is about 265px, and the host fits in one line of that. Keeping the span
+     also broke the last-row arithmetic below, which counts tiles as cells. */
+  /* Fill the last row. With ten tiles in four columns the two left over used
+     to leave two cells empty, and an empty cell shows the grid's own hairline
+     background as a blank slab. */
+  .grid-k > .k:last-child:nth-child(4n+1){grid-column:span 4}
+  .grid-k > .k:nth-last-child(2):nth-child(4n+1),
+  .grid-k > .k:last-child:nth-child(4n+2),
+  .grid-k > .k:last-child:nth-child(4n+3){grid-column:span 2}
+  @media(max-width:900px){
+    .grid-k > .k:last-child:nth-child(2n+1){grid-column:span 2}
+    .grid-k > .k:last-child:nth-child(4n+1),
+    .grid-k > .k:nth-last-child(2):nth-child(4n+1),
+    .grid-k > .k:last-child:nth-child(4n+2),
+    .grid-k > .k:last-child:nth-child(4n+3){grid-column:auto}
+  }
+  @media(max-width:520px){.grid-k > .k{grid-column:auto !important}}
   .chips span{display:inline-block;background:var(--panel2);border:1px solid var(--line);
-    border-radius:20px;padding:4px 12px;margin:3px 4px 0 0;font-size:12px}
+    border-radius:0;padding:4px 12px;margin:3px 4px 0 0;font-size:12px}
   .journey{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);
-    border-radius:8px;padding:11px 13px;margin:8px 0;font-size:13px}
+    border-radius:0;padding:11px 13px;margin:8px 0;font-size:13px}
   .journey b{color:var(--accent-hi)}
   table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
-  th,td{padding:10px 11px;text-align:left;border-bottom:1px solid var(--line)}
-  th{color:var(--mut);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.05em}
+  th,td{padding:10px 11px;text-align:left;border-bottom:1px solid var(--hair)}
+  th{color:var(--mut);font-weight:600;text-transform:uppercase;font-size:12px;letter-spacing:.05em}
   td.num,th.num{text-align:right}
-  .bar{height:12px;background:var(--panel2);border-radius:8px;overflow:hidden;margin:10px 0}
-  .bar>div{height:100%;background:linear-gradient(90deg,#e11627,#f5333f);width:0;
+  .bar{height:12px;background:var(--panel2);border-radius:0;overflow:hidden;margin:10px 0}
+  /* Flat, not a gradient: the canvas draws one only for the eyebrow mark. */
+  .bar>div{height:100%;background:var(--accent);width:0;
     transition:width .4s}
-  .badge{padding:3px 10px;border-radius:6px;font-weight:700;font-size:12px}
-  .b-ok{background:var(--ok);color:#06121f}.b-bad{background:var(--bad);color:#fff}
-  .b-run{background:var(--warn);color:#1a1200}
-  .log{background:#070708;border:1px solid var(--line);border-radius:8px;padding:12px;
-    font-family:ui-monospace,Consolas,monospace;font-size:12px;color:#d8d8dd;
+  .badge{padding:3px 9px;border-radius:0;font-family:var(--mono);
+    font-weight:var(--fw-bold);font-size:12px;text-transform:uppercase;
+    letter-spacing:var(--ls-caps)}
+  /* #06121f and #1a1200 were navy/brown inks from an older palette. The
+     design puts dark ink on every light tag. */
+  .b-ok{background:var(--ok);color:var(--tag-ink)}
+  .b-bad{background:var(--sev3);color:var(--tag-ink)}
+  .b-run{background:var(--sev1);color:var(--tag-ink)}
+  /* The console stays a dark box in both themes -- black on dark, near-black
+     on light -- so log output never changes colour mid-run. */
+  .log{background:var(--logbg);border:1px solid var(--line);border-radius:0;padding:12px;
+    font-family:var(--mono);font-size:12px;color:#d8d8dd;
     max-height:180px;overflow:auto;white-space:pre-wrap}
-  .rec{background:var(--panel2);border-left:4px solid var(--accent);border-radius:8px;
+  .rec{background:var(--panel2);border-left:4px solid var(--accent);border-radius:0;
     padding:12px 14px;margin:9px 0;font-size:13px}
+  /* A field's row: what it is, what it is called, what the recording had, and
+     where that came from -- each in its own column so the eye can run down any
+     one of them. */
+  .fRow{display:grid;grid-template-columns:84px 190px minmax(0,1fr) auto;
+    gap:12px;align-items:center;padding:5px 0;font-size:13px;
+    border-bottom:1px solid var(--hair)}
+  .fRow:last-child{border-bottom:none}
+  .fRow .badge{justify-self:start}
+  .fRow .fn{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap}
+  .fRow .fv{color:var(--mut);min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .fRow .fv.needs{color:var(--sev1)}
+  .fRow .fe{color:var(--mut);font-size:12px;text-align:right;
+    white-space:nowrap}
+  @media(max-width:760px){
+    .fRow{grid-template-columns:84px minmax(0,1fr);row-gap:2px}
+    .fRow .fv,.fRow .fe{grid-column:2;text-align:left}
+  }
   .rec .d{color:var(--mut);margin-top:5px;line-height:1.5}
   .muted{color:var(--mut);font-size:13px}
   details summary{cursor:pointer;color:var(--accent-hi);font-size:13px;margin-top:10px}
   /* call selector */
   .callTools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
   .callTools .btn{padding:6px 12px;font-size:12px}
-  .callList{border:1px solid var(--line);border-radius:10px;background:var(--panel2);
+  .callList{border:1px solid var(--line);border-radius:0;background:var(--panel2);
     max-height:340px;overflow:auto}
-  .callItem{display:flex;align-items:center;gap:10px;padding:8px 12px;
-    border-bottom:1px solid var(--line);font-size:13px;cursor:pointer;margin:0}
+  /* The kept calls are a finite list -- sixteen of them here -- and capping the
+     box cut the last row through the middle, which reads as a broken layout
+     rather than as something to scroll. The live stream keeps its cap. */
+  #anCalls{max-height:none;overflow:visible}
+  /* Real columns, not a flex line. The method tag is a different width for
+     every verb and the group / KEEP cells are optional, so on a flex row each
+     one started wherever the row before it happened to end. */
+  .callItem{display:grid;
+    grid-template-columns:auto 54px 62px minmax(0,1fr) 96px 48px;
+    align-items:center;gap:10px;padding:8px 12px;
+    border-bottom:1px solid var(--hair);font-size:13px;cursor:pointer;margin:0}
   .callItem:last-child{border-bottom:none}
+  .callItem .kind{justify-self:start}
+  .callItem .grp{color:var(--mut);text-align:right;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .callItem .flag{justify-self:end}
+  @media(max-width:820px){
+    .callItem{grid-template-columns:auto 48px 56px minmax(0,1fr);
+      row-gap:4px}
+    .callItem .grp,.callItem .flag{grid-column:4;justify-self:start;
+      text-align:left}
+  }
   /* Was a fixed dark-palette value, which turned the row black under the
      light theme. */
   .callItem:hover{background:var(--panel2)}
   .callItem input{width:auto;margin:0;accent-color:var(--accent)}
-  .callItem .m{font-family:ui-monospace,monospace;font-weight:700;min-width:54px;color:var(--mut)}
-  .callItem .p{font-family:ui-monospace,monospace;flex:1;word-break:break-all;color:var(--txt)}
-  .kind{padding:2px 8px;border-radius:6px;font-size:10.5px;font-weight:700;letter-spacing:.3px}
-  .kind.REST{background:#123a2a;color:#3ddc97}
-  .kind.API{background:#0f2e4d;color:#5b93ff}
-  .kind.XHR{background:#3a2d12;color:#e6a700}
-  .kind.GET{background:#2a2a30;color:#c9c9d2}
-  .kind.POST,.kind.PUT,.kind.PATCH,.kind.DELETE{background:#3a1220;color:#ff6b9a}
-  .noiseItem{display:flex;gap:10px;padding:6px 12px;border-bottom:1px solid var(--line);
+  .callItem .m{font-family:var(--mono);font-weight:700;min-width:54px;color:var(--mut)}
+  .callItem .p{font-family:var(--mono);flex:1;word-break:break-all;color:var(--txt)}
+  .kind{padding:2px 8px;border-radius:0;font-size:12px;
+    font-weight:var(--fw-bold);letter-spacing:var(--ls-caps);
+    font-family:var(--mono);color:var(--tag-ink)}
+  /* The last of the older palette: five chips that paired a bright colour with
+     its own dark background, which only ever worked on a dark page. They take
+     the ladder and dark ink now, like every other tag. */
+  .kind.REST{background:var(--ok)}
+  .kind.API{background:var(--sev0)}
+  .kind.XHR{background:var(--sev1)}
+  .kind.GET{background:var(--sev5)}
+  .kind.POST,.kind.PUT,.kind.PATCH,.kind.DELETE{background:var(--sev2)}
+  .noiseItem{display:grid;grid-template-columns:54px minmax(0,1fr) 140px;
+    gap:10px;padding:6px 12px;border-bottom:1px solid var(--hair);
     font-size:12px;color:var(--mut)}
   .noiseItem:last-child{border-bottom:none}
-  .noiseItem .m{font-family:ui-monospace,monospace;min-width:54px}
-  .noiseItem .p{font-family:ui-monospace,monospace;flex:1;word-break:break-all}
-  pre.code{background:#070708;border:1px solid var(--line);border-radius:8px;padding:12px;
-    font-size:11.5px;overflow:auto;max-height:340px;color:#d8d8dd}
+  .noiseItem .m{font-family:var(--mono);min-width:54px}
+  .noiseItem .p{font-family:var(--mono);flex:1;word-break:break-all}
+  pre.code{background:#070708;border:1px solid var(--line);border-radius:0;padding:12px;
+    font-size:12px;overflow:auto;max-height:340px;color:#d8d8dd}
   .hidden{display:none}
+  /* Working on it. These states used to be a 14px spinner and a lowercase
+     word in muted grey, which read as a caption rather than as the app doing
+     something -- an operator could not tell an upload was in flight. It takes
+     the amber bar because it is neither a verdict nor a failure. */
+  .busy{display:flex;align-items:center;gap:12px;border:1px solid var(--hair);
+    border-left:4px solid var(--orange);background:var(--panel2);
+    padding:13px 15px;margin:10px 0;font-size:14px;color:var(--txt)}
+  .busy .spin{width:18px;height:18px;border-width:2px;margin:0;flex:none}
+  .busy .lbl{font-family:var(--mono);font-size:12px;font-weight:var(--fw-bold);
+    text-transform:uppercase;letter-spacing:var(--ls-caps);color:var(--orange);
+    flex:none}
+  .busy .what{color:var(--mut);font-size:13px;min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
   .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--mut);
     border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;
     vertical-align:middle;margin-right:6px}
   @keyframes sp{to{transform:rotate(360deg)}}
-  a.link{color:var(--accent-hi);text-decoration:none}
+  /* 9a's link colour is the eyebrow's: amber on dark, burnt orange on light.
+     --accent-hi is a dark red, which on a #131313 panel was barely legible. */
+  /* The design system's link rule. There was no base rule at all, so any
+     anchor without .link fell through to the browser's default blue -- which
+     is what "Capture fresh tokens instead" was rendering as. */
+  a{color:var(--txt);text-decoration:underline;text-underline-offset:2px}
+  a:hover{color:var(--accent)}
+  a.accent{color:var(--accent)}
+  a.link{color:var(--eyebrow);text-decoration:none}
+  a.link:hover{text-decoration:underline}
   @media(max-width:720px){.row,.row3{grid-template-columns:1fr}}
 </style>
 </head>
@@ -387,8 +791,14 @@
     <div class="pill" id="healthPill">checking engine…</div>
     <div class="pill" id="aiPill" title="Set ANTHROPIC_API_KEY to enable the agentic layer">AI: checking…</div>
     <div class="pill" style="border-color:rgba(255,255,255,.4)">Claude + <b style="color:var(--peach)">Locust</b></div>
+    <!-- The two docks. 9a reaches them from here and from the setup rail; both
+         open the same drawer, so there is one library, not two. -->
+    <button class="btn ghost" data-dock="library" title="Library — saved scripts, runs, projects"
+            aria-label="Open the library" style="padding:6px 12px">&#9636;</button>
+    <button class="btn ghost" data-dock="ask" title="Ask LT Metrics about past runs"
+            aria-label="Ask LT Metrics" style="padding:6px 14px">?</button>
     <button class="btn ghost" id="btnTheme" title="Switch between the light and dark palette"
-            style="padding:6px 14px">Dark mode</button>
+            style="padding:6px 14px">Light mode</button>
     <button class="btn" id="btnRestart" title="Kill running tests and restart the engine (also reloads code changes)"
             style="padding:6px 12px">⟳ Restart</button>
   </div>
@@ -417,19 +827,11 @@
   <div id="restartMsg">Restarting engine…</div>
 </div>
 
-<nav>
-  <button data-tab="new" class="active">New Test</button>
-  <button data-tab="saved">Saved Scripts</button>
-  <button data-tab="history">History</button>
-  <button data-tab="projects">Projects</button>
-  <button data-tab="ask">Ask LT Metrics</button>
-</nav>
-
 <main>
   <!-- NEW TEST -->
   <section id="tab-new">
     <div id="savedBanner" class="card hidden" style="border-left:4px solid var(--accent)">
-      💾 <b>Using saved script:</b> <span id="savedName"></span> — no re-crawl needed. Choose a
+      <b>Using saved script:</b> <span id="savedName"></span> — no re-crawl needed. Choose a
       <b>test type</b> below and click <b>Generate &amp; Run Test</b>.
       <a class="link" style="margin-left:10px" onclick="clearSaved()">✕ Clear</a>
     </div>
@@ -438,13 +840,14 @@
       <p class="railNote">Collapses on its own once analysis is done, so results
         get the full width.</p>
       <h2 class="hidden">1 · Project &amp; target</h2>
-      <p class="hint">Name your project. The target URL is taken from your recording (you can override it here). Login is driven by the recording; for multi-user load, upload a credentials CSV below with several accounts.</p>
-      <div class="row">
-        <div><label>Project name</label><input id="projectName" placeholder="My Web App" value="My Web App"></div>
-        <div><label>Client / team (optional)</label><input id="client" placeholder="Internal"></div>
-      </div>
-      <label>Target URL</label>
-      <input id="url" placeholder="https://www.example.com">
+      <!-- The canvas stacks two fields here, project then target, and carries no
+           explanatory paragraph -- the labels do that work. -->
+      <div><label for="projectName">Project name</label>
+        <input id="projectName" placeholder="My Web App" value="My Web App"></div>
+      <div><label for="url">Target URL</label>
+        <input id="url" placeholder="https://www.example.com"></div>
+      <div><label for="client">Client / team (optional)</label>
+        <input id="client" placeholder="Internal"></div>
     </div>
 
     <div class="card">
@@ -452,26 +855,52 @@
       <p class="railNote">JMeter <code>.jmx</code>, Taurus <code>.yaml</code> or a
         <code>.har</code> capture.</p>
       <h2 class="hidden">1 · Upload your BlazeMeter recording</h2>
-      <p class="hint">LT Metrics works entirely from your recording — JMeter <code>.jmx</code>,
-        Taurus/BlazeMeter <code>.yaml/.yml</code>, or <code>.har</code>. It reads the journey,
-        auto-correlates dynamic values, and tells you exactly what data to upload.</p>
-      <label>Recording <span class="muted">— .jmx, .yaml/.yml, or .har</span></label>
-      <input type="file" id="upRec" accept=".jmx,.yaml,.yml,.har">
+      <!-- The canvas asks for the file with a drop target, not a bare browse
+           button. The real input stays -- hidden, still the thing that holds the
+           file -- so every existing handler and the form submit are unchanged. -->
+      <input type="file" id="upRec" accept=".jmx,.yaml,.yml,.har" class="visually-hidden">
+      <div id="dropRec">
+        <div class="dz-t">Drop your recording here</div>
+        <div class="dz-s">or pick a file from your machine</div>
+        <button class="btn" type="button" id="btnPickRec">Choose a file</button>
+      </div>
+      <!-- The canvas swaps the drop target for this once a file is in hand:
+           what was uploaded, whether it parsed, what it found, and the two
+           things you can still do about it. -->
+      <div id="recUploaded" class="hidden">
+        <div class="ru-top">
+          <span class="ru-l">Uploaded</span>
+          <span class="ru-tag hidden" id="recParsed">PARSED</span>
+        </div>
+        <div class="ru-name" id="recName"></div>
+        <p class="ru-stats" id="railRecording"></p>
+        <div class="ru-acts">
+          <button class="btn ghost" type="button" id="btnReplaceRec">Replace</button>
+          <button class="btn ghost hidden" type="button" id="btnReanalyze">Re-analyze</button>
+        </div>
+      </div>
       <div class="muted" id="sumRec"></div>
-      <p class="railNote" id="railRecording" style="margin-top:8px"></p>
-      <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
-        <input id="enhancePlaywright" type="checkbox" style="width:auto" checked>
-        Also crawl live with Playwright — renders JS and fills gaps the recording might have
-        missed (on by default; requires Playwright installed on the server — falls back
-        automatically to the plain recording analysis if it isn't)
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;margin-top:6px">
-        <input id="includeStatic" type="checkbox" style="width:auto">
-        Include static pages &amp; assets (html / css / js / images) — off by default, so the
-        test runs API calls only. Turn on for a faithful full replay.
-      </label>
-      <div class="btns">
-        <button class="btn" id="btnDiscover">🔎 Analyze recording</button>
+      <div id="startFrom">
+        <div class="sf-l">Or start from</div>
+        <button class="btn ghost" type="button" data-dock="library">
+          <span class="sf-i" aria-hidden="true">&#9636;</span>A saved script</button>
+        <div class="sf-h">No recording yet? Record the journey in JMeter or
+          BlazeMeter, then export it here.</div>
+      </div>
+      <!-- The rail states a thing, then explains it in a note. These two were
+           the only place it stated the explanation instead: a paragraph inside
+           a checkbox label, wrapping to five lines in a 308px column. -->
+      <label class="optRow"><input id="enhancePlaywright" type="checkbox" checked>
+        Also crawl live with Playwright</label>
+      <p class="railNote">Renders JS and fills gaps the recording missed. Needs
+        Playwright on the server; falls back to the plain recording analysis if
+        it is not there.</p>
+      <label class="optRow"><input id="includeStatic" type="checkbox">
+        Include static pages &amp; assets</label>
+      <p class="railNote">HTML, CSS, JS and images. Off by default so the test
+        runs API calls only — turn it on for a faithful full replay.</p>
+      <div class="btns" id="discoverActions">
+        <button class="btn" id="btnDiscover">Analyze recording</button>
       </div>
     </div>
 
@@ -497,16 +926,26 @@
         for this site gives better captured data than the default)</span></label>
       <input id="pwSearchTerm" placeholder="test">
       <div class="btns">
-        <button class="btn" id="btnCrawlRecord">🌐 Crawl &amp; record with Playwright</button>
+        <button class="btn" id="btnCrawlRecord">Crawl &amp; record with Playwright</button>
       </div>
       <div class="muted" id="sumCrawl" style="margin-top:8px"></div>
+    </div>
+
+    <!-- The analysis reports itself here, in the main column above the details
+         it is producing. It used to run in the rail under the drop zone, where
+         a seven-step checklist had a 308px column to fit into. -->
+    <div class="card hidden" id="analysisProgressCard">
+      <div class="eyebrow">Reading your recording</div>
+      <div id="analysisProgress"></div>
     </div>
 
     <div class="card hidden" id="discoveryCard">
       <!-- 9a has no "Recording analysis" heading. The eyebrow above already
            says what the reader is looking at; repeating it in the tool's own
            vocabulary is what made this card read as a different product. -->
-      <details class="quiet"><summary>Recording details<span class="n"
+      <!-- Open by default: it is the first thing anyone reads after an
+           analysis, and having to click for it made the numbers feel optional. -->
+      <details class="quiet" open><summary>Recording details<span class="n"
         id="discOne"></span></summary>
         <div class="grid-k" id="discKpis"></div>
       </details>
@@ -558,19 +997,31 @@
       <p class="hint" id="dataNeed">Some fields in the recording need real
         values. Download the template, fill one row per virtual user, and
         upload it back.</p>
+      <input type="file" id="upData" accept=".csv" class="visually-hidden">
       <div id="dataSteps">
         <div class="st">
-          <h3>1 · Get the template</h3>
+          <div class="st-t">1 · Get the template</div>
           <div class="cols" id="dataCols"></div>
-          <div class="btns" style="margin:0">
-            <button class="btn" id="btnSampleCsv">⬇ Download sample CSV</button>
-          </div>
+          <button class="btn ghost" type="button" id="btnSampleCsv">&#8681; Download sample CSV</button>
         </div>
-        <div class="st">
-          <h3>2 · Upload your data</h3>
-          <div class="cols" id="dataHave">nothing uploaded yet</div>
-          <input type="file" id="upData" accept=".csv">
-          <div class="muted" id="sumData"></div>
+        <!-- The canvas asks for the filled CSV with a drop target, and swaps it
+             for a summary of the file once there is one -- the same pair the
+             recording upload uses. -->
+        <div class="st dz" id="dropData">
+          <div class="dz-t">2 · Drop your filled CSV here</div>
+          <div class="dz-s" id="dataHave">One row per virtual user</div>
+          <button class="btn" type="button" id="btnPickData">Choose a file</button>
+        </div>
+        <div class="st hidden" id="dataUploaded">
+          <div class="ru-top">
+            <span class="ru-l">Uploaded</span>
+            <span class="ru-tag hidden" id="dataChecked">CHECKED</span>
+          </div>
+          <div class="ru-name" id="dataName"></div>
+          <p class="ru-stats" id="sumData"></p>
+          <div class="ru-acts">
+            <button class="btn ghost" type="button" id="btnReplaceData">Replace</button>
+          </div>
         </div>
       </div>
       <div id="validateOut"></div>
@@ -578,10 +1029,13 @@
            live far down the page, beside the run controls, so the file's
            problems and the file's verdict were nowhere near each other. -->
       <div id="readiness" style="margin-top:10px"></div>
-      <p class="hint" style="margin-top:12px">Optional — a separate credentials
-        CSV, if logins aren't in the data file.</p>
-      <input type="file" id="upUsers" accept=".csv">
-      <div class="muted" id="sumUsers"></div>
+      <input type="file" id="upUsers" accept=".csv" class="visually-hidden">
+      <div id="dropUsers">
+        <span>Optional — a separate credentials CSV, if logins aren't in the
+          data file. Drop it here.</span>
+        <button class="btn ghost" type="button" id="btnPickUsers">Choose a file</button>
+        <p class="muted" id="sumUsers"></p>
+      </div>
       <div class="btns">
         <button class="btn ghost" onclick="saveScript(false)">💾 Save script</button>
       </div>
@@ -600,8 +1054,8 @@
 
       <!-- Hidden per request: Performance Test Plan upload/analyze block. DOM kept
            (display:none) so run defaults are unchanged; unhide to restore. -->
-      <details open style="border:1px solid var(--bd,#2a2a2a);border-radius:8px;padding:10px 12px;margin:4px 0 14px;display:none">
-        <summary style="cursor:pointer;font-weight:600">📄 Start from a Performance Test Plan
+      <details open style="border:1px solid var(--bd,#2a2a2a);border-radius:0;padding:10px 12px;margin:4px 0 14px;display:none">
+        <summary style="cursor:pointer;font-weight:600">Start from a Performance Test Plan
           <span class="muted">— optional (PDF / DOCX / Markdown / text)</span></summary>
         <p class="hint" style="margin-top:8px">LT Metrics reads the plan and <b>recommends</b> the test types
           it describes — with users, duration, ramp-up, think time, SLA, objectives and scenarios — then
@@ -613,9 +1067,10 @@
       </details>
 
       <label style="margin-top:4px">The test plan</label>
+      <!-- The sentence about the request count went with the column it
+           described; there is no count beside a row any more. -->
       <p class="hint" style="margin:2px 0 8px">How much of the traffic goes to each part of the
-        journey. 100% means every virtual user walks that group every iteration. The request count
-        beside each one is fixed — it is what the browser actually sent — so the two multiply.</p>
+        journey. 100% means every virtual user walks that group every iteration.</p>
       <p class="hint" id="thrSource" style="margin:2px 0 8px;display:none"></p>
       <div id="anThroughput"><p class="muted">Analyze a recording (Section 1) to see its transaction groups.</p></div>
 
@@ -702,8 +1157,8 @@
           <input id="ovCaptchaToken" type="text" placeholder="blank if CAPTCHA is disabled on the test env">
           <input id="ovCaptchaField" type="text" placeholder="token field name (optional)">
         </details>
-        <details open style="margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:6px 12px">
-          <summary style="font-weight:700;color:var(--accent-hi)">💳 Real-browser payment track (Playwright) — drive real card iframes</summary>
+        <details open style="margin-top:8px;border:1px solid var(--line);border-radius:0;padding:6px 12px">
+          <summary style="font-weight:700;color:var(--accent-hi)">Real-browser payment track (Playwright) — drive real card iframes</summary>
           <p class="hint">Runs a small pool of REAL browsers alongside the load test to complete a
             hosted card payment (Stripe / CyberSource) that HTTP replay can't. Requires Playwright
             (run <code>setup-browser-track.bat</code> once). Leave Browser VUs at 0 to keep it off —
@@ -733,9 +1188,9 @@
 
       <!-- Hidden per request: Intelligent Test Data Generator block. DOM kept
            (display:none) so the run still uses uploaded/recording data; unhide to restore. -->
-      <div id="dataGenBlock" style="border:1px solid var(--bd,#2a2a2a);border-radius:8px;padding:10px 12px;margin:12px 0;display:none">
+      <div id="dataGenBlock" style="border:1px solid var(--bd,#2a2a2a);border-radius:0;padding:10px 12px;margin:12px 0;display:none">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <b>🧪 Intelligent Test Data Generator</b>
+          <b>Intelligent Test Data Generator</b>
           <button class="btn ghost" id="btnGenData" style="width:auto">Generate test data</button>
         </div>
         <p class="hint" style="margin-top:6px">Generates realistic, validated data for the selected
@@ -750,7 +1205,7 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:13px">
           <input id="genRegister" type="checkbox" style="width:auto">
           <b>Register new customer accounts</b> on the store
-          <span style="color:#e6a700">⚠ creates real accounts — test/staging only</span>
+          <span style="color:var(--sev1)">▲ creates real accounts — test/staging only</span>
         </label>
         <div class="muted" id="sumGenData" style="margin-top:6px"></div>
         <div id="genDataOut" style="margin-top:8px"></div>
@@ -794,13 +1249,18 @@
       <div style="display:flex;align-items:flex-start;gap:14px">
         <div style="flex:1">
           <div class="eyebrow" id="liveEyebrow">Running</div>
-          <h2 id="liveSays" style="font-size:24px;margin:2px 0 14px">Load test in progress</h2>
+          <!-- Placeholder only, until the first poll writes the real sentence. It
+               said "Load test in progress", which is what the state line beside
+               the badge says -- so before the first poll the panel said it twice. -->
+          <h2 id="liveSays" style="font-size:24px;margin:2px 0 14px">Starting the run…</h2>
         </div>
         <button class="btn ghost" id="btnStop" style="padding:6px 14px">⏹ Stop and see the result</button>
       </div>
-      <span class="badge b-run hidden" id="liveStatus">running</span>
-      <p class="hint" id="livePhase"></p>
-      <div id="liveBrowserTrack" style="display:none;margin:6px 0 2px;padding:9px 12px;border-radius:8px;
+      <div id="liveState">
+        <span class="badge b-run hidden" id="liveStatus">running</span>
+        <p id="livePhase"></p>
+      </div>
+      <div id="liveBrowserTrack" style="display:none;margin:6px 0 2px;padding:9px 12px;border-radius:0;
            border:1px solid var(--line);font-size:13px"></div>
       <div class="bar"><div id="liveBar"></div></div>
       <div id="liveScale"></div>
@@ -808,29 +1268,36 @@
       <label style="margin-top:14px">The journey, filling up as it runs</label>
       <div id="liveJourney"><p class="muted" style="padding:6px 0">
         Stages appear here as the run reaches them.</p></div>
-      <div style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:14px">
-        <div style="display:flex;align-items:center;margin-bottom:8px">
-          <div id="chartMode" role="group" aria-label="Chart style">
-            <button type="button" data-mode="bar" class="on">Bars</button>
-            <button type="button" data-mode="line">Lines</button>
-          </div>
+      <!-- The canvas puts the eyebrow and the Bars/Lines switch on one row
+           above the plot, and closes the box with a mono read-out. -->
+      <!-- The eyebrow IS the row: it is already a flex line with the section
+           mark, so the switch just sits at its far end. It also has to stay an
+           .eyebrow for splitIntoPanels to adopt it instead of adding a second
+           heading above it. -->
+      <div id="chartHead" class="eyebrow">Requests, latency and users over time
+        <div id="chartMode" role="group" aria-label="Chart style">
+          <button type="button" data-mode="bar" class="on">Bars</button>
+          <button type="button" data-mode="line">Lines</button>
         </div>
-        <canvas id="liveChart" height="120"></canvas>
       </div>
-      <label style="margin-top:14px">Live API calls
+      <div id="chartBox">
+        <canvas id="liveChart" height="120"></canvas>
+        <div id="chartFoot"></div>
+      </div>
+      <label class="withTools" style="margin-top:14px">Live API calls
         <span class="muted">— every request as it happens (click a row for request/response)</span>
-        <span style="float:right">
-          <label style="display:inline;font-weight:400"><input type="checkbox" id="callsErrOnly"> errors only</label>
-          &nbsp;<span class="muted" id="callsCount">0</span>
+        <span class="tools">
+          <label class="opt" for="callsErrOnly"><input type="checkbox" id="callsErrOnly"> errors only</label>
+          <span class="muted" id="callsCount">0</span>
         </span>
       </label>
-      <div id="liveCalls" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel2);font-family:monospace;font-size:12px"></div>
+      <div id="liveCalls" style="max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:0;background:var(--panel2);font-family:var(--mono);font-size:12px"></div>
       <label style="margin-top:14px">Engine log</label>
       <div class="log" id="liveLog">waiting for output…</div>
     </div>
 
     <div class="card hidden" id="healCard" data-phase="2">
-      <h2>🤖 AI Auto-heal <span class="badge" id="healBadge"></span></h2>
+      <h2>AI Auto-heal <span class="badge" id="healBadge"></span></h2>
       <p class="hint">When a run fails, Claude reads the actual failures, fixes the script
         (correlation, headers, REST prefix, payment method, address fields…) and regenerates
         it. Broken-script failures are re-run automatically; a timed run that produced traffic
@@ -858,8 +1325,10 @@
     </div>
 
     <div class="card hidden" id="timelineCard" data-phase="4">
-      <h2>Checkout timeline <span class="badge" id="timelineBadge"></span>
-        <span class="muted" id="timelineMode" style="font-weight:400;font-size:13px"></span></h2>
+      <h2>Checkout timeline <span class="badge" id="timelineBadge"></span></h2>
+      <!-- Mode, build and memory are a machine read-out, so they sit on their
+           own mono line instead of trailing off the end of the heading. -->
+      <p class="tlMeta" id="timelineMode"></p>
       <p class="hint">Each checkout API step (from the recording), in order — with request,
         status, elapsed time and the response body. Updates live; stops at the first failure.</p>
       <div id="timelineBody"></div>
@@ -873,7 +1342,7 @@
       <div class="eyebrow" style="margin-top:18px">The numbers behind it</div>
       <div class="grid-k" id="resKpis"></div>
       <div class="btns">
-        <button class="btn" id="btnReport">📊 Open full report</button>
+        <button class="btn" id="btnReport">📊 Open full report ↗</button>
         <button class="btn ghost" id="btnReportDl">⬇ Download report (HTML)</button>
         <button class="btn ghost" id="btnXlsx">⬇ Download Excel</button>
         <button class="btn ghost" onclick="saveScript(true)">💾 Save script</button>
@@ -890,50 +1359,57 @@
     </div>
   </section>
 
+</main>
+
+<!-- The dock. The sections below are the same elements the tab strip used to
+     show, moved rather than rebuilt, so every id and handler still resolves.
+     Library shows three of them at once; Ask shows the fourth. -->
+<div id="dock" hidden>
+  <button id="dockScrim" type="button" tabindex="-1" aria-label="Close"></button>
+  <div id="dockPanel" role="dialog" aria-modal="true" aria-labelledby="dockTitle">
+    <div id="dockHead">
+      <div id="dockTitle">Library</div>
+      <button id="dockClose" type="button">Close</button>
+    </div>
+    <div id="dockBody">
+
   <!-- SAVED SCRIPTS -->
   <section id="tab-saved" class="hidden">
     <div class="card">
-      <h2>Saved scripts</h2>
-      <p class="hint">Re-run a saved script directly — no recording or discovery needed.</p>
-      <table><thead><tr><th>Name</th><th>Target</th><th>Type</th><th>Saved</th><th></th></tr></thead>
-        <tbody id="savedRows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table>
+      <div class="eyebrow">Saved scripts</div>
+      <div class="dockList" id="savedRows"><div class="none">Loading…</div></div>
     </div>
   </section>
 
   <!-- HISTORY -->
   <section id="tab-history" class="hidden">
     <div class="card">
-      <h2>Run history</h2>
-      <p class="hint">Every run is stored in the SQLite ledger for trend comparison.</p>
-      <table><thead><tr><th>Started</th><th>Project</th><th>Type</th>
-        <th class="num">Users</th><th class="num">Reqs</th><th class="num">Err%</th>
-        <th class="num">p95</th><th>Gate</th><th></th></tr></thead>
-        <tbody id="historyRows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody></table>
+      <div class="eyebrow">Recent runs</div>
+      <div class="dockList" id="historyRows"><div class="none">Loading…</div></div>
     </div>
   </section>
 
   <!-- PROJECTS -->
   <section id="tab-projects" class="hidden">
     <div class="card">
-      <h2>Saved projects</h2>
-      <p class="hint">Select a project to reuse its configuration.</p>
-      <table><thead><tr><th>Project</th><th>Target</th><th class="num">Runs</th>
-        <th>Last run</th><th></th></tr></thead>
-        <tbody id="projectRows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table>
+      <div class="eyebrow">Projects</div>
+      <div class="dockList" id="projectRows"><div class="none">Loading…</div></div>
     </div>
   </section>
 
   <!-- ASK -->
   <section id="tab-ask" class="hidden">
     <div class="card">
-      <h2>Ask LT Metrics about your history</h2>
-      <p class="hint">Natural-language queries over past runs. e.g. “show checkout regressions over the last 6 months”.</p>
+      <div class="eyebrow">Ask</div>
       <input id="askText" placeholder="show checkout regressions over the last 6 months">
       <div class="btns"><button class="btn" id="btnAsk">Ask</button></div>
       <div id="askResult" style="margin-top:14px"></div>
     </div>
   </section>
-</main>
+
+    </div>
+  </div>
+</div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -949,11 +1425,19 @@ let currentRun = null, poll = null, currentDiscovery=false;
 const uploads = {users_csv:null, data_csv:null, recording:null, testplan:null};
 
 // file uploads (users CSV / data CSV / recording)
+// One shape for every "working on it" state -- upload, validation, analysis.
+function _busy(label, what){
+  return '<div class="busy"><span class="spin"></span>'
+    + '<span class="lbl">' + label + '</span>'
+    + (what ? '<span class="what">' + _escHtml(what) + '</span>' : '')
+    + '</div>';
+}
+
 async function uploadFile(kind, inputId, sumId, field){
   const el = $('#'+inputId); const f = el.files && el.files[0];
   const sum = $('#'+sumId);
   if(!f){ uploads[field]=null; sum.textContent=''; return; }
-  sum.innerHTML='<span class="spin"></span>uploading…';
+  sum.innerHTML=_busy('Uploading', f.name);
   try{
     const fd = new FormData(); fd.append('kind', kind); fd.append('file', f);
     const r = await fetch('/api/upload', {method:'POST', body:fd});
@@ -961,10 +1445,10 @@ async function uploadFile(kind, inputId, sumId, field){
     if(!r.ok) throw new Error(d.detail||'upload failed');
     uploads[field] = d.path;
     const s = d.summary||{};
-    if(s.error) sum.innerHTML = '⚠️ '+s.error;
-    else if(kind==='users') sum.innerHTML = `✅ ${f.name} · ${s.rows||0} credential row(s)`;
+    if(s.error) sum.innerHTML = '▲ '+s.error;
+    else if(kind==='users') sum.innerHTML = `✓ ${f.name} · ${s.rows||0} credential row(s)`;
     else if(kind==='data'){
-      sum.innerHTML = `✅ ${f.name} · ${s.keywords||0} keyword(s), ${s.product_ids||0} product id(s)`;
+      sum.innerHTML = `✓ ${f.name} · ${s.keywords||0} keyword(s), ${s.product_ids||0} product id(s)`;
       // Say it, every time. A file that quietly gains a value nobody typed is
       // worse than one that is missing it -- the reader has to be able to trust
       // that what they see is what they supplied.
@@ -974,17 +1458,17 @@ async function uploadFile(kind, inputId, sumId, field){
       // worked: emptying the cell just lets the next upload refill it from
       // memory. Advice that cannot work is worse than none.
       if(put.length) sum.innerHTML +=
-        `<div class="muted" style="margin-top:6px;color:#e6a700;line-height:1.5">`
+        `<div class="muted" style="margin-top:6px;color:var(--sev1);line-height:1.5">`
         + `&#8635; <b>${put.map(_escHtml).join(', ')}</b> had no card token in your `
         + `file, so LT Metrics used the one it saved when you last fetched. `
         + `Your file on disk is unchanged.<br>`
         + `Want ${put.length === 1 ? 'a brand-new token' : 'brand-new tokens'} instead? `
-        + `<a href="#" id="btnForgetTokens">Forget `
+        + `<a href="#" class="link" id="btnForgetTokens">Forget `
         + `${put.length === 1 ? 'it' : 'them'}</a>, then click Fetch card tokens — `
         + `which will capture for ${put.map(_escHtml).join(', ')} as well as any `
         + `account that still has none.</div>`;
     }
-    else sum.innerHTML = `✅ ${f.name} · ${s.endpoints||0} endpoint(s) from ${s.source||'recording'}`+(s.base_url?` · ${s.base_url}`:'');
+    else sum.innerHTML = `✓ ${f.name} · ${s.endpoints||0} endpoint(s) from ${s.source||'recording'}`+(s.base_url?` · ${s.base_url}`:'');
     const fg = $('#btnForgetTokens');
     if(fg) fg.onclick = async (ev) => {
       ev.preventDefault();
@@ -999,11 +1483,129 @@ async function uploadFile(kind, inputId, sumId, field){
         + 'Fetch card tokens to capture '
         + (put.length === 1 ? 'a fresh one' : 'fresh ones') + '.';
     };
-  }catch(e){ uploads[field]=null; sum.innerHTML='⚠️ '+e.message; }
+  }catch(e){ uploads[field]=null; sum.innerHTML='▲ '+e.message; }
 }
 $('#upUsers').onchange=()=>uploadFile('users','upUsers','sumUsers','users_csv');
-$('#upData').onchange=async()=>{ await uploadFile('data','upData','sumData','data_csv'); validateData(); };
-$('#upRec').onchange=()=>uploadFile('recording','upRec','sumRec','recording');
+$('#upData').onchange=async()=>{
+  await uploadFile('data','upData','sumData','data_csv');
+  syncDataState();
+  validateData();
+};
+
+// Drop target or uploaded box, as with the recording. CHECKED is claimed only
+// once validation has actually run and passed.
+function syncDataState(){
+  const el = $('#upData'); if(!el) return;
+  const f = el.files && el.files[0];
+  const has = !!(f && uploads.data_csv);
+  $('#dropData').classList.toggle('hidden', has);
+  $('#dataUploaded').classList.toggle('hidden', !has);
+  if(has){
+    $('#dataName').textContent = f.name;
+    // uploadFile writes "✓ <name> · <what was found>". The box names the
+    // file on its own line, so the stats keep only the second half.
+    const sum = $('#sumData');
+    if(sum){
+      let txt = sum.textContent.trim().replace(/^✓\s*/, '');
+      if(txt.indexOf(f.name) === 0)
+        txt = txt.slice(f.name.length).replace(/^\s*·\s*/, '');
+      sum.textContent = txt;
+    }
+  }
+  else { $('#dataName').textContent = ''; $('#sumData').innerHTML = ''; }
+  $('#dataChecked').classList.toggle('hidden', !(has && dataValid));
+}
+
+$('#btnReplaceData').onclick = ()=>{
+  const el = $('#upData');
+  el.value = '';
+  uploads.data_csv = null;
+  dataValid = true;                  // nothing to block on until a file is back
+  $('#sumData').innerHTML = '';
+  const out = $('#validateOut'); if(out) out.innerHTML = '';
+  syncDataState();
+  syncRunGate();
+  el.click();
+};
+$('#upRec').onchange=async()=>{
+  await uploadFile('recording','upRec','sumRec','recording');
+  syncRecState();
+};
+
+// Drop target or uploaded box -- never both. The canvas treats these as two
+// states of one control, so everything that changes the file routes through
+// here rather than showing and hiding pieces of it by hand.
+function syncRecState(){
+  const el = $('#upRec'); if(!el) return;
+  const f = el.files && el.files[0];
+  const has = !!(f && uploads.recording);
+  // Parsed means there are findings on screen, which is what the tag claims.
+  // Keying it off currentAnalysis would miss any other route into
+  // renderAnalysis, and would show PARSED with nothing behind it.
+  const parsed = has && !!($('#railRecording').textContent || '').trim();
+  $('#dropRec').classList.toggle('hidden', has);
+  $('#startFrom').classList.toggle('hidden', has);
+  $('#recUploaded').classList.toggle('hidden', !has);
+  $('#recParsed').classList.toggle('hidden', !parsed);
+  $('#btnReanalyze').classList.toggle('hidden', !parsed);
+  // Once it has parsed, the box's own Re-analyze is the way back in, so the
+  // primary CTA below would be a second button for the same job.
+  const acts = $('#discoverActions');
+  if(acts) acts.classList.toggle('hidden', parsed);
+  if(has){
+    $('#recName').textContent = f.name;
+    // The box states the filename; the line under the drop target used to say
+    // it again, with a tick in front.
+    const sum = $('#sumRec');
+    if(sum && /^✓/.test(sum.textContent.trim())) sum.innerHTML = '';
+  } else {
+    $('#recName').textContent = '';
+    $('#railRecording').textContent = '';
+  }
+}
+
+$('#btnReplaceRec').onclick = ()=>{
+  const el = $('#upRec');
+  el.value = '';                     // a re-pick of the same file must still fire
+  uploads.recording = null;
+  currentAnalysis = null;            // the old analysis describes a file that is gone
+  $('#railRecording').textContent = '';
+  $('#sumRec').innerHTML = '';
+  // The results on screen describe the file being replaced. Leaving them up
+  // would attach the old journey to the new recording.
+  $('#discoveryCard').classList.add('hidden');
+  $('#analysisProgressCard').classList.add('hidden');
+  syncRecState();
+  el.click();                        // "Replace" means pick another, not just clear
+};
+$('#btnReanalyze').onclick = ()=> analyzeRecording();
+
+// A drop target in front of a hidden file input. Both routes end at the same
+// input, so each input's own change handler stays the only uploader. Three
+// uploads use this now -- the recording, the data CSV and the credentials CSV.
+function wireDropTarget(zoneSel, inputSel, buttonSel){
+  const zone = $(zoneSel), input = $(inputSel), btn = $(buttonSel);
+  if(!zone || !input) return;
+  if(btn) btn.onclick = ()=> input.click();
+  const stop = e =>{ e.preventDefault(); e.stopPropagation(); };
+  ['dragenter','dragover'].forEach(t=> zone.addEventListener(t, e=>{
+    stop(e); zone.classList.add('over'); }));
+  ['dragleave','drop'].forEach(t=> zone.addEventListener(t, e=>{
+    stop(e); zone.classList.remove('over'); }));
+  zone.addEventListener('drop', e=>{
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!f) return;
+    // Hand the dropped file to the input so nothing downstream can tell the
+    // difference between a drop and a browse.
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change'));
+  });
+}
+wireDropTarget('#dropRec',   '#upRec',   '#btnPickRec');
+wireDropTarget('#dropData',  '#upData',  '#btnPickData');
+wireDropTarget('#dropUsers', '#upUsers', '#btnPickUsers');
 
 // Performance Test Plan (PDF) — upload, analyze, and render selectable test types.
 if($('#upPlan')) $('#upPlan').onchange = uploadPlan;
@@ -1011,17 +1613,17 @@ async function uploadPlan(){
   const f=$('#upPlan').files[0], sum=$('#sumPlan'), box=$('#planTypes'), pan=$('#planSummary');
   box.innerHTML=''; if(pan) pan.innerHTML='';
   if(!f){ uploads.testplan=null; sum.textContent=''; return; }
-  sum.innerHTML='<span class="spin"></span>uploading…';
+  sum.innerHTML=_busy('Uploading', f.name);
   try{
     const fd=new FormData(); fd.append('kind','testplan'); fd.append('file',f);
     const r=await fetch('/api/upload',{method:'POST',body:fd});
     const d=await r.json(); if(!r.ok) throw new Error(d.detail||'upload failed');
     uploads.testplan=d.path;
-    sum.innerHTML='<span class="spin"></span>analyzing test plan…';
+    sum.innerHTML=_busy('Reading', 'the test plan');
     const plan=await api('/api/analyze-test-plan',{testplan:d.path});
     renderPlanTypes(plan, sum);
     applyPlanToType();   // update the "Choose a test" fields for the current type now
-  }catch(e){ uploads.testplan=null; sum.innerHTML='⚠️ '+e.message; }
+  }catch(e){ uploads.testplan=null; sum.innerHTML='▲ '+e.message; }
 }
 
 let _lastTestPlan=null;
@@ -1064,19 +1666,23 @@ function _planThroughput(){
 // or without a rendered throughput editor. Groups the plan doesn't mention are left as-is.
 function applyPlanThroughput(){
   const mix=_planThroughput(); if(!Object.keys(mix).length) return;
-  const nums=document.querySelectorAll('#anThroughput .thrNum'); if(!nums.length) return;
+  // The slider is the control now -- the number box it used to drive is gone,
+  // so the match runs off the sliders or nothing here would move.
+  const rows=document.querySelectorAll('#anThroughput .thrRange');
+  if(!rows.length) return;
   const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const entries=Object.entries(mix).map(([k,v])=>[norm(k),v]);
-  nums.forEach(numEl=>{
-    const i=+numEl.dataset.i; const g=norm(_agNames[i]); let pct=null;
+  rows.forEach(rangeEl=>{
+    const i=+rangeEl.dataset.i; const g=norm(_agNames[i]); let pct=null;
     for(const [sc,v] of entries){
       if(!g||!sc) continue;
       if(g===sc || g.includes(sc) || sc.includes(g) ||
          sc.split(' ').some(t=>t.length>3 && g.includes(t))){ pct=v; break; }
     }
     if(pct!=null){
-      numEl.value=pct; apiThroughput[_agNames[i]]=pct;
-      const r=document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]'); if(r) r.value=pct;
+      rangeEl.value=pct; apiThroughput[_agNames[i]]=pct;
+      const n=document.querySelector('#anThroughput .thrNum[data-i="'+i+'"]');
+      if(n) n.value=pct;
     }
   });
   if(typeof renderThroughputCost === 'function') renderThroughputCost();
@@ -1102,9 +1708,9 @@ function renderPlanTypes(plan, sum){
   if((plan.business_scenarios||[]).length) parts.push(`<div style="font-size:13px;margin-top:4px"><b>Business scenarios:</b> <span class="muted">${plan.business_scenarios.slice(0,8).map(esc).join(' · ')}</span></div>`);
   if((plan.pass_criteria||[]).length) parts.push(`<div style="font-size:13px;margin-top:4px"><b>Pass criteria</b><ul style="margin:2px 0 0 16px;color:var(--mut)">${plan.pass_criteria.slice(0,4).map(o=>`<li>${esc(o)}</li>`).join('')}</ul></div>`);
   const cov=plan.coverage||{};
-  const covBadges=Object.keys(cov).map(k=>`<span style="font-size:11px;padding:1px 6px;border-radius:8px;margin-right:4px;background:${cov[k]?'#173':'#333'};color:${cov[k]?'#3ddc97':'#888'}">${cov[k]?'✓':'–'} ${k.replace(/_/g,' ')}</span>`).join('');
+  const covBadges=Object.keys(cov).map(k=>`<span class="kind" style="background:${cov[k]?'var(--ok)':'var(--panel2)'};color:${cov[k]?'var(--tag-ink)':'var(--mut)'}">${cov[k]?'✓':'–'} ${k.replace(/_/g,' ')}</span>`).join('');
   if(covBadges) parts.push(`<div style="margin-top:6px">${covBadges}</div>`);
-  panel.innerHTML = parts.length ? `<div style="border-left:2px solid var(--accent,#4f8cff);padding:6px 10px;background:rgba(255,255,255,0.02)">${parts.join('')}</div>` : '';
+  panel.innerHTML = parts.length ? `<div style="border-left:2px solid var(--accent);padding:6px 10px;background:rgba(255,255,255,0.02)">${parts.join('')}</div>` : '';
 
   if(!tests.length){ box.innerHTML=''; return; }
   const rows=tests.map((t,i)=>{
@@ -1214,31 +1820,10 @@ function describePlan(){
   return bits.join(' ');
 }
 
-// Filled when a data file is validated; the canvas shows it as "300 rows ·
-// 4 columns" in the rail, next to the traffic it will drive.
-let DATA_SUMMARY = '';
-
+// The rail no longer carries a read-out of the plan -- it restated the very
+// fields sitting above it. What is left is the plain-English sentence and the
+// run button label, and each of those appears in exactly one place.
 function renderPlanSummary(){
-  const p = _planNow();
-  const box = $('#railSummary'), will = $('#railWill');
-  if(box){
-    const row = (k, v) => v
-      ? '<div><b>' + k + '</b><span>' + _escHtml(String(v)) + '</span></div>' : '';
-    box.innerHTML =
-        row('Project', p.project)
-      + row('Target', (p.target || '').replace(/^https?:\/\//, ''))
-      + row('Test', p.type)
-      + row('Traffic', p.users ? p.users + ' users'
-            + (p.mins ? ' · ' + p.mins + ' min' : '') : '')
-      + row('Ramp', p.spawn ? p.spawn + '/s' : '')
-      + row('Gates', [p.p95 ? 'p95 \u2264 ' + p.p95.toLocaleString() + 'ms' : '',
-                      p.err ? 'err \u2264 ' + p.err + '%' : ''].filter(Boolean).join(' · '))
-      + row('Data', DATA_SUMMARY)
-      + row('Orders', p.orders ? p.orders + ' per user' : '');
-  }
-  if(will) will.textContent = describePlan()
-    || 'Set the users and duration to see what this run will do.';
-
   const says = $('#trafficSays');
   if(says) says.textContent = describePlan();
 
@@ -1590,26 +2175,9 @@ function buildSetupRail(){
   body.id = 'railBody';
   rail.append(toggle, body);
 
-  // What is actually set, in the rail, so the choice stays visible once the
-  // setup panel is collapsed.
-  const sum = document.createElement('div');
-  sum.className = 'card';
-  sum.innerHTML = '<div id="railSummary"></div>'
-    + '<div class="railEyebrow" style="font-size:10px;margin:14px 0 0">'
-    + 'What will happen</div><p id="railWill"></p>'
-    + '<div id="railLinks">'
-    + '<button type="button" data-tab="saved">Library — saved scripts, runs, projects</button>'
-    + '<button type="button" data-tab="ask">Ask LT Metrics about past runs</button>'
-    + '</div>';
-  body.appendChild(sum);
-  // The canvas puts these in the rail rather than the top row. They drive the
-  // same tabs, so nothing is duplicated -- the click is forwarded.
-  sum.querySelectorAll('#railLinks button').forEach(b=>{
-    b.onclick = ()=>{
-      const nav = document.querySelector('nav button[data-tab="' + b.dataset.tab + '"]');
-      if(nav) nav.click();
-    };
-  });
+  // The rail is the setup itself -- project, target, recording -- and nothing
+  // else. It used to open with a read-out of the same values the fields below
+  // already show, which said everything twice.
 
   // Move, never rebuild: appendChild relocates the same node, so ids and
   // listeners come with it. Cloning or re-writing innerHTML would drop them.
@@ -1809,9 +2377,8 @@ function showPhaseEmptyState(n){
 
 document.querySelectorAll('#phases button').forEach(b=>{
   b.onclick = ()=>{
-    // The phase bar belongs to the run flow, so make sure that tab is showing.
-    const navNew = document.querySelector('nav button[data-tab="new"]');
-    if(navNew && !navNew.classList.contains('active')) navNew.click();
+    // The run is the page now, so there is no tab to switch back to first --
+    // and the drawer's scrim means this cannot be reached while it is open.
     showPhase(b.dataset.phase);
     // Opening the phase is the moment to re-read it: a run may have finished
     // since it was last drawn.
@@ -1864,8 +2431,8 @@ function watchPhaseReveals(){
 }
 
 // ---- light / dark --------------------------------------------------------
-// The approved design is light. The previous palette is kept whole under
-// [data-theme="dark"], so nothing was thrown away to get here.
+// 9a opens in dark. Light is the other half of the same palette, and a
+// stored choice still wins over the default.
 function applyTheme(t){
   document.documentElement.setAttribute('data-theme', t);
   const b = $('#btnTheme');
@@ -1873,8 +2440,8 @@ function applyTheme(t){
   try{ localStorage.setItem('ltm-theme', t); }catch(e){}
 }
 (function initTheme(){
-  let t = 'light';
-  try{ t = localStorage.getItem('ltm-theme') || 'light'; }catch(e){}
+  let t = 'dark';
+  try{ t = localStorage.getItem('ltm-theme') || 'dark'; }catch(e){}
   applyTheme(t);
   const b = $('#btnTheme');
   // The chart reads its colours when it is built, so a switch has to reach it
@@ -1897,18 +2464,49 @@ splitIntoPanels();    // panels carry the phase of the card they came from
 watchPhaseReveals();
 showPhase('1');
 
-// tabs
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  ['new','saved','history','projects','ask'].forEach(t=>
-    $('#tab-'+t).classList.toggle('hidden', t!==b.dataset.tab));
-  // The phases describe a run; they mean nothing on the library tabs.
-  const ph = $('#phases');
-  if(ph) ph.style.display = (b.dataset.tab === 'new') ? '' : 'none';
-  if(b.dataset.tab==='history') loadHistory();
-  if(b.dataset.tab==='projects') loadProjects();
-  if(b.dataset.tab==='saved') loadSaved();
+// ---- the dock ------------------------------------------------------------
+// Two views over the same drawer: 'library' stacks saved scripts, runs and
+// projects; 'ask' is the question box. The run underneath is never unmounted,
+// so closing the drawer returns you to the setup exactly as you left it.
+const DOCK_VIEWS = {
+  library: {title:'Library',        tabs:['saved','history','projects']},
+  ask:     {title:'Ask LT Metrics', tabs:['ask']},
+};
+let _dockReturn = null;   // what to focus again once the drawer closes
+
+function openDock(view){
+  const spec = DOCK_VIEWS[view];
+  if(!spec) return;
+  _dockReturn = document.activeElement;
+  $('#dockTitle').textContent = spec.title;
+  ['saved','history','projects','ask'].forEach(t=>
+    $('#tab-'+t).classList.toggle('hidden', !spec.tabs.includes(t)));
+  $('#dock').hidden = false;
+  document.body.style.overflow = 'hidden';   // the drawer scrolls, not the page
+  // Each list fetches when it is actually shown, as the tabs used to.
+  if(spec.tabs.includes('saved'))    loadSaved();
+  if(spec.tabs.includes('history'))  loadHistory();
+  if(spec.tabs.includes('projects')) loadProjects();
+  // Only the shown section can take focus -- the hidden ones are still in the
+  // DOM, and focusing a display:none control fails without saying so.
+  const open = $('#dockBody').querySelector('section:not(.hidden)');
+  ((open && open.querySelector('input, button')) || $('#dockClose')).focus();
+}
+
+function closeDock(){
+  if($('#dock').hidden) return;
+  $('#dock').hidden = true;
+  document.body.style.overflow = '';
+  if(_dockReturn && _dockReturn.isConnected) _dockReturn.focus();
+  _dockReturn = null;
+}
+
+document.querySelectorAll('[data-dock]').forEach(b=>
+  b.onclick = ()=> openDock(b.dataset.dock));
+$('#dockClose').onclick = closeDock;
+$('#dockScrim').onclick = closeDock;
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape') closeDock();
 });
 
 // health + test types
@@ -1968,10 +2566,12 @@ function startProgress(el, phases, opts){
   const fmt = ms => { const s=Math.floor(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
   function render(){
     const cur = phases[Math.min(idx, phases.length-1)] || 'Working';
-    const list = done.map(p=>`<div style="color:#3ddc97;font-size:12px">✓ ${p}</div>`).join('');
-    el.innerHTML = `<div style="display:flex;align-items:center;gap:8px">
-        <span class="spin"></span>
-        <span>${cur} <span class="muted">· ${fmt(Date.now()-t0)}</span></span></div>${list}`;
+    const list = done.map(p=>`<div class="progDone">✓ ${p}</div>`).join('');
+    const n = Math.min(idx + 1, phases.length);
+    el.innerHTML = `<div class="progStep">Step ${n} of ${phases.length}</div>`
+      + `<div class="progNow"><span class="spin"></span>`
+      + `<span>${cur} <span class="el">${fmt(Date.now()-t0)}</span></span></div>`
+      + list;
   }
   render();
   const tick = setInterval(render, 500);                         // live timer
@@ -1980,7 +2580,8 @@ function startProgress(el, phases, opts){
   }, opts.stepMs || 2500);
   return { stop(msg){
     clearInterval(tick); clearInterval(adv);
-    el.innerHTML = (msg || '✓ done') + ` <span class="muted">· ${fmt(Date.now()-t0)}</span>`;
+    el.innerHTML = `<div class="progNow"><span>${msg || '\u2713 done'}`
+      + ` <span class="el">${fmt(Date.now()-t0)}</span></span></div>`;
   }};
 }
 
@@ -1995,7 +2596,10 @@ async function analyzeRecording(){
        'Mapping user journeys','Building business flow']
     : ['Parsing recording','Detecting platform & tech','Extracting REST / API calls',
        'Filtering static noise','Correlating dynamic values','Mapping user journeys','Building business flow'];
-  const prog = startProgress($('#sumRec'), phases, {stepMs: enhance?4000:1800});
+  // Above the details it is building, not in the rail beside the file.
+  $('#analysisProgressCard').classList.remove('hidden');
+  const prog = startProgress($('#analysisProgress'), phases,
+                             {stepMs: enhance?4000:1800});
   try{
     const inclStatic = $('#includeStatic') && $('#includeStatic').checked;
     const a = enhance
@@ -2005,8 +2609,8 @@ async function analyzeRecording(){
     currentAnalysis=a;
     renderAnalysis(a);
     if(a.base_url && !$('#url').value.trim()) $('#url').value=a.base_url;   // target from recording
-  }catch(e){ prog.stop('⚠️ '+e.message); alert('Analysis failed: '+e.message); }
-  btn.disabled=false; btn.innerHTML='🔎 Analyze recording';
+  }catch(e){ prog.stop('▲ '+e.message); alert('Analysis failed: '+e.message); }
+  btn.disabled=false; btn.innerHTML='Analyze recording';
 }
 
 // crawl & record (no upload — Playwright drives the site directly)
@@ -2032,8 +2636,8 @@ async function crawlAndRecord(){
     currentAnalysis=a;
     renderAnalysis(a);
     if(a.base_url && !$('#url').value.trim()) $('#url').value=a.base_url;
-  }catch(e){ prog.stop('⚠️ '+e.message); alert('Crawl & record failed: '+e.message); }
-  btn.disabled=false; btn.innerHTML='🌐 Crawl & record with Playwright';
+  }catch(e){ prog.stop('▲ '+e.message); alert('Crawl & record failed: '+e.message); }
+  btn.disabled=false; btn.innerHTML='Crawl & record with Playwright';
 }
 
 // ---- Intelligent Test Data Generator ----
@@ -2075,23 +2679,23 @@ async function generateTestData(){
     const esc=x=>String(x==null?'':x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
     const v=r.validation||{}; const errs=(v.errors||[]);
     const vHtml = errs.length
-      ? `<div style="color:#ff6b9a;font-size:13px">⚠ Validation: ${errs.map(esc).join(' · ')}</div>`
-      : `<div style="color:#3ddc97;font-size:13px">✓ Validation gate: ${esc(v.status||'ok')}</div>`;
+      ? `<div style="color:var(--sev3);font-size:13px">▲ Validation: ${errs.map(esc).join(' · ')}</div>`
+      : `<div style="color:var(--ok);font-size:13px">✓ Validation gate: ${esc(v.status||'ok')}</div>`;
     const pay=r.payment||{};
     const meta=`<div style="font-size:13px">${r.rows||0} rows · ${r.unique_customers||0} customers · ${r.unique_skus||0} SKUs · payment <b>${esc(pay.method||'')}</b>${pay.is_card?' (sandbox test card)':''} <span class="muted">— ${esc(pay.note||'')}</span></div>`;
     const lv=r.live||{}; let liveHtml='';
-    if(lv.products_found!=null) liveHtml+=`<div style="font-size:13px">🛒 Live products: <b>${lv.products_found}</b> real in-stock, priced SKU(s) <span class="muted">(${esc(lv.products_source||'')})</span></div>`;
-    if(lv.registered!=null) liveHtml+=`<div style="font-size:13px">👤 Registered: <b>${lv.registered}</b> account(s) on the store <span class="muted">${esc(lv.registration_note||'')}</span></div>`;
+    if(lv.products_found!=null) liveHtml+=`<div style="font-size:13px">Live products: <b>${lv.products_found}</b> real in-stock, priced SKU(s) <span class="muted">(${esc(lv.products_source||'')})</span></div>`;
+    if(lv.registered!=null) liveHtml+=`<div style="font-size:13px">Registered: <b>${lv.registered}</b> account(s) on the store <span class="muted">${esc(lv.registration_note||'')}</span></div>`;
     const files=r.csv_files||{};
     const dls=Object.keys(files).map(n=>`<a class="link" style="cursor:pointer;margin-right:10px" data-n="${n}">⬇ ${n}.csv</a>`).join('');
     out.innerHTML = meta + liveHtml + vHtml
       + `<div style="margin-top:6px">${dls}</div>`
-      + (r.preview_csv?`<pre style="margin-top:6px;max-height:140px;overflow:auto;font-size:11px;background:rgba(255,255,255,0.03);padding:6px;border-radius:6px">${esc(r.preview_csv)}</pre>`:'')
+      + (r.preview_csv?`<pre style="margin-top:6px;max-height:140px;overflow:auto;font-size:12px;background:rgba(255,255,255,0.03);padding:6px;border-radius:0">${esc(r.preview_csv)}</pre>`:'')
       + (_vok
           ? `<p class="hint" style="margin-top:4px">This data set is now applied to the run below (throughput, test type and users were set from the plan).</p>`
-          : `<p class="hint" style="margin-top:4px;color:#ff6b9a">⚠ Not applied to the run — fix the validation issue above (e.g. provide accounts that can authenticate), then regenerate.</p>`);
+          : `<p class="hint" style="margin-top:4px;color:var(--sev3)">▲ Not applied to the run — fix the validation issue above (e.g. provide accounts that can authenticate), then regenerate.</p>`);
     out.querySelectorAll('a[data-n]').forEach(a=>a.onclick=()=>_dlCsv(a.dataset.n+'.csv', files[a.dataset.n]));
-  }catch(e){ prog.stop('⚠️ '+e.message); }
+  }catch(e){ prog.stop('▲ '+e.message); }
 }
 
 function _escHtml(s){ return String(s==null?'':s).replace(/</g,'&lt;'); }
@@ -2139,10 +2743,14 @@ function renderCallSelector(calls, dropped){
   } else {
     box.innerHTML = calls.map(c=>{
       const k = String(c.kind||'GET').toUpperCase();
-      const grp = c.group ? `<span class="muted">${_escHtml(c.group)}</span>` : '';
+      // Always emitted, empty or not: a missing cell would shift every cell
+      // after it into the wrong column.
+      const grp = `<span class="grp">${c.group ? _escHtml(c.group) : ''}</span>`;
       const crit = isPricingCritical(c);
       const why = crit ? (CRITICAL_WHY[c.critical] || 'Business critical.') : '';
-      const flag = crit ? `<span class="kind REST" style="background:#3d1b1b;color:#ff9a9a" title="${_escAttr(why)}">KEEP</span>` : '';
+      const flag = crit
+        ? `<span class="kind flag" style="background:var(--sev4);color:#fff" title="${_escAttr(why)}">KEEP</span>`
+        : '<span class="flag"></span>';
       return `<label class="callItem">
         <input type="checkbox" class="callChk" data-sig="${_escAttr(c.sig)}" data-kind="${_escAttr(k)}" data-critical="${_escAttr(c.critical||'')}" data-stage="${_escAttr(c.stage||'')}" data-background="${c.background?'1':''}" ${c.selected!==false?'checked':''}>
         <span class="m">${_escHtml(c.method)}</span>
@@ -2243,7 +2851,7 @@ function updateCallCount(){
         const path = x.closest('.callItem').querySelector('.p').textContent;
         const label = kind === 'login' ? 'The storefront sign-in is unticked.'
                                        : 'The call that prices the cart is unticked.';
-        return '⚠️ <b>' + label + '</b> <code>' + _escHtml(path) + '</code> — '
+        return '▲ <b>' + label + '</b> <code>' + _escHtml(path) + '</code> — '
              + (CRITICAL_WHY[kind] || '')
              + ' The run would still report 200 everywhere.';
       }).join('<br>')
@@ -2269,9 +2877,9 @@ function renderReadiness(){
   const wantsCard = !!(PAY_TEMPLATES && PAY_TEMPLATES[method]);
   const rows = [];
   const line = (ok, text) =>
-    rows.push(`<div style="margin:3px 0">${ok === true ? '<span style="color:#2ecc71">✓</span>'
-                        : ok === false ? '<span style="color:#e11627">✗</span>'
-                        : '<span style="color:#e6a700">⚠</span>'} ${text}</div>`);
+    rows.push(`<div style="margin:3px 0">${ok === true ? '<span style="color:var(--ok)">✓</span>'
+                        : ok === false ? '<span style="color:var(--sev3)">✗</span>'
+                        : '<span style="color:var(--warn)">▲</span>'} ${text}</div>`);
 
   // --- accounts ---
   if(asked && asked > a.unique_logins){
@@ -2380,9 +2988,11 @@ function renderReadiness(){
 
   // A warning is still something to read before running, so it must not sit
   // under a heading that says everything is fine.
-  const bad  = rows.filter(r => r.indexOf('#e11627') > -1).length;
-  const warn = rows.filter(r => r.indexOf('#e6a700') > -1).length;
-  el.innerHTML = `<div class="rec" style="border-left-color:${bad ? '#e11627' : warn ? '#e6a700' : '#2ecc71'}">`
+  // These read the rows back to count severities, so the needles have to match
+  // whatever line() writes -- they were literals on both sides before.
+  const bad  = rows.filter(r => r.indexOf('var(--sev3)') > -1).length;
+  const warn = rows.filter(r => r.indexOf('var(--warn)') > -1).length;
+  el.innerHTML = `<div class="rec" style="border-left-color:${bad ? 'var(--sev3)' : warn ? 'var(--warn)' : 'var(--ok)'}">`
     + `<b>${(bad || warn) ? 'Before you run' : 'Ready to run'}</b>`
     + `<div class="d" style="margin-top:6px">${rows.join('')}</div></div>`;
 
@@ -2555,7 +3165,7 @@ function applyPayTemplate(){
         + 'Edit if your store needs more.';
     } else if(tpl){
       note.innerHTML = 'You have edited this. '
-        + '<a href="#" id="ovPayAddlReset">Reset to the default for ' + _escHtml(code) + '</a>';
+        + '<a href="#" class="link" id="ovPayAddlReset">Reset to the default for ' + _escHtml(code) + '</a>';
       const r = $('#ovPayAddlReset');
       if(r) r.onclick = (e)=>{ e.preventDefault(); addlEl.value = tpl;
                                addlEl.dataset.filled = tpl; applyPayTemplate(); };
@@ -2584,7 +3194,7 @@ function populateGateways(detected){
   sel.innerHTML = html;
   const note = $('#gatewayNote');
   if(note) note.innerHTML = detected
-    ? `🤖 Claude detected a hosted card gateway in this recording: <b>${GATEWAY_LABELS[detected]||detected}</b>. Leave the picker on “auto” to use it.`
+    ? `Claude detected a hosted card gateway in this recording: <b>${GATEWAY_LABELS[detected]||detected}</b>. Leave the picker on “auto” to use it.`
     : `No hosted card gateway detected in this recording — the browser track will just navigate. (Set Browser VUs to 0 to skip it.)`;
 }
 
@@ -2603,7 +3213,7 @@ function renderPaymentStrategy(detected){
   if(!detected){ el.innerHTML = ''; return; }
   const name = GATEWAY_LABELS[detected] || detected;
   el.innerHTML =
-    '<div style="border-left:4px solid #e6a700;background:#161618;border-radius:8px;padding:12px 14px">'
+    '<div style="border-left:4px solid var(--sev1);background:var(--panel2);border-radius:0;padding:12px 14px">'
     + '<b>&#128179; Card payment at load &mdash; pick the approach that fits</b>'
     + '<div class="muted" style="margin-top:6px;font-size:13px">'
     + 'This recording pays with <b>' + name + '</b>, a hosted card gateway. What is '
@@ -2664,14 +3274,22 @@ function renderUiSteps(steps){
 function renderAnalysis(a){
   if(!a) return;
   $('#discoveryCard').classList.remove('hidden');
+  // The scheme is the same on every target and cost the host its first line,
+  // so it goes; the full URL stays as the tile's title.
+  const _host = (a.base_url||'').replace(/^https?:\/\//,'').replace(/\/$/,'');
   $('#discKpis').innerHTML=[
-    ['Source', (a.source||'?').toString().toUpperCase()],
-    ['Target', a.base_url||'—'],
-    ['Steps', a.steps||0],
-    ['Static dropped', a.static_dropped||0],
-    ['UI actions', (a.ui_steps||[]).length],
-    ['Correlations', (a.correlations||[]).length],
-  ].map(([l,v])=>`<div class="k"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+    ['Source', (a.source||'?').toString().toUpperCase(), 'ident'],
+    ['Target', _host||'—', 'ident'],
+    ['Steps', a.steps||0, ''],
+    ['Static dropped', a.static_dropped||0, ''],
+    ['UI actions', (a.ui_steps||[]).length, ''],
+    ['Correlations', (a.correlations||[]).length, ''],
+  ].map(([l,v,k])=>{
+    const isTarget = l === 'Target';
+    return `<div class="k"`
+      + (isTarget && a.base_url ? ` title="${_escHtml(a.base_url)}"` : '') + '>'
+      + `<div class="l">${l}</div><div class="v${k?' '+k:''}">${v}</div></div>`;
+  }).join('');
   // The same facts as a sentence, where 9a puts them. Written into the rail
   // under the uploaded file, and onto the collapsed tiles so nothing is lost.
   const kept = (a.calls || []).length;
@@ -2701,10 +3319,11 @@ function renderAnalysis(a){
       : ' fields in the recording need real values. ')
     + 'Download the template, fill one row per virtual user, and upload it back.';
   const rl = $('#railRecording'); if(rl) rl.textContent = line;
+  if(typeof syncRecState === 'function') syncRecState();   // PARSED + Re-analyze
 
   const j=a.journey||{};
   $('#discJourneys').innerHTML = `<div class="journey"><b>${j.name||'Recorded Journey'}</b><br>${(j.steps||[]).join(' → ')||'—'}</div>`;
-  if(a.error) $('#discJourneys').innerHTML += `<p class="muted" style="color:#e11627">Parse note: ${a.error}</p>`;
+  if(a.error) $('#discJourneys').innerHTML += `<p class="muted" style="color:var(--sev2)">Parse note: ${a.error}</p>`;
   renderCallSelector(a.calls, a.dropped);
   populateGateways(a.detected_gateway);
   renderPaymentMethods(a.payment);
@@ -2721,20 +3340,25 @@ function renderAnalysis(a){
   const fc = $('#fieldCount');
   if(fc) fc.textContent = nFields ? nFields + ' field(s)' : '';
   $('#anCorr').innerHTML = (a.correlations||[]).length
-    ? a.correlations.map(c=>`<div class="rec">🔗 <b>${c.value}</b> <span class="muted">(from ${c.field})</span><div class="d">${c.handling}</div></div>`).join('')
+    ? a.correlations.map(c=>`<div class="rec"><b>${c.value}</b> <span class="muted">(from ${c.field})</span><div class="d">${c.handling}</div></div>`).join('')
     : '<p class="muted">No dynamic values needing correlation were detected.</p>';
   $('#anGroups').innerHTML = (a.groups||[]).length
     ? a.groups.map(g=>{
+        // A row per field, in columns. The badge leads: sitting it after the
+        // name put it at a different x on every line, because the name sets
+        // where it starts.
         const cols = (g.fields||[]).map(f=>{
           const req = f.required
-            ? ' <span class="badge b-bad">required</span>'
-            : ' <span class="badge b-ok">optional</span>';
+            ? '<span class="badge b-bad">required</span>'
+            : '<span class="badge b-ok">optional</span>';
           const val = (f.source==='recorded' && f.sample)
-            ? ` <span class="muted">= ${_escHtml(f.sample)}</span>`
-            : ` <span class="muted" style="color:#e6a700">needs input</span>`;
-          return `${_escHtml(f.column)}${req}${val} <span class="muted">(${_evidenceLabel(f.evidence)})</span>`;
-        }).join('<br>');
-        return `<div class="rec">📋 <b>${g.group}</b> <span class="muted">— ${g.why}</span><div class="d">${cols}</div></div>`;
+            ? `<span class="fv">= ${_escHtml(f.sample)}</span>`
+            : `<span class="fv needs">needs input</span>`;
+          return `<div class="fRow">${req}`
+            + `<span class="fn">${_escHtml(f.column)}</span>${val}`
+            + `<span class="fe">${_evidenceLabel(f.evidence)}</span></div>`;
+        }).join('');
+        return `<div class="rec"><b>${g.group}</b> <span class="muted">— ${g.why}</span><div class="d">${cols}</div></div>`;
       }).join('')
       + `<p class="muted" style="margin-top:8px">Sample values are taken from your recording. In the downloadable sample CSV, cells the recording didn't supply are marked <code>&lt;&lt;FILL: … — required&gt;&gt;</code> where a value is required (blank cells are optional — LT Metrics fills them at runtime). Replace every <code>&lt;&lt;FILL: …&gt;&gt;</code> before running.</p>`
     : '<p class="muted">No input fields need parameterization — the recording is self-contained.</p>';
@@ -2743,6 +3367,10 @@ function renderAnalysis(a){
   const ag = a.api_groups || [];
   _agNames = ag.map(g=>g.name);
   window._agCounts = ag;
+  // The canvas's test plan: one bordered list, a row per group carrying its
+  // name, a slider and the percentage. The journey deepens down the severity
+  // ladder, so the bar darkens as it approaches checkout.
+  //
   // A recording that names its transactions needs no explanation. One that
   // does not gets its groups worked out from what each call does, and the
   // reader should be told that rather than left wondering.
@@ -2767,27 +3395,38 @@ function renderAnalysis(a){
     src.textContent = derived ? bits.join(' ') : '';
   }
   $('#anThroughput').innerHTML = ag.length
-    ? ag.map((g,i)=>{ apiThroughput[g.name]=100; return `
-        <div class="rec" style="display:flex;align-items:center;gap:10px">
-          <b style="flex:1">${_escHtml(g.name)}</b>
-          <span class="muted">${g.count} request${g.count==1?'':'s'}</span>
-          <input type="range" min="0" max="100" step="5" value="100" data-i="${i}" class="thrRange" style="width:130px">
-          <input type="number" min="0" max="100" value="100" data-i="${i}" class="thrNum" style="width:60px"> %
-          <span class="muted thrEach" data-i="${i}" style="width:74px;text-align:right"></span>
-        </div>`; }).join('')
+    ? '<div class="thrList">' + ag.map((g,i)=>{ apiThroughput[g.name]=100; return `
+        <div class="thrRow" style="border-left-color:var(--sev${
+              Math.min(i, 5)})">
+          <span class="thrName" title="${_escHtml(g.name)}">${_escHtml(g.name)}</span>
+          <input type="range" min="0" max="100" step="1" value="100" data-i="${i}"
+                 class="thrRange" aria-label="${_escHtml(g.name)} share of traffic">
+          <input type="number" min="0" max="100" step="1" value="100" data-i="${i}"
+                 class="thrNum" aria-label="${_escHtml(g.name)} share, per cent">
+          <span class="thrPct">%</span>
+        </div>`; }).join('') + '</div>'
     : '<p class="muted">No transaction groups recorded — all requests run as one flow.</p>';
   if(ag.length) $('#anThroughput').innerHTML +=
     '<p class="muted" id="thrTotal" style="margin-top:10px"></p>';
+  // Either control can set the share; each writes the other back so the two
+  // never disagree about what the run will do.
+  const _thrSet = (i, pct)=>{
+    pct = Math.max(0, Math.min(100, Math.round(+pct || 0)));
+    apiThroughput[_agNames[i]] = pct;
+    const r = document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]');
+    const n = document.querySelector('#anThroughput .thrNum[data-i="'+i+'"]');
+    if(r && +r.value !== pct) r.value = pct;
+    if(n && +n.value !== pct) n.value = pct;
+    renderThroughputCost();
+  };
   document.querySelectorAll('#anThroughput .thrRange').forEach(el=>{
-    el.oninput=()=>{ const i=+el.dataset.i; apiThroughput[_agNames[i]]=+el.value;
-      const n=document.querySelector('#anThroughput .thrNum[data-i="'+i+'"]'); if(n) n.value=el.value;
-      renderThroughputCost(); };
+    el.oninput=()=> _thrSet(+el.dataset.i, el.value);
   });
   document.querySelectorAll('#anThroughput .thrNum').forEach(el=>{
-    el.onchange=()=>{ let v=Math.max(0,Math.min(100,+el.value||0)); el.value=v;
-      const i=+el.dataset.i; apiThroughput[_agNames[i]]=v;
-      const r=document.querySelector('#anThroughput .thrRange[data-i="'+i+'"]'); if(r) r.value=v;
-      renderThroughputCost(); };
+    // oninput as it is typed, and again on change so a blank or out-of-range
+    // entry is corrected rather than left sitting there.
+    el.oninput = ()=>{ if(el.value !== '') _thrSet(+el.dataset.i, el.value); };
+    el.onchange = ()=> _thrSet(+el.dataset.i, el.value);
   });
   if(_lastTestPlan) applyPlanThroughput();   // auto-adjust from an already-loaded plan
   renderThroughputCost();                    // paint the costs before anything is touched
@@ -2797,15 +3436,15 @@ function renderAnalysis(a){
   let notesHtml = '';
   const note = aa.notes || a.notes;
   if(note)
-    notesHtml += `<div class="rec" style="border-left-color:#4f8cff;white-space:pre-wrap">🤖 <b>AI analysis (Claude):</b> ${esc(note)}`
+    notesHtml += `<div class="rec" style="border-left-color:var(--sev0);white-space:pre-wrap"><b>AI analysis (Claude):</b> ${esc(note)}`
       + (aa.platform?` <span class="muted">· platform: ${esc(aa.platform)}</span>`:'')
       + ((aa.journey||[]).length?`<div class="d">journey: ${aa.journey.map(esc).join(' → ')}</div>`:'')
       + `</div>`;
   if((aa.warnings||[]).length)
-    notesHtml += `<div class="rec" style="border-left-color:#e6a700">⚠ <b>Warnings that could affect scripting:</b>`
+    notesHtml += `<div class="rec" style="border-left-color:var(--sev1)">▲ <b>Warnings that could affect scripting:</b>`
       + aa.warnings.map(w=>`<div class="d">• ${esc(w)}</div>`).join('') + `</div>`;
   if(!notesHtml && a.ai_enabled===false)
-    notesHtml = `<p class="muted">💡 Set <b>ANTHROPIC_API_KEY</b> to let Claude analyze the recording (journey, typed inputs, risks) — currently using built-in rules.</p>`;
+    notesHtml = `<p class="muted">Set <b>ANTHROPIC_API_KEY</b> to let Claude analyze the recording (journey, typed inputs, risks) — currently using built-in rules.</p>`;
   $('#anNotes').innerHTML = notesHtml;
   currentDiscovery=true;
 }
@@ -2846,7 +3485,7 @@ function enrolPanel(){
   // disappearance WAS the confirmation, which is no way to confirm anything.
   if(!need.length){
     if(!have.length) return '';
-    return '<div class="rec" id="enrolBox" style="border-left-color:#2ecc71">'
+    return '<div class="rec" id="enrolBox" style="border-left-color:var(--ok)">'
       + '<b>&#10003; Card tokens ready for ' + have.length + ' account'
       + (have.length === 1 ? '' : 's') + '</b>'
       + '<div class="d" style="margin-top:6px">' + have.map(_escHtml).join(', ')
@@ -2857,13 +3496,13 @@ function enrolPanel(){
       // Until now there was no way to force a fresh token once the file
       // carried one: forgetting the memory left the cell, and clearing the
       // cell let the memory refill it. This does both.
-      + '<br><a href="#" id="btnFreshTokens">Capture fresh tokens instead</a>'
+      + '<br><a href="#" class="link" id="btnFreshTokens">Capture fresh tokens instead</a>'
       + ' — forgets these and empties the cells, so the next fetch starts clean.'
       + '</div>'
       + enrolDownload()
       + '</div>';
   }
-  return '<div class="rec" id="enrolBox" style="border-left-color:#e6a700">'
+  return '<div class="rec" id="enrolBox" style="border-left-color:var(--sev1)">'
     + '<b>&#128179; ' + need.length + ' account'
     + (need.length === 1 ? '' : 's') + ' still need a card token</b>'
     + '<div class="d" style="margin-top:6px">'
@@ -2883,7 +3522,7 @@ function enrolPanel(){
 
     + '<pre id="enrolLog" style="display:none;margin-top:10px;max-height:220px;'
     +   'overflow:auto;font-size:12px;background:#0b1220;padding:10px;'
-    +   'border-radius:6px;white-space:pre-wrap"></pre>'
+    +   'border-radius:0;white-space:pre-wrap"></pre>'
     + '</div>';
 }
 
@@ -2897,26 +3536,23 @@ function enrolDownload(){
     + 'the next upload carries them: '
     + '<a id="enrolDl" class="btn" style="padding:5px 12px;font-size:12px;'
     +   'text-decoration:none;display:inline-block;margin-left:6px;'
-    +   'background:#e11627;color:#fff;font-weight:700;border-radius:8px" '
+    +   'background:var(--accent);color:#fff;font-weight:700;border-radius:0" '
     +   'href="/api/enrol-cards/csv?job=' + encodeURIComponent(ENROL_JOB) + '">'
     +   '&#8595; Download updated CSV</a>'
     + '</div>';
 }
 
 function renderThroughputCost(){
-  // What each step costs per iteration, and the total. Without this the
-  // request count sits frozen beside a moving slider and reads as a bug --
-  // the multiplication was left for the operator to do in their head.
+  // The canvas shows a row's share and nothing else, so the per-row cost is
+  // gone. The total stays: it is the only place the run's real request count
+  // is stated, and it carries the warning about checkout never running.
   const ag = (window._agCounts || []);
   if(!ag.length) return;
   let total = 0, checkout = null;
-  ag.forEach((g,i)=>{
+  ag.forEach(g=>{
     const pct = +(apiThroughput[g.name] || 0);
-    const each = g.count * pct / 100;
-    total += each;
+    total += g.count * pct / 100;
     if(/checkout|order|payment/i.test(g.name)) checkout = pct;
-    const el = document.querySelector('#anThroughput .thrEach[data-i="'+i+'"]');
-    if(el) el.textContent = '→ ' + each.toFixed(1);
   });
   const foot = $('#thrTotal');
   if(!foot) return;
@@ -2951,7 +3587,7 @@ function wireFresh(){
       await validateData();
       const box = $('#enrolBox');
       if(box) box.insertAdjacentHTML('beforeend',
-        '<div class="muted" style="margin-top:8px;color:#e6a700">Cleared '
+        '<div class="muted" style="margin-top:8px;color:var(--sev1)">Cleared '
         + (r.cleared || 0) + ' token cell(s) and forgot ' + (r.forgotten || 0)
         + ' saved token(s). Click Fetch card tokens to capture fresh ones.</div>');
     }catch(err){
@@ -3033,13 +3669,15 @@ function syncRunGate(){
   btn.title = blocked ? 'Fix the data CSV validation issues before generating the test' : '';
   const g=$('#runGate');
   if(g) g.innerHTML = blocked
-    ? '⛔ <b style="color:#e11627">Data CSV has blocking issues</b> — fix them above (or re-download the sample) before generating the test.'
+    ? '✗ <b style="color:var(--sev3)">Data CSV has blocking issues</b> — fix them above (or re-download the sample) before generating the test.'
     : '';
 }
 
 async function validateData(){
   if(!uploads.data_csv){ dataValid = true; syncRunGate(); return; }
-  const out=$('#validateOut'); if(out) out.innerHTML='<p class="muted">Validating…</p>';
+  const out=$('#validateOut');
+  if(out) out.innerHTML=_busy('Validating',
+      'checking your CSV against the fields above');
   dataValid = false; syncRunGate();          // block until it validates clean
   try{
     const r=await api('/api/validate-data',{data_csv:uploads.data_csv, recording:uploads.recording||null});
@@ -3053,11 +3691,16 @@ async function validateData(){
       uEl.value = ACCOUNTS.unique_logins;
       uEl.dataset.suggested = String(ACCOUNTS.unique_logins);
     }
-    out.innerHTML=`<div class="rec" style="border-left-color:${r.ok?'#2ecc71':'#e11627'}">`
-      +`<b>Validation:</b> <span class="badge ${r.ok?'b-ok':'b-bad'}">${r.ok?'PASS':'BLOCKED'}</span>`
-      +`<div class="d">${(r.messages||[]).join('<br>')}</div></div>`
+    // The canvas states the verdict as a tinted strip with a mono tag, on the
+    // ok/severity tokens rather than two hardcoded greens.
+    out.innerHTML=`<div class="checkStrip ${r.ok?'good':'bad'}">`
+      +`<span class="cs-tag">${r.ok?'GOOD TO GO':'BLOCKER'}</span>`
+      +`<span class="cs-h">What the CSV check found</span>`
+      +`</div>`
+      +`<div class="checkBody">${(r.messages||[]).map(m=>`<div>${m}</div>`).join('')}</div>`
       + enrolPanel();
     wireEnrol();
+    if(typeof syncDataState === 'function') syncDataState();   // CHECKED tag
     applyMethodFromData();     // the file decides the method, before the template
     applyPayTemplate();
     renderReadiness();
@@ -3097,7 +3740,7 @@ async function refreshPlan(alertOnErr){
         <div class="k"><div class="l">Max err%</div><div class="v">${p.exit_criteria.max_error_rate_pct}</div></div>
         <div class="k"><div class="l">Max p95</div><div class="v">${p.exit_criteria.max_p95_ms}ms</div></div>
       </div><p class="muted" style="margin-top:10px">${p.summary}</p>
-      <div class="btns" style="margin-top:8px"><button class="btn ghost" id="btnAiPlan">🤖 AI suggest plan</button></div>
+      <div class="btns" style="margin-top:8px"><button class="btn ghost" id="btnAiPlan">AI suggest plan</button></div>
       <div id="aiPlanOut"></div>`;
     const ab=$('#btnAiPlan'); if(ab) ab.onclick=aiSuggestPlan;
   }catch(e){ if(alertOnErr) alert(e.message); }
@@ -3113,7 +3756,7 @@ async function aiSuggestPlan(){
     const r=await api('/api/plan/ai-suggest', body);
     if(!r.ai_enabled){ out.innerHTML='<p class="muted">Set ANTHROPIC_API_KEY to enable AI plan tuning.</p>'; return; }
     let html='';
-    if(r.notes) html+=`<div class="rec" style="border-left-color:#4f8cff;white-space:pre-wrap">🤖 ${r.notes.replace(/</g,'&lt;')}</div>`;
+    if(r.notes) html+=`<div class="rec" style="border-left-color:var(--sev0);white-space:pre-wrap">${r.notes.replace(/</g,'&lt;')}</div>`;
     const s=r.suggested||{};
     if(Object.keys(s).length){
       html+='<p class="muted" style="margin-top:8px">Suggested: '
@@ -3224,13 +3867,13 @@ function showReview(res){
   badge.textContent=v.verdict; badge.className='badge '+(v.failures?'b-bad':'b-ok');
   $('#reviewScore').textContent=v.score+' · '+res.plan.summary;
   $('#reviewFindings').innerHTML = v.findings.map(f=>{
-    const ico = f.status==='pass'?'✅':f.status==='fail'?'❌':f.status==='info'?'ℹ️':'⚠️';
+    const ico = f.status==='pass'?'✓':f.status==='fail'?'✗':f.status==='info'?'':'▲';
     return `<div class="rec">${ico} <b>${f.check}</b><div class="d">${f.detail}</div></div>`;
   }).join('');
   if(v.ai_review){
     $('#reviewFindings').innerHTML +=
-      `<div class="rec" style="border-left-color:#4f8cff;margin-top:10px;white-space:pre-wrap">`
-      +`🤖 <b>Senior engineer AI review (Claude)</b><div class="d">`+v.ai_review.replace(/</g,'&lt;')+`</div></div>`;
+      `<div class="rec" style="border-left-color:var(--sev0);margin-top:10px;white-space:pre-wrap">`
+      +`<b>Senior engineer AI review (Claude)</b><div class="d">`+v.ai_review.replace(/</g,'&lt;')+`</div></div>`;
   }
   $('#scriptPreview').textContent=res.script_preview;
 }
@@ -3255,25 +3898,35 @@ function wireChartMode(){
     };
   });
 }
+// Chart.js draws to a canvas, which cannot resolve a CSS custom property, so
+// the tokens are read once here and handed over as literal colours. The canvas
+// assigns: requests are the bars in sev0, p95 is the sev3 line, active users
+// the muted dashed one.
 function chartColours(){
   const css = getComputedStyle(document.documentElement);
   const tok = (n, f) => (css.getPropertyValue(n) || '').trim() || f;
   return {grid: tok('--line', '#e6e0d6'), mut: tok('--mut', '#767676'),
-          fill: tok('--peach', '#FBD9BE')};
+          fill: tok('--sev0', '#8E93B4'), reqs: tok('--sev0', '#8E93B4'),
+          p95: tok('--sev3', '#FF7B70'), sla: tok('--sev3', '#FF7B70')};
 }
 
 // Recolour what is already drawn. Rebuilding would drop every point plotted so
 // far, which during a run is the whole point of the chart.
 function applyChartTheme(){
   if(!liveChart) return;
-  const {grid, mut, fill} = chartColours();
+  const c = chartColours();
   const o = liveChart.options;
-  o.plugins.legend.labels.color = mut;
-  o.scales.x.ticks.color = mut;  o.scales.x.grid.color = grid;
-  o.scales.y.ticks.color = mut;  o.scales.y.grid.color = grid;
-  o.scales.y.title.color = mut;
-  o.scales.y1.ticks.color = mut;
-  liveChart.data.datasets[0].backgroundColor = fill;
+  o.plugins.legend.labels.color = c.mut;
+  o.scales.x.ticks.color = c.mut;  o.scales.x.grid.color = c.grid;
+  o.scales.y.ticks.color = c.mut;  o.scales.y.grid.color = c.grid;
+  o.scales.y1.ticks.color = c.mut;
+  // Every series, not just the bars -- switching theme used to leave p95 and
+  // the users line on the other palette's colours.
+  const ds = liveChart.data.datasets;
+  ds[0].backgroundColor = c.reqs;  ds[0].borderColor = c.reqs;
+  if(ds[1]) ds[1].borderColor = c.p95;
+  if(ds[2]) ds[2].borderColor = c.mut;
+  if(ds[3]) ds[3].borderColor = c.sla;
   liveChart.update('none');
 }
 
@@ -3285,18 +3938,30 @@ function initLiveChart(){
   const {grid, mut} = chartColours();
   // 9a offers both. Throughput reads better as bars (a count per interval)
   // and latency as a line, so only the first series changes.
+  const _cc = chartColours();
   liveChart=new Chart(el,{type:'line',
     data:{labels:[],datasets:[
-      {label:'req/s',data:[],type:CHART_MODE,borderColor:'#e11627',
-       backgroundColor:chartColours().fill,yAxisID:'y',tension:.3,pointRadius:0},
-      {label:'p95 (ms)',data:[],borderColor:'#e6a23c',yAxisID:'y1',tension:.3,pointRadius:0},
-      {label:'Users',data:[],borderColor:'#2ecc71',yAxisID:'y1',tension:.3,pointRadius:0},
+      {label:'Requests / sec',data:[],type:CHART_MODE,borderColor:_cc.reqs,
+       backgroundColor:_cc.reqs,yAxisID:'y',tension:.3,pointRadius:0},
+      {label:'p95 (ms)',data:[],borderColor:_cc.p95,borderWidth:2.5,
+       yAxisID:'y1',tension:.3,pointRadius:0},
+      {label:'Active users',data:[],borderColor:_cc.mut,borderWidth:2,
+       borderDash:[6,4],yAxisID:'y1',tension:.3,pointRadius:0},
+      // The gate, as a flat dashed line. Chart.js needs an annotation plugin
+      // for a true threshold and none is loaded, so the SLA is a series.
+      {label:'p95 SLA',data:[],borderColor:_cc.sla,borderWidth:1,
+       borderDash:[4,4],yAxisID:'y1',tension:0,pointRadius:0,fill:false},
     ]},
     options:{responsive:true,animation:false,interaction:{intersect:false},
-      plugins:{legend:{labels:{color:mut}}},
+      // The gate is a series only because there is no annotation plugin; the
+      // canvas's legend names three things, so it stays out of the legend.
+      plugins:{legend:{labels:{color:mut,
+        filter:i=>i.text!=='p95 SLA'}}},
       scales:{
         x:{ticks:{color:mut,maxTicksLimit:8},grid:{color:grid}},
-        y:{position:'left',title:{display:true,text:'req/s',color:mut},ticks:{color:mut},grid:{color:grid}},
+        // No axis title: the footer says which series reads against which axis,
+        // which is how the canvas labels it.
+        y:{position:'left',ticks:{color:mut},grid:{color:grid}},
         y1:{position:'right',ticks:{color:mut},grid:{display:false}},
       }}});
 }
@@ -3307,6 +3972,18 @@ function pushLive(s){
   d.datasets[0].data.push(+(s.rps||0).toFixed(1));
   d.datasets[1].data.push(Math.round(s.p95||0));
   d.datasets[2].data.push(Math.round(s.users||0));
+  // The canvas closes the plot with what the numbers are right now, and which
+  // axis each series is read against.
+  const foot = $('#chartFoot');
+  if(foot) foot.innerHTML =
+      '<span>now ' + (+(s.rps||0)).toFixed(0) + ' req/s</span>'
+    + '<span>p95 ' + Math.round(s.p95||0).toLocaleString() + 'ms</span>'
+    + '<span>' + Math.round(s.users||0) + ' users</span>'
+    + '<span>req/s left axis · p95 right axis</span>';
+  // The gate is flat, so it needs a point per label or it stops short of the
+  // plot. Drawn only when there is a gate to draw.
+  const gate = +(($('#ovSlaP95') && $('#ovSlaP95').value) || 0);
+  if(d.datasets[3]) d.datasets[3].data.push(gate > 0 ? gate : null);
   if(d.labels.length>120){ d.labels.shift(); d.datasets.forEach(x=>x.data.shift()); }
   liveChart.update();
 }
@@ -3344,13 +4021,13 @@ function renderCalls(){
   const rows = matched.slice(-600);   // cap DOM rows; buffer keeps more
   const near = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
   box.innerHTML = rows.length ? rows.map(c=>{
-    const color = c.ok ? '#2ecc71' : '#e11627';
+    const color = c.ok ? 'var(--ok)' : 'var(--sev3)';
     const grp = c.group ? `<span class="muted">[${_escHtml(c.group)}]</span> ` : '';
     const st = c.status || (c.ok ? 'OK' : 'ERR');
-    return `<div class="callRow" data-seq="${c.seq}" style="padding:4px 8px;border-bottom:1px solid var(--line);cursor:pointer">
+    return `<div class="callRow" data-seq="${c.seq}" style="padding:4px 8px;border-bottom:1px solid var(--hair);cursor:pointer">
         <b style="color:${color}">${c.ok?'✓':'✗'} ${st}</b> ${grp}${_escHtml(c.method||'')} ${_escHtml(c.name||c.url||'')}
         <span class="muted" style="float:right">${Math.round(c.ms||0)}ms</span>
-        <div class="callDetail" style="display:none;white-space:pre-wrap;margin-top:6px;color:var(--muted)"></div>
+        <div class="callDetail" style="display:none;white-space:pre-wrap;margin-top:6px;color:var(--mut)"></div>
       </div>`;
   }).join('') : '<div class="muted" style="padding:8px">no calls yet</div>';
   if($('#callsCount')) $('#callsCount').textContent = callsAll.length + (errOnly ? (' ('+matched.length+' errors)') : '') + (matched.length>rows.length ? ' · showing last '+rows.length : '');
@@ -3378,7 +4055,16 @@ async function pollRun(){
   $('#liveStatus').textContent=st;
   $('#liveStatus').className='badge '+(st==='completed'?'b-ok':(st==='error'||st==='stopped'||st==='failed')?'b-bad':'b-run');
   $('#btnStop').style.display=['starting','running','analyzing'].includes(st)?'':'none';
-  $('#livePhase').textContent=(s.phase||'')+(s.error?(' — '+s.error):'');
+  // The badge already names the state. When the server's phase is only
+  // another word for it -- "Done" beside COMPLETED -- there is nothing to add,
+  // so the line stays empty rather than saying it twice.
+  const _echoes={completed:['done','complete','completed','finished'],
+                 stopped:['stopped','cancelled'],
+                 error:['error','failed'], failed:['error','failed']};
+  const _phase=(s.phase||'').trim();
+  const _echo=(_echoes[st]||[]).includes(_phase.toLowerCase());
+  $('#livePhase').textContent=(_echo?'':_phase)
+    +(s.error?((!_echo&&_phase?' — ':'')+s.error):'');
   renderBrowserTrack(s.browser_track);
   $('#liveBar').style.width=((st==='completed')?100:(s.pct||0))+'%';
   renderLiveJourney(st);
@@ -3461,7 +4147,7 @@ async function pollRun(){
     const b=$('#healBadge'); b.textContent = healing?'working…':'applied';
     b.className='badge '+(healing?'b-run':'b-ok');
     $('#healBody').innerHTML = s.ai_heal_note
-      ? `<div class="rec" style="border-left-color:#4f8cff;white-space:pre-wrap">🤖 `
+      ? `<div class="rec" style="border-left-color:var(--sev0);white-space:pre-wrap">`
         + s.ai_heal_note.replace(/</g,'&lt;') + `</div>`
       : `<p class="muted"><span class="spin"></span> Claude is analyzing the failures and regenerating the script…</p>`;
   }
@@ -3481,10 +4167,14 @@ function renderBrowserTrack(bt){
   const el=$('#liveBrowserTrack'); if(!el) return;
   if(!bt){ el.style.display='none'; return; }
   const t=String(bt).toLowerCase();
-  let color='#5b93ff', bg='#0f2e4d', ico='🧭';          // running / default
-  if(t.startsWith('skipped')){ color='#e6a700'; bg='#3a2d12'; ico='⏭️'; }
-  else if(t.startsWith('error')){ color='#ff6b9a'; bg='#3a1220'; ico='⚠️'; }
-  else if(t.startsWith('done')){ color='#3ddc97'; bg='#123a2a'; ico='✅'; }
+  // The four states on the severity ladder, with the tint behind each drawn
+  // from the same rung. These were a blue / amber / pink / green set with
+  // matching dark backgrounds -- an older palette, and the only place in the
+  // app still using it.
+  let color='var(--sev0)', bg='var(--panel2)', ico='▶';   // running / default
+  if(t.startsWith('skipped')){ color='var(--sev1)'; bg='var(--panel2)'; ico='›'; }
+  else if(t.startsWith('error')){ color='var(--sev3)'; bg='var(--sev3-tint)'; ico='▲'; }
+  else if(t.startsWith('done')){ color='var(--ok)'; bg='var(--ok-tint)'; ico='✓'; }
   let extra='';
   if(t.indexOf('not installed')>=0)
     extra=' — install it with <code>setup-browser-track.bat</code> (or <code>pip install playwright &amp;&amp; playwright install chromium</code>), then re-run.';
@@ -3527,19 +4217,21 @@ async function saveScript(fromRun){
 }
 let savedScripts = [];
 let loadedSaved = null;
+// The library rows follow 9a: a name, one value, and the left bar for state.
+// The script already loaded says so instead of offering itself again.
 async function loadSaved(){
   try{
     savedScripts = await api('/api/saved-scripts');
-    $('#savedRows').innerHTML = savedScripts.length? savedScripts.map(r=>`
-      <tr><td>${r.name}</td><td>${r.base_url||''}</td><td>${r.test_type||''}</td>
-      <td>${(r.created_at||'').replace('T',' ').slice(0,16)}</td>
-      <td style="white-space:nowrap"><button class="btn ghost" onclick="useSaved('${encodeURIComponent(r.name)}')">⚙ Configure &amp; Run</button>
-        <button class="btn ghost" style="margin-left:6px" onclick="exportSavedCI('${encodeURIComponent(r.name)}')">⤓ Export to CI/CD</button>
-        <a class="link" style="cursor:pointer;margin-left:8px" onclick="renameSaved('${encodeURIComponent(r.name)}')">rename</a>
-        · <a class="link" style="cursor:pointer" onclick="deleteSaved('${encodeURIComponent(r.name)}')">delete</a>
-      </td></tr>`).join('')
-      : '<tr><td colspan="5" class="muted">No saved scripts yet. Save one from New Test.</td></tr>';
-  }catch(e){ $('#savedRows').innerHTML='<tr><td colspan="5" class="muted">'+e.message+'</td></tr>'; }
+    $('#savedRows').innerHTML = savedScripts.length? savedScripts.map(r=>{
+      const inUse = loadedSaved === r.name;
+      return inUse
+        ? `<div style="border-left-color:var(--orange)">
+             <span class="nm">${r.name}</span><span class="st">in use</span></div>`
+        : `<button type="button" onclick="useSaved('${encodeURIComponent(r.name)}')">
+             <span class="nm">${r.name}</span><span class="st">Use</span></button>`;
+    }).join('')
+      : '<div class="none">No saved scripts yet. Save one once a run is set up.</div>';
+  }catch(e){ $('#savedRows').innerHTML='<div class="none">'+e.message+'</div>'; }
 }
 // Load a saved script into the main page so the user configures the test type + runs it.
 async function useSaved(nameEnc){
@@ -3552,7 +4244,7 @@ async function useSaved(nameEnc){
   if(m.expected_users){ $('#expectedUsers').value = m.expected_users; }
   $('#savedName').textContent = name;
   $('#savedBanner').classList.remove('hidden');
-  document.querySelector('nav button[data-tab="new"]').click();
+  closeDock();   // the script is chosen; the run is what you wanted to get back to
   // the recording + its data are baked into the saved script — disable those
   // inputs and show the user only what still needs to be set per run.
   let info=null; try{ info=await api('/api/saved-script-info',{name}); }catch(e){}
@@ -3566,9 +4258,16 @@ function clearSaved(){
   _setSavedLock(false);
 }
 function _setSavedLock(on, info){
-  ['upRec','btnDiscover','upData','upUsers','btnCrawlRecord'].forEach(id=>{
+  ['upRec','btnDiscover','upData','upUsers','btnCrawlRecord',
+   'btnPickRec'].forEach(id=>{
     const el=$('#'+id); if(el){ el.disabled=!!on; el.style.opacity=on?0.45:1; }
   });
+  // The file input is behind the drop target now, so dimming it is invisible;
+  // the zone has to say it is locked too.
+  const zone=$('#dropRec');
+  if(zone){ zone.classList.toggle('locked', !!on); }
+  const box=$('#recUploaded');
+  if(box){ box.classList.toggle('locked', !!on); }
   let note=$('#savedLockNote');
   if(on){
     const rec=$('#upRec');
@@ -3577,7 +4276,7 @@ function _setSavedLock(on, info){
       rec.parentElement.insertBefore(note, rec); }
     const cols=(info&&info.data_columns&&info.data_columns.length)
       ? info.data_columns.join(', ') : '(none saved)';
-    if(note) note.innerHTML='🔒 <b>Reusing a saved script.</b> Its recording and data are '
+    if(note) note.innerHTML='<b>Reusing a saved script.</b> Its recording and data are '
       +'already included, so the upload fields are disabled.<div class="d">Included data columns: '
       +'<b>'+cols+'</b>. Just choose the test type / users / overrides below and run. '
       +'Load a new recording (or click ✕ on the banner) to start fresh.</div>';
@@ -3639,20 +4338,31 @@ function renderTimeline(src){
   let stateHtml='';
   if(cs && (cs.state || cs.stopped_at)){
     const qt = cs.quote_trace || [];
+    // Label and value in two columns, so the eye can run down either one.
+    const row = (l, v) => `<div class="r"><span class="l">${l}</span>`
+      + `<span class="v">${v}</span></div>`;
     const qtHtml = qt.length
-      ? '<br><b>quote trace:</b>' + qt.map(q =>
-          `<br>&nbsp;&nbsp;${esc(q.stage)} → quote <b>${esc(q.quote_id||'—')}</b>`
-          + (q.note?` <span class="muted">(${esc(q.note)})</span>`:'')).join('')
-        + (cs.quote_mismatch?`<br>&nbsp;&nbsp;⚠ <b style="color:#e11627">QUOTE MISMATCH</b> — add-to-cart and the token's active quote differ`:'')
+      ? row('Quote trace', qt.map(q =>
+          `${esc(q.stage)} → ${esc(q.quote_id||'—')}`
+          + (q.note?`  (${esc(q.note)})`:'')).join('<br>')
+          + (cs.quote_mismatch
+             ? `<br><span style="color:var(--sev3)">quote mismatch — add-to-cart`
+               + ` and the token's active quote differ</span>` : ''))
       : '';
-    stateHtml = `<div class="rec" style="border-left-color:${cs.quote_mismatch?'#e11627':'#4f8cff'}"><b>📋 Checkout State</b><div class="d">`
-      +`reached: <b>${cs.state||'—'}</b> · cart: ${cs.cart_id||'—'} · items in cart: ${cs.item_count!=null?cs.item_count:'—'}`
-      +`<br>shipping methods: ${(cs.shipping_methods||[]).join(', ')||'—'}`
-      +`<br>payment methods: ${(cs.payment_methods||[]).join(', ')||'—'}`
-      +qtHtml
-      +(cs.stopped_at?`<br>🛑 STOPPED at <b>${esc(cs.stopped_at)}</b> (${cs.stop_status||''}): ${esc(cs.stop_reason||'')}`:'')
-      +(cs.order_id?`<br>✅ order id: <b>${esc(cs.order_id)}</b>`:'')
-      +`</div></div>`;
+    stateHtml = `<div class="tlState${cs.quote_mismatch?' mismatch':''}">`
+      + row('Reached', esc(cs.state||'—'))
+      + row('Cart', esc(cs.cart_id||'—') + '  ·  '
+            + (cs.item_count!=null?cs.item_count:'—') + ' item(s)')
+      + row('Shipping methods', esc((cs.shipping_methods||[]).join(', ')||'—'))
+      + row('Payment methods', esc((cs.payment_methods||[]).join(', ')||'—'))
+      + qtHtml
+      + (cs.order_id?row('Order id', esc(cs.order_id)):'')
+      + (cs.stopped_at
+         ? `<div class="tlStop"><span class="k">stopped</span> at `
+           + `<b>${esc(cs.stopped_at)}</b> (${esc(String(cs.stop_status||''))})`
+           + (cs.stop_reason?` — ${esc(cs.stop_reason)}`:'') + `</div>`
+         : '')
+      + `</div>`;
   }
   if(!hasTl){
     if(b){ b.textContent=''; b.className='badge'; }
@@ -3664,14 +4374,22 @@ function renderTimeline(src){
   const okc=tl.filter(e=>e.ok && e.step!=='STOP').length;
   if(b){ b.textContent = okc+'/'+tl.length+' ok'; b.className='badge '+(tl.some(e=>!e.ok)?'b-bad':'b-ok'); }
   $('#timelineBody').innerHTML = stateHtml + tl.map(e=>{
-    const ico = e.step==='STOP' ? '🛑' : (e.ok?'✅':'❌');
-    const meta = [e.method, (e.status!=null?e.status:''), (e.ms!=null?e.ms+'ms':'')].filter(Boolean).join(' · ');
-    const extra = e.extra?`<div class="d"><b>${esc(e.extra)}</b></div>`:'';
-    const mono = 'font-family:monospace;font-size:11px;white-space:pre-wrap';
-    const req = e.req?`<div class="d" style="${mono};color:#8ba0bd">→ request: ${esc(e.req)}</div>`:'';
-    const body = e.body?`<div class="d" style="${mono};color:var(--mut)">← response: ${esc(e.body)}</div>`:'';
-    return `<div class="rec" style="border-left-color:${e.ok?'#2ecc71':'#e11627'}">`
-      +`${ico} <b>${e.step}</b> <span class="muted">${meta}</span>${extra}${req}${body}</div>`;
+    // A glyph, not an emoji: the design uses no colour emoji, and the bar down
+    // the left already carries the state. #8ba0bd on the request line was a
+    // blue-grey from a palette this app no longer uses.
+    const stop = e.step === 'STOP';
+    const bar  = stop ? 'var(--sev4)' : (e.ok ? 'var(--ok)' : 'var(--sev3)');
+    const ico  = stop ? '■' : (e.ok ? '✓' : '✗');
+    const meta = [e.method, (e.status!=null?e.status:''),
+                  (e.ms!=null?e.ms+'ms':'')].filter(Boolean).join('  ·  ');
+    const extra = e.extra?`<div class="tl-x">${esc(e.extra)}</div>`:'';
+    const req  = e.req?`<div class="tl-b">→ request   ${esc(e.req)}</div>`:'';
+    const body = e.body?`<div class="tl-b">← response  ${esc(e.body)}</div>`:'';
+    return `<div class="tlRow" style="border-left-color:${bar}">`
+      + `<div class="tl-h"><span class="tl-i" style="color:${bar}">${ico}</span>`
+      + `<span class="tl-s">${esc(e.step)}</span>`
+      + (meta?`<span class="tl-m">${meta}</span>`:'') + `</div>`
+      + extra + req + body + `</div>`;
   }).join('');
 }
 
@@ -3693,7 +4411,7 @@ function showResults(a, s){
   const o=a.overall||{}, sla=a.sla||{}, rca=a.rca||{}, trend=a.trend||{};
   const recs=Array.isArray(a.recommendations)?a.recommendations:[];
   const gate=$('#gateBadge');
-  if(gate){ gate.textContent=sla.pass?'PASS ✅':'FAIL ❌';
+  if(gate){ gate.textContent=sla.pass?'PASS ✓':'FAIL ✗';
             gate.className='badge '+(sla.pass?'b-ok':'b-bad'); }
   const rk=[
     ['Requests', num(o.total_requests).toLocaleString()],
@@ -3716,7 +4434,7 @@ function showResults(a, s){
          <div class="d">${r.detail||''}</div></div>`).join('')
     : '<p class="muted">No recommendations — results look healthy.</p>';
   $('#resRca').innerHTML='<b>Root cause:</b> '+(rca.summary||'—')
-    + (a.llm_rca ? '<div class="d" style="margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--line);padding-top:8px">🤖 <b>AI analysis (Claude):</b> '
+    + (a.llm_rca ? '<div class="d" style="margin-top:8px;white-space:pre-wrap;border-top:1px solid var(--hair);padding-top:8px"><b>AI analysis (Claude):</b> '
         + a.llm_rca.replace(/</g,'&lt;') + '</div>' : '');
   $('#resTrend').innerHTML='<b>Trend:</b> '+(trend.note||'—');
   if(a.jira_markdown){ $('#jiraWrap').classList.remove('hidden');
@@ -3737,43 +4455,50 @@ function showResults(a, s){
   $('#resultCard').scrollIntoView({behavior:'smooth'});
 }
 
+// A run reads "date · type users" with its p95 on the right; the bar is the
+// gate. Opening the row opens that run's report, which is the only thing the
+// canvas offers from a run in the library.
+function _runSev(r){
+  if(r.status !== 'completed') return 'var(--sev0)';
+  if(r.sla_pass) return 'var(--sev0)';
+  return (r.error_rate > 0) ? 'var(--sev3)' : 'var(--sev2)';
+}
 async function loadHistory(){
   try{
     const rows=await api('/api/history');
-    $('#historyRows').innerHTML = rows.length? rows.map(r=>`
-      <tr><td>${(r.started_at||'').replace('T',' ').slice(0,16)}</td>
-      <td>${r.project_name}${r.label?(' · <i>'+r.label+'</i>'):''}</td><td>${r.test_type}</td>
-      <td class="num">${r.users||''}</td><td class="num">${(r.total_requests||0).toLocaleString()}</td>
-      <td class="num">${r.error_rate??''}</td><td class="num">${Math.round(r.p95||0)}</td>
-      <td><span class="badge ${r.sla_pass?'b-ok':'b-bad'}">${r.sla_pass?'PASS':(r.status==='completed'?'FAIL':r.status)}</span></td>
-      <td style="white-space:nowrap">
-        <a class="link" href="/api/run/${r.id}/report" target="_blank">report</a>
-        · <a class="link" style="cursor:pointer" onclick="renameRun('${r.id}', ${JSON.stringify(r.label||'')})">rename</a>
-        · <a class="link" style="cursor:pointer" onclick="deleteRun('${r.id}')">delete</a>
-      </td></tr>`).join('')
-      : '<tr><td colspan="9" class="muted">No runs yet.</td></tr>';
-  }catch(e){ $('#historyRows').innerHTML='<tr><td colspan="9" class="muted">'+e.message+'</td></tr>'; }
+    $('#historyRows').innerHTML = rows.length? rows.map(r=>{
+      const when = (r.started_at||'').replace('T',' ').slice(0,16);
+      const what = [r.test_type, r.users].filter(Boolean).join(' ');
+      return `<a href="/api/run/${r.id}/report" target="_blank"
+                 style="border-left-color:${_runSev(r)};text-decoration:none"
+                 title="Open the report for this run">
+        <span class="nm">${when}${what?(' · '+what):''}</span>
+        <span class="val">${r.p95 ? Math.round(r.p95).toLocaleString()+'ms' : '—'}</span></a>`;
+    }).join('')
+      : '<div class="none">No runs yet.</div>';
+  }catch(e){ $('#historyRows').innerHTML='<div class="none">'+e.message+'</div>'; }
 }
 async function loadProjects(){
   try{
     const rows=await api('/api/projects');
     $('#projectRows').innerHTML = rows.length? rows.map(r=>`
-      <tr><td>${r.name}</td><td>${r.target_url}</td><td class="num">${r.run_count||0}</td>
-      <td>${(r.last_run||'').replace('T',' ').slice(0,16)||'—'}</td>
-      <td style="white-space:nowrap">
-        <a class="link" style="cursor:pointer" onclick="useProject('${encodeURIComponent(r.name)}','${encodeURIComponent(r.target_url)}')">use</a>
-        · <a class="link" style="cursor:pointer" onclick="renameProject(${r.id}, '${encodeURIComponent(r.name)}')">rename</a>
-        · <a class="link" style="cursor:pointer" onclick="deleteProject(${r.id}, '${encodeURIComponent(r.name)}')">delete</a>
-      </td></tr>`).join('')
-      : '<tr><td colspan="5" class="muted">No projects yet.</td></tr>';
-  }catch(e){ $('#projectRows').innerHTML='<tr><td colspan="5" class="muted">'+e.message+'</td></tr>'; }
+      <button type="button" title="${r.target_url}"
+        onclick="useProject('${encodeURIComponent(r.name)}','${encodeURIComponent(r.target_url)}')">
+        <span class="nm">${r.name}</span><span class="st">Use</span></button>`).join('')
+      : '<div class="none">No projects yet.</div>';
+  }catch(e){ $('#projectRows').innerHTML='<div class="none">'+e.message+'</div>'; }
 }
 function useProject(n,u){
   $('#projectName').value=decodeURIComponent(n); $('#url').value=decodeURIComponent(u);
-  document.querySelector('nav button[data-tab="new"]').click();
+  closeDock();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 // ---- rename / delete handlers ----
+// UNREACHABLE for now, deliberately. 9a's library row holds a name, one value
+// and one action, so renaming and deleting came out of the drawer along with
+// exportSavedCI below. The server endpoints are untouched and these are the
+// only clients of them, so they stay here until the redesign gives them a
+// home -- a row menu, or a manage view. Nothing calls them today.
 async function renameSaved(nameEnc){
   const name=decodeURIComponent(nameEnc);
   const nn=prompt('Rename saved script:', name); if(!nn||nn.trim()===name) return;
@@ -3793,7 +4518,7 @@ async function exportSavedCI(nameEnc){
     let msg = 'CI/CD bundle written to:\n'+r.out_dir+'\n\nFiles:\n  '+(r.files||[]).join('\n  ')
       + '\n\nCommit these into your app repo, then trigger the workflow after each deploy.'
       + '\nEdit perf-test.yml for users/duration; edit ci/perf/testdata.csv for accounts.';
-    if((r.warnings||[]).length) msg += '\n\n⚠ '+r.warnings.join('\n⚠ ');
+    if((r.warnings||[]).length) msg += '\n\n▲ '+r.warnings.join('\n▲ ');
     alert(msg);
   }catch(e){ alert('Export failed: '+e.message); }
 }
@@ -3830,12 +4555,14 @@ $('#btnAsk').onclick=async()=>{
       html+='<p class="muted">Tip: set <b>ANTHROPIC_API_KEY</b> to get plain-language answers. Showing ledger data:</p>';
     }
     html+=`<p class="muted">Entity: <b>${r.entity}</b> · window: ${r.months} months · ${r.count} matches</p>`;
+    // The matches read as library rows, not a table: the drawer is 560px and
+    // the answer above already carries the explanation.
     if(r.results.length){
-      html+='<table><thead><tr><th>Date</th><th>Project</th><th>Transaction</th><th>Type</th><th class="num">p95</th><th>Gate</th></tr></thead><tbody>'+
-        r.results.map(x=>`<tr><td>${(x.started_at||'').slice(0,10)}</td><td>${x.project_name}</td>
-        <td>${x.name}</td><td>${x.test_type}</td><td class="num">${Math.round(x.p95||0)}</td>
-        <td><span class="badge ${x.sla_pass?'b-ok':'b-bad'}">${x.sla_pass?'PASS':'FAIL'}</span></td></tr>`).join('')+
-        '</tbody></table>';
+      html+='<div class="dockList">'+ r.results.map(x=>`
+        <div style="border-left-color:${x.sla_pass?'var(--sev0)':'var(--sev3)'}">
+          <span class="nm">${(x.started_at||'').slice(0,10)} · ${x.name}</span>
+          <span class="val">${Math.round(x.p95||0).toLocaleString()}ms</span></div>`).join('')
+        +'</div>';
     } else html+='<p class="muted">No matching history yet.</p>';
     $('#askResult').innerHTML=html;
   }catch(e){ $('#askResult').innerHTML='<p class="muted">'+e.message+'</p>'; }
