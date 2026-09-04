@@ -326,7 +326,8 @@ check("the job id is escaped into the URL",
 # near-black card, measured on the live page. Hence the inline colours.
 check("no rule styles a plain a.btn",
       "a.btn" not in UI.replace("button.btn", ""))
-check("so the button carries its own background", "background:#e11627" in _dl)
+check("so the button carries its own background",
+      "background:var(--accent)" in _dl)
 check("and its own text colour", "color:#fff" in _dl)
 
 # The advice it replaced could not work: clearing the cell just lets the next
