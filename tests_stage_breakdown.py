@@ -86,8 +86,11 @@ check("it has its own card, not the timeline's",
       'id="stageCard"' in UI and 'class="card hidden" id="timelineCard"' in UI)
 check("the dominant stage is named, not left to be read off a bar",
       "takes ' + lead.share" in UI)
-check("failures are named", "Failures in " in UI)
-check("and 'nothing failed' is said out loud", "Nothing failed" in UI)
+# Anchored to the expression that renders the sentence, not to the phrase: the
+# phrase alone also matches a comment, and a check that passes off a comment is
+# not a check.
+check("the stages that errored are named", "'Errors in ' + broke" in UI)
+check("and a clean run is said out loud", "No call returned an error" in UI)
 check("it refreshes when the phase is opened",
       "b.dataset.phase === '4' && currentRun" in UI)
 check("and when results arrive", "if(currentRun) loadStages(currentRun);" in UI)

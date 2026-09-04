@@ -2253,25 +2253,39 @@ __BROWSE_TASKS__
                 self._txn_begin(_CHECKOUT_TXN)
             try:
                 self._rest_checkout()       # robust, API-driven order
+                # The validator can come up short and the recorded order step
+                # still succeed. That is a checkout that WORKED, so it has to
+                # run while the transaction is still open. Closing first
+                # reported "order not placed" against an order the very next
+                # call went on to place, and left that order out of this user's
+                # own count -- so a run capped at one order placed more.
+                if not self._order_placed:
+                    self._order_fallback()
             finally:
                 self._txn_end(None if self._order_placed else "order not placed")
+        elif not self._order_placed:
+            self._order_fallback()
         if self._order_placed:
             self._orders_done = getattr(self, "_orders_done", 0) + 1
-        elif not self._order_placed:
-            # Nothing to place an order against. The checkout stopped before the
-            # cart held anything, so trying anyway produces a second and third
-            # failure -- "firstname is required" from an address that was never
-            # read -- and buries the reason it really stopped.
-            _st = (_FLOW.get("checkout_state") or {})
-            if _st.get("stopped_at") and not _st.get("item_count"):
-                _clog_annotate("no cart to order from (stopped at %s: %s) — "
-                               "not attempting an order"
-                               % (_st.get("stopped_at"),
-                                  _st.get("stop_reason") or "no reason given"))
-                return
-            # The recorded order step belongs to a group that the loop already
-            # timed. Wrapping it again would double-count that group.
-            self._place_order()
+
+    def _order_fallback(self):
+        """Place the order by the recorded step when the primary path did not.
+
+        Skipped when there is nothing to place an order against. The checkout
+        stopped before the cart held anything, so trying anyway produces a
+        second and third failure -- "firstname is required" from an address
+        that was never read -- and buries the reason it really stopped.
+        """
+        _st = (_FLOW.get("checkout_state") or {})
+        if _st.get("stopped_at") and not _st.get("item_count"):
+            _clog_annotate("no cart to order from (stopped at %s: %s) — "
+                           "not attempting an order"
+                           % (_st.get("stopped_at"),
+                              _st.get("stop_reason") or "no reason given"))
+            return
+        # The recorded order step belongs to a group that the loop already
+        # timed. Wrapping it again would double-count that group.
+        self._place_order()
 
     def _run_raw(self, step):
         """Verbatim replay of one recorded step (JMeter-style): recorded body +

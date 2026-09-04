@@ -473,7 +473,19 @@ def _html(a: dict, history: list[dict]) -> str:
         "<h2>AI Root-Cause Analysis (Claude)</h2><div class=\"rec\">"
         + html.escape(_llm_txt).replace("\n", "<br>") + "</div>") if _llm_txt else ""
 
-    labels = json.dumps([h["t"] for h in history])
+    # Raw epoch seconds ("1788535425") tell a reader nothing, and the console
+    # plots elapsed time -- so the same run had two different axes. Elapsed,
+    # both places.
+    def _elapsed(v, t0):
+        try:
+            return "%ds" % (int(float(v)) - t0)
+        except (TypeError, ValueError):
+            return str(v)
+    try:
+        _t0 = int(float(history[0]["t"])) if history else 0
+    except (TypeError, ValueError, KeyError, IndexError):
+        _t0 = 0
+    labels = json.dumps([_elapsed(h.get("t"), _t0) for h in history])
     p50 = json.dumps([h["p50"] for h in history])
     p95 = json.dumps([h["p95"] for h in history])
     users = json.dumps([h["users"] for h in history])

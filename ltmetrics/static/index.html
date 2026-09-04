@@ -2032,13 +2032,17 @@ async function loadStages(runId){
   const RANK = ['Healthy','Watch','Strained','Failing','Critical'];
   const worst = rows.reduce((a,b)=>
     RANK.indexOf(b.health) > RANK.indexOf(a.health) ? b : a, rows[0]);
+  // One sentence is about speed and the next about errors, so a stage on the
+  // slow end of the ladder read as a contradiction of the sentence that
+  // followed it. Scope each to what it measures: the rung is still named, and
+  // it can no longer be mistaken for a count of errors.
   if(worst && RANK.indexOf(worst.health) > 1)
     bits.push('<b>' + _escHtml(worst.stage) + '</b> is '
-              + _escHtml(worst.health.toLowerCase()) + ' at ' + worst.gate_pct
-              + '% of the gate.');
+              + _escHtml(worst.health.toLowerCase()) + ' on speed, at '
+              + worst.gate_pct + '% of the gate.');
   bits.push(broke.length
-    ? 'Failures in ' + broke.map(s=>_escHtml(s.stage)).join(', ') + '.'
-    : 'Nothing failed.');
+    ? 'Errors in ' + broke.map(s=>_escHtml(s.stage)).join(', ') + '.'
+    : 'No call returned an error.');
   if(funnel){
     const lost = rows.reduce((a,s)=> a + (s.dropped || 0), 0);
     const first = rows[0], last = rows[rows.length - 1];
