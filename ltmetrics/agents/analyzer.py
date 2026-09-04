@@ -66,6 +66,12 @@ def _read_stats(run_dir: Path) -> tuple[list[dict], dict | None]:
             "p99": _f(r.get("99%")),
             "rps": _f(r.get("Requests/s")),
         }
+        # Locust buckets its percentiles, so p99 can come back ABOVE the exact
+        # max it was measured from. A percentile cannot exceed the maximum, and
+        # a reader who spots that stops trusting the rest of the table.
+        if rec["max"]:
+            rec["p99"] = min(rec["p99"], rec["max"])
+            rec["p95"] = min(rec["p95"], rec["max"])
         if rec["name"] == "Aggregated":
             aggregated = rec
         else:
@@ -138,6 +144,18 @@ def _read_flow_stats(run_dir: Path) -> dict:
         return {}
 
 
+
+def is_transaction(e):
+    """Is this row a transaction timer rather than a single request?
+
+    A transaction wraps the calls inside it, so its time is their sum. Locust
+    records ours with the type "TXN" and a "TXN: " name prefix; either alone is
+    enough, because an older run may carry only one of them.
+    """
+    return (str(e.get("method") or "").strip().upper() == "TXN"
+            or str(e.get("name") or "").strip().upper().startswith("TXN:"))
+
+
 def analyze(run_dir: Path, plan_cfg: dict, discovery: dict,
             project_id: int, run_id: str) -> dict:
     endpoints, aggregated = _read_stats(Path(run_dir))
@@ -204,6 +222,17 @@ def analyze(run_dir: Path, plan_cfg: dict, discovery: dict,
     max_p95 = plan_cfg["exit_criteria"]["max_p95_ms"]
     breaches = []
     for e in endpoints:
+        # A transaction timer is the SUM of the calls inside it, so holding it to
+        # a PER-REQUEST gate is arithmetic rather than a finding -- a journey of
+        # twenty calls breaches a 5,000ms gate by existing, and then leads the
+        # ticket as the latency hotspot. The stage panel already excludes these
+        # for the same reason ("counting it would add the same milliseconds
+        # twice"). They keep their row, their numbers and their failures; they
+        # get no verdict against a gate that was never about them.
+        if is_transaction(e):
+            e["sla_target"] = None
+            e["sla_pass"] = None
+            continue
         target = LABEL_SLA.get(e["name"], max_p95)
         e["sla_target"] = target
         e["sla_pass"] = e["p95"] <= target

@@ -91,7 +91,11 @@ def build(analysis: dict, discovery: dict | None = None, run_dir=None) -> list[d
             recs.append(_rec("P2", "p95 %.0fms over the %.0fms target"
                              % (p95, p95_target), "Medium", "Medium",
                              "Profile the slowest endpoints; check DB / cache / N+1 queries."))
-        eps = analysis.get("endpoints") or []
+        # "Slowest endpoint" has to be an endpoint. A transaction timer is the
+        # sum of the calls inside it, so it wins this comparison on every run
+        # and sends the investigation to a number that is not a bottleneck.
+        eps = [e for e in (analysis.get("endpoints") or [])
+               if e.get("sla_target") is not None]
         slow = max(eps, key=lambda e: float(e.get("p95", 0) or 0), default=None)
         if slow and float(slow.get("p95", 0) or 0) > 0:
             recs.append(_rec("P3", "Slowest endpoint: %s (p95 %.0fms)"

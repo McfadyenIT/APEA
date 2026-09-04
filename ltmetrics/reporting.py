@@ -396,7 +396,10 @@ def _html(a: dict, history: list[dict]) -> str:
 
     rows = ""
     for e in a["endpoints"]:
-        status = "✅" if e.get("sla_pass") else "❌"
+        # sla_pass is None for a transaction timer -- no target, so no verdict.
+        # Rendering that as a cross blamed the journey for being a journey.
+        _tgt = e.get("sla_target")
+        status = "—" if _tgt is None else ("✅" if e.get("sla_pass") else "❌")
         err = (e["num_failures"] / e["num_requests"] * 100) if e["num_requests"] else 0
         rows += f'''<tr>
           <td>{html.escape(str(e["name"]))}</td>
@@ -410,7 +413,7 @@ def _html(a: dict, history: list[dict]) -> str:
           <td class="num">{int(e["p95"])}</td>
           <td class="num">{int(e["p99"])}</td>
           <td class="num">{e["rps"]:.2f}</td>
-          <td class="num">{int(e.get("sla_target", 0))}</td>
+          <td class="num">{"—" if _tgt is None else int(_tgt)}</td>
           <td>{status}</td></tr>'''
 
     recs = ""
@@ -631,6 +634,9 @@ def _html(a: dict, history: list[dict]) -> str:
     <th>Transaction</th><th>Endpoint</th><th>Samples</th><th>Fails</th><th>Err %</th><th>Avg</th>
     <th>p50</th><th>p90</th><th>p95</th><th>p99</th><th>req/s</th><th>SLA (ms)</th>
     <th>Status</th></tr></thead><tbody>{rows}</tbody></table>
+  <p class="sub" style="margin-top:8px">A row with no target is a transaction
+  timer: it wraps the calls inside it, so its time is the sum of theirs and a
+  per-request target does not apply to it. Its failures still count.</p>
   {static_note}
   {browser_html}
   {business_html}
@@ -751,9 +757,12 @@ def _xlsx(a: dict, history: list[dict], path: Path) -> None:
         ws2.append([e["name"], endpoint, e["num_requests"], e["num_failures"], round(err, 2),
                     round(e["avg"], 1), round(e["p50"], 1), round(e["p90"], 1),
                     round(e["p95"], 1), round(e["p99"], 1), round(e["rps"], 2),
-                    e.get("sla_target", 0), "PASS" if e.get("sla_pass") else "FAIL"])
+                    ("" if e.get("sla_target") is None else e.get("sla_target")),
+                    ("n/a" if e.get("sla_target") is None
+                     else ("PASS" if e.get("sla_pass") else "FAIL"))])
         last = ws2.cell(row=ws2.max_row, column=len(cols))
-        last.fill = green if e.get("sla_pass") else red
+        if e.get("sla_target") is not None:
+            last.fill = green if e.get("sla_pass") else red
     for col in "ABCDEFGHIJKLM":
         ws2.column_dimensions[col].width = 14
     ws2.column_dimensions["A"].width = 26
