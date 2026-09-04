@@ -97,6 +97,10 @@ _ns = {"re": _re}
 _ns["_ORDER_URL_SIGNALS"] = ["checkout/success", "onepage/success"]
 _ns["_ORDER_PLACE_PATTERNS"] = ["payment-information", "placeorder"]
 exec(_re.search(r"^_NOT_AN_ID = (.+)$", _GEN, _re.M).group(0), _ns)
+# _looks_like_order calls _places_orders, so the helper and its exclusion list
+# have to be in the namespace before it is defined.
+exec(_re.search(r"^_NOT_ORDER_PLACE = .+?\)\n", _GEN, _re.M | _re.S).group(0), _ns)
+exec(_re.search(r"^def _places_orders.*?(?=^def )", _GEN, _re.M | _re.S).group(0), _ns)
 for _fn in ("_is_real_id", "_extract_order_id", "_confirm_order",
             "_looks_like_order"):
     exec(_re.search(r"^def %s\(.*?(?=^def |^class |^_[A-Z])" % _fn, _GEN,
@@ -190,6 +194,26 @@ check("both recorded-step paths apply it",
       _GEN.count("_berr = _body_error(txt) if ok else \"\"") == 2)
 check("and the run says so rather than failing three steps later",
       "answered 200 but refused it" in _GEN)
+
+print()
+print("a setup step is not failed for not placing an order")
+# Magento has two endpoints one word apart: set-payment-information sets the
+# method and returns true; payment-information places the order. The pattern
+# "payment-information" is a substring of both, so the replay loop treated the
+# setup call as an order attempt and recorded a failure for a correct 200.
+# Seven of the forty failures in a Radwell run were that.
+_ns["_ORDER_PLACE_PATTERNS"] = ["payment-information", "placeorder",
+                                "place-order", "purchaseorder/save"]
+check("set-payment-information does not place an order",
+      not _ns["_places_orders"]("/rest/uk/V1/carts/mine/set-payment-information"))
+check("payment-information does",
+      _ns["_places_orders"]("/rest/uk/V1/carts/mine/payment-information"))
+check("nor does payment-methods",
+      not _ns["_places_orders"]("/rest/uk/V1/carts/mine/payment-methods"))
+check("a storefront placeOrder still does",
+      _ns["_places_orders"]("/checkout/onepage/placeOrder"))
+check("and the replay loop uses the same test",
+      'if not _places_orders(s.get("path")):' in _GEN)
 
 print()
 print("FAILURES: %d" % len(FAILURES))

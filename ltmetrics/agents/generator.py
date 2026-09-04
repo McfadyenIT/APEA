@@ -1928,13 +1928,27 @@ def _body_error(txt):
         "the response body reports an error"
 
 
+# Endpoints whose names CONTAIN an order-place pattern while doing something
+# else. Magento's set-payment-information sets the method and returns true; the
+# order is placed by payment-information, one word shorter.
+_NOT_ORDER_PLACE = ("set-payment-information", "set-payment_information",
+                    "setpaymentinformation", "payment-methods", "paymentmethods")
+
+
+def _places_orders(path) -> bool:
+    """Is this step the one that actually places the order?"""
+    p = (path or "").lower()
+    if any(k in p for k in _NOT_ORDER_PLACE):
+        return False
+    return any(k in p for k in _ORDER_PLACE_PATTERNS)
+
+
 def _looks_like_order(path, status, txt):
     """Return an order id/'confirmed' if this step confirms an order, else None."""
     oid = _confirm_order(path, status, txt)
     if oid:
         return oid
-    p = (path or "").lower()
-    if status < 400 and any(k in p for k in _ORDER_PLACE_PATTERNS):
+    if status < 400 and _places_orders(path):
         return _extract_order_id(txt)   # only count when a real order id comes back
     return None
 
@@ -3166,7 +3180,7 @@ __BROWSE_TASKS__
 
     def _replay_order_step(self):
         for s in FLOW_STEPS:
-            if not any(k in (s.get("path") or "").lower() for k in _ORDER_PLACE_PATTERNS):
+            if not _places_orders(s.get("path")):
                 continue
             body = s.get("body")
             if isinstance(body, dict):
