@@ -130,8 +130,6 @@ def apply_to_rows(rows: list, base_url: str) -> list:
     say something its author did not.
     """
     known = recall(base_url)
-    if not known:
-        return []
     filled = []
     for r in rows or []:
         if not isinstance(r, dict):
@@ -139,10 +137,34 @@ def apply_to_rows(rows: list, base_url: str) -> list:
         if (r.get("payment_token") or "").strip():
             continue
         u = (r.get("username") or r.get("email") or "").strip().lower()
-        if u and known.get(u):
-            r["payment_token"] = known[u]
+        if not u:
+            continue
+        tok = known.get(u)
+        if not tok and not (base_url or "").strip():
+            # ONLY when the tool does not know which store it is working with --
+            # _LAST_TARGET lives in the process and is empty after a restart.
+            # A NAMED store that lacks the account is a different matter: the
+            # answer there is no, or a token would cross between stores.
+            tok = _sole_token_for(u)
+        if tok:
+            r["payment_token"] = tok
             filled.append(r.get("username") or u)
     return filled
+
+
+def _sole_token_for(user: str) -> str:
+    """A remembered token for this account when exactly one store has one.
+
+    Two stores holding the same email is genuinely ambiguous -- the tokens are
+    different and picking one would put the wrong card against an account -- so
+    that case is left for the operator.
+    """
+    hits = []
+    for _host, accts in (_load() or {}).items():
+        tok = (accts or {}).get(user)
+        if tok:
+            hits.append(tok)
+    return hits[0] if len(hits) == 1 else ""
 
 
 def forget(base_url: str = "", user: str = "") -> int:

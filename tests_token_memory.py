@@ -152,5 +152,50 @@ check("the message says what a fetch will then cover",
       "as well as any" in _ui)
 
 print()
+print("a remembered token survives a restart of the tool")
+# The store a token belongs to came from _LAST_TARGET, "the last URL this
+# SESSION analysed", which is a module-level dict. Restart the tool and the
+# lookup is keyed on "" and matches nothing -- so the same file that had been
+# enrolled an hour earlier was told it still needed a card token.
+import sys as _sys3
+_sys3.path.insert(0, ".")
+from ltmetrics.agents import token_memory as _tm3
+
+_saved = _tm3._load()
+try:
+    _tm3._save({"shop.example.com": {"a@b.com": "TOKEN-A"},
+                "other.example.com": {"shared@b.com": "TOKEN-X"},
+                "third.example.com": {"shared@b.com": "TOKEN-Y"}})
+    _r = [{"username": "a@b.com", "payment_token": ""}]
+    check("with no store known, one remembered account is restored",
+          _tm3.apply_to_rows(_r, "") == ["a@b.com"]
+          and _r[0]["payment_token"] == "TOKEN-A")
+
+    _r2 = [{"username": "a@b.com", "payment_token": ""}]
+    check("naming the store still works, as before",
+          _tm3.apply_to_rows(_r2, "https://shop.example.com/uk/") == ["a@b.com"])
+
+    _r3 = [{"username": "shared@b.com", "payment_token": ""}]
+    check("an account on two stores is left alone -- the tokens differ",
+          _tm3.apply_to_rows(_r3, "") == []
+          and not _r3[0]["payment_token"])
+
+    _r3b = [{"username": "a@b.com", "payment_token": ""}]
+    check("a NAMED store that lacks the account still gets nothing",
+          _tm3.apply_to_rows(_r3b, "https://other.example.com/") == []
+          and not _r3b[0]["payment_token"])
+
+    _r4 = [{"username": "nobody@example.com", "payment_token": ""}]
+    check("an account nobody enrolled gets nothing",
+          _tm3.apply_to_rows(_r4, "") == [])
+
+    _r5 = [{"username": "a@b.com", "payment_token": "TYPED-BY-HAND"}]
+    _tm3.apply_to_rows(_r5, "")
+    check("a token already in the file is never overwritten",
+          _r5[0]["payment_token"] == "TYPED-BY-HAND")
+finally:
+    _tm3._save(_saved)
+
+print()
 print("FAILURES: %d" % len(FAILURES))
 sys.exit(1 if FAILURES else 0)
