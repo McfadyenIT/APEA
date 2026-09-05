@@ -2277,6 +2277,14 @@ __BROWSE_TASKS__
         that was never read -- and buries the reason it really stopped.
         """
         _st = (_FLOW.get("checkout_state") or {})
+        if _st.get("value_gate_stopped"):
+            # The cart holds a line, so the empty-cart guard below would wave
+            # this through -- but the line is worth nothing, and that is exactly
+            # what the gate refused. Placing it by another route is the same bad
+            # order through a different door.
+            _clog_annotate("the cart-value gate refused this cart (line price 0) — "
+                           "not placing the order by another route either")
+            return
         if _st.get("stopped_at") and not _st.get("item_count"):
             _clog_annotate("no cart to order from (stopped at %s: %s) — "
                            "not attempting an order"
@@ -2830,6 +2838,10 @@ __BROWSE_TASKS__
             _line_prices = ([_line_price(i) for i in items]
                             if isinstance(items, list) else [])
             if not any(p > 0 for p in _line_prices):
+                # Recorded so the order fallback can see this was a considered
+                # refusal, not an absent cart. Its own guard only checks for an
+                # EMPTY cart, and a worthless cart is not an empty one.
+                _set_state(value_gate_stopped=True)
                 return self._stop("Cart contains items", st,
                     "cart line price is 0 (sku='%s', quote=%s). %sPlacing this order "
                     "would create a 0-value order that captures shipping/tax only. "
