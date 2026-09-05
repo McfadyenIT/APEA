@@ -2204,6 +2204,7 @@ __BROWSE_TASKS__
                            % _MAX_ORDERS_PER_USER)
             raise StopUser()
         self._order_placed = False
+        self._stop_at = self._stop_why = ""    # last iteration's reason is not this one's
         self._txn_name, self._txn_t0 = None, None
         # Decide, once per iteration, which business groups run this time
         # (JMeter Throughput-Controller "Percent Executions"). None => no gating.
@@ -2269,7 +2270,12 @@ __BROWSE_TASKS__
                 if not self._order_placed:
                     self._order_fallback()
             finally:
-                self._txn_end(None if self._order_placed else "order not placed")
+                _why = ""
+                if not self._order_placed and getattr(self, "_stop_why", ""):
+                    _why = " — stopped at %s: %s" % (
+                        getattr(self, "_stop_at", "?"), str(self._stop_why)[:180])
+                self._txn_end(None if self._order_placed
+                              else "order not placed" + _why)
         elif not self._order_placed:
             self._order_fallback()
         if self._order_placed:
@@ -2411,6 +2417,10 @@ __BROWSE_TASKS__
         """Record a hard STOP at the first failed checkout step and halt this
         transaction. If checkout is definitively broken (repeated stops, no
         orders), abort the WHOLE run rather than hammer a broken checkout."""
+        # Also on the USER: checkout_state is global and holds only the most
+        # recent iteration, so by report time it describes a different checkout.
+        # The transaction that is about to be closed needs THIS user's reason.
+        self._stop_at, self._stop_why = step, reason
         _set_state(stopped_at=step, stop_reason=reason, stop_status=status)
         _clog("STOP", "", "", status, 0, reason, False,
               extra="Stopped at '%s' (status %s): %s" % (step, status, reason))

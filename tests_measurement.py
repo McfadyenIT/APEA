@@ -94,8 +94,14 @@ check("an unplaced order marks the transaction failed",
 # The validator can return early (a gate stops it), so its transaction must be
 # closed in a finally. There is exactly ONE such wrapper: the recorded-order
 # fallback is deliberately not wrapped, because the loop already timed its group.
+# Counted by BLOCK, not by the line that happens to come first inside it: the
+# call may be preceded by the lines that assemble the failure reason.
+_fin_closes = sum(1 for _blk in sc.split("finally:")[1:]
+                  if "self._txn_end(" in _blk[:600])
 check("the validator's transaction is closed in a finally",
-      sc.count("finally:\n                self._txn_end(") == 1, True)
+      _fin_closes == 1, True)
+check("and the close still reports an unplaced order as a failure",
+      'else "order not placed"' in sc, True)
 check("each iteration starts with no transaction open",
       "self._txn_name, self._txn_t0 = None, None" in sc, True)
 check("the transaction is named from the recording, not hardcoded",
