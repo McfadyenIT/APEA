@@ -50,14 +50,27 @@ def _num(v):
 def _api_item_price(flow: dict):
     """The line-item price the API returned when the product was added to cart
     (this is what shows as £0 on a client-side-priced catalog)."""
+    # Every price the cart reported, in order. The FIRST one is not the answer:
+    # on a client-side-priced catalogue the REST add always lands at 0 and the
+    # storefront cart-add prices the quote immediately afterwards, so taking the
+    # first reports 0 for an order that went out correctly priced -- and which
+    # one comes first varies between runs of the same data.
+    seen = []
     for s in (flow.get("timeline") or []):
         url = str(s.get("url") or "").lower()
-        if "items" in url:
-            body = str(s.get("body") or s.get("resp") or "")
-            m = re.search(r'"price"\s*:\s*([0-9]+(?:\.[0-9]+)?)', body)
-            if m:
-                return _num(m.group(1))
-    return None
+        if "items" not in url:
+            continue
+        body = str(s.get("body") or s.get("resp") or "")
+        for m in re.finditer(r'"price"\s*:\s*([0-9]+(?:\.[0-9]+)?)', body):
+            v = _num(m.group(1))
+            if v is not None:
+                seen.append(v)
+    if not seen:
+        return None
+    priced = [v for v in seen if v]
+    # The price the order was placed at: the last one the cart actually held.
+    # Only when nothing ever priced is 0 the honest answer.
+    return priced[-1] if priced else seen[-1]
 
 
 def _ordered_sku(flow: dict):

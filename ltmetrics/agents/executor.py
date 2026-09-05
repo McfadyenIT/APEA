@@ -478,9 +478,21 @@ def _price_heal(run_dir, discovery, analysis) -> None:
     try:
         flow = analysis.get("flow") or {}
         timeline = flow.get("timeline") or []
-        zero = any('"price":0' in str(s.get("body") or "").replace(" ", "")
-                   for s in timeline
-                   if "items" in str(s.get("url") or "").lower())
+        # A 0 the storefront cart-add then corrected is not worth healing, and
+        # reporting it contradicts the order the run actually placed. Heal only
+        # a cart that NEVER priced -- which is also the case the cart-value gate
+        # stops before an order is written.
+        _seen = []
+        for s in timeline:
+            if "items" not in str(s.get("url") or "").lower():
+                continue
+            for _m in _re.finditer(r'"price"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
+                                   str(s.get("body") or "")):
+                try:
+                    _seen.append(float(_m.group(1)))
+                except ValueError:
+                    pass
+        zero = bool(_seen) and not any(v > 0 for v in _seen)
         if not (zero and flow.get("orders")):
             return
         base = (discovery or {}).get("base_url") or ""
