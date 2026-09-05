@@ -1150,6 +1150,13 @@ _CALL_SEQ = [0]
 _CALLS_CAP = 20000                     # bound disk/memory: stop after this many detailed calls
 try:
     os.makedirs(os.path.dirname(_CALLS_PATH), exist_ok=True)
+    # Start this invocation's feed empty. The preflight and the measured run are
+    # two runs of this same script writing to one file, and the report counts
+    # only the measured one -- so leaving the preflight's rows behind made the
+    # stage panel report more errors than the report it sits next to, with
+    # neither number wrong for what it was counting. The preflight still streams
+    # live while it runs; it just does not carry into the measured run.
+    open(_CALLS_PATH, "w").close()
 except Exception:
     pass
 _SECRET_RE = re.compile(
