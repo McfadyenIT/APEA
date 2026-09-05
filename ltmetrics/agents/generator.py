@@ -3550,8 +3550,46 @@ __BROWSE_TASKS__
         # Generic -- any store that places orders by API and prices by storefront
         # cart-add hits this on its second iteration onwards.
         if "no such entity with cart" in low.replace("cartid", "cart id"):
+            # LOOK BEFORE RETRYING. The store can clear the dead quote id,
+            # create a fresh one, land the item in it, and only THEN throw from
+            # a custom cart module -- an error response for a request that
+            # partly succeeded. Retrying that blind buys a second unit, and on
+            # a product limited to one it writes an order the store would never
+            # have taken while the run reports a success. Measured: four of six
+            # Amneal orders came out at twice the quantity.
+            if self._token:
+                _n = None
+                with self.client.get(_REST_PREFIX + _EP["items"],
+                                     headers={"Authorization": "Bearer %s" % self._token},
+                                     name="AUTO-HEAL check cart",
+                                     catch_response=True) as hr:
+                    if hr.status_code < 400:
+                        hr.success()
+                        try:
+                            _got = json.loads(hr.text or "[]")
+                            _n = len(_got) if isinstance(_got, list) else 0
+                        except Exception:
+                            _n = None
+                    else:
+                        # Cannot see the cart -> cannot prove the add missed.
+                        # Refusing to retry risks an empty cart, which STOPS the
+                        # run and says why; retrying risks a wrong order on the
+                        # store. Prefer the one that cannot spend the client's
+                        # money.
+                        hr.failure("heal cart check %s" % hr.status_code)
+                if _n:
+                    _clog_annotate("the cart-add reported a stale cart, but the item is "
+                                   "in the quote (%d line(s)) — not retrying, that would "
+                                   "buy a second unit" % _n)
+                    return False
+                if _n is None:
+                    _clog_annotate("the cart-add reported a stale cart and the cart could "
+                                   "not be read — not retrying, rather than risk a "
+                                   "duplicate line on the order")
+                    return False
             _clog_annotate("the storefront session was still holding the cart the last "
-                           "order consumed — retrying the add on a fresh one")
+                           "order consumed, and the cart is empty — retrying the add on "
+                           "a fresh one")
             return True
         return False
 

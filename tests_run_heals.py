@@ -98,14 +98,24 @@ if heal is not None:
     h = _src(tpl, heal)
     check("it recognises a cart id the store no longer has",
           "no such entity with cart" in h)
-    # It must be a plain retry: issuing a request to "fix" it would be a second
-    # call against a session that the failed attempt already reset.
     idx = h.find("no such entity with cart")
     tail = h[idx:]
-    check("and answers with a retry, not another request",
-          "return True" in tail and "self.client" not in tail)
+    check("a retry is still possible when the add really did miss",
+          "return True" in tail)
     check("the operator is told why the retry happened",
           "_clog_annotate" in tail)
+    # The retry must never be blind. "No such entity with cartId" can come back
+    # from a request that ALREADY landed the item: the store clears the dead
+    # quote id, creates a fresh one, adds, and only then throws from a custom
+    # cart module. Retrying that bought a second unit of a product limited to
+    # one -- four of six Amneal orders came out at 94.96 instead of 47.48, an
+    # order the store would never have taken, reported as a success.
+    check("it reads the cart before retrying, rather than retrying blind",
+          "AUTO-HEAL check cart" in tail)
+    check("an item already in the quote cancels the retry",
+          "return False" in tail and tail.index("AUTO-HEAL check cart") < tail.index("return True"))
+    check("and a cart it cannot read also cancels it",
+          "not be read" in tail)
     check("a different missing entity is not swallowed",
           "no such entity with cart" in h and "no such entity\"" not in h)
 
