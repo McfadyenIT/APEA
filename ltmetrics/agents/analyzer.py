@@ -363,7 +363,12 @@ def _rca(endpoints, failures, error_rate) -> dict:
     if not endpoints:
         return {"summary": "No transaction data captured.", "suspects": []}
     by_fail = sorted(endpoints, key=lambda x: -x["num_failures"])
-    by_slow = sorted(endpoints, key=lambda x: -x["p95"])
+    # A transaction timer is the sum of the calls inside it, so it wins any
+    # latency sort by construction and sends the reader to a number that is not
+    # a bottleneck. Real endpoints only for the hotspot; if a run somehow has
+    # nothing but transactions, fall back rather than report nothing.
+    _real = [e for e in endpoints if not is_transaction(e)]
+    by_slow = sorted(_real or endpoints, key=lambda x: -x["p95"])
     suspects = []
     if by_fail and by_fail[0]["num_failures"] > 0:
         suspects.append({

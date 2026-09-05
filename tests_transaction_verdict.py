@@ -107,6 +107,19 @@ check("and gives it no target rather than a failing one",
 check("a transaction never reaches the breach list",
       src.index("is_transaction(e)") < src.index("breaches.append"))
 
+print("\nthe root-cause line names an endpoint too")
+# This one feeds the Jira ticket, so it is the copy a client actually reads.
+# It kept its own latency sort after the SLA table and the recommendation had
+# both been fixed, and so still reported "Latency leader: TXN: Test (21000 ms)"
+# beside a recommendation naming POST inventory/validate at 6397 ms.
+rca_src = inspect.getsource(analyzer._rca)
+check("the hotspot sort excludes transactions",
+      "is_transaction(e)" in rca_src)
+check("but a run of nothing but transactions still gets an answer",
+      "_real or endpoints" in rca_src)
+check("failures are still counted against a transaction",
+      'sorted(endpoints, key=lambda x: -x["num_failures"])' in rca_src)
+
 print("\nthe slowest ENDPOINT is an endpoint")
 src = inspect.getsource(recommendation)
 check("the slowest-endpoint pick skips rows with no target",
