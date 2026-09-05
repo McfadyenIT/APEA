@@ -2509,8 +2509,23 @@ __BROWSE_TASKS__
                 ok = r.status_code < 400
                 data = json.loads(r.text or "{}") if ok else {}
                 items = (((data.get("data") or {}).get("products") or {}).get("items") or [])
-                (r.success() if (ok and items)
-                 else r.failure("graphql resolve status=%s items=%d" % (r.status_code, len(items))))
+                # A search that matches nothing is the STORE answering correctly
+                # about a term that is not in its catalogue -- usually a value in
+                # the test data that is an id or a keyword rather than a sku.
+                # Charging that to the store's error budget puts our data problem
+                # in the client's report as their defect. The call is judged on
+                # what it was: an HTTP request the store served.
+                if not ok:
+                    r.failure("graphql resolve status=%s" % r.status_code)
+                else:
+                    r.success()
+                    if not items:
+                        _bump("resolve_empty")
+                        _clog_annotate(
+                            "search term '%s' matched no product in the catalogue. The "
+                            "store answered correctly, so this is the test data, not a "
+                            "site failure — use a real sku if the run needs this exact "
+                            "product." % term)
                 for it in items:
                     if it.get("__typename") == "ConfigurableProduct":
                         c = self._configurable_candidate(it, _price, _instock)
@@ -3173,7 +3188,7 @@ __BROWSE_TASKS__
         self._agr_cache = agr
         return agr
 
-    def _rest_place_order(self):
+    def _rest_place_order(self, _healed=False):
         auth = {"Authorization": "Bearer %s" % self._token}
         method, codes = None, []
         with self.client.get(_REST_PREFIX + "/carts/mine/payment-methods",
@@ -3233,6 +3248,14 @@ __BROWSE_TASKS__
             # user knows exactly which offline code to set.
             r.failure("[Place Order REST] method=%s code=%s available=%s body=%s"
                       % (pm["method"], r.status_code, codes, body[:600]))
+            _fail_st, _fail_body = r.status_code, body
+        # The recorded path heals a quote that dropped its shipping address
+        # between the shipping call and the order ("The shipping address is
+        # missing"); this fallback never did, so the same transient ended the
+        # run here instead. Same remedy, applied once.
+        if not _healed and self._heal({"name": "Place Order (REST)"}, _fail_st, _fail_body):
+            _bump("heals")
+            return self._rest_place_order(_healed=True)
         return False
 
     def _replay_order_step(self):
@@ -3518,6 +3541,18 @@ __BROWSE_TASKS__
                     hr.success()
                     return True
                 hr.failure("heal token %s" % hr.status_code)
+        # 4) the storefront session still points at a cart that no longer exists
+        # -> the quote it held was consumed by the order just placed through the
+        # API, so the next storefront cart-add resolves a dead id ("No such
+        # entity with cartId = N"). Magento clears the stale id when that lookup
+        # throws, so the retry the caller is about to make lands on a fresh
+        # quote: the failed attempt IS the reset, and no extra request is needed.
+        # Generic -- any store that places orders by API and prices by storefront
+        # cart-add hits this on its second iteration onwards.
+        if "no such entity with cart" in low.replace("cartid", "cart id"):
+            _clog_annotate("the storefront session was still holding the cart the last "
+                           "order consumed — retrying the add on a fresh one")
+            return True
         return False
 
     @staticmethod
