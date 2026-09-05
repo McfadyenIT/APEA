@@ -327,7 +327,11 @@ def _recommend(overall, endpoints, plan_cfg, error_rate, failures) -> list[dict]
                       "Check app logs, upstream timeouts, and connection-pool limits.",
         })
 
-    slow = [e for e in endpoints if e["p95"] > LABEL_SLA.get(e["name"], max_p95)]
+    # sla_target is None for a transaction timer -- it wraps the calls inside it,
+    # so there is no per-request target to be over. Read the target the gate
+    # already decided rather than looking it up a second way.
+    slow = [e for e in endpoints
+            if e.get("sla_target") is not None and e["p95"] > e["sla_target"]]
     slow.sort(key=lambda x: -x["p95"])
     for e in slow[:3]:
         share = (e["num_requests"] / max(1, overall["total_requests"])) * 100
@@ -335,7 +339,7 @@ def _recommend(overall, endpoints, plan_cfg, error_rate, failures) -> list[dict]
         recs.append({
             "priority": "P2", "impact": impact, "effort": "Medium",
             "title": f"{e['name']} p95 {int(e['p95'])} ms over target "
-                     f"{int(LABEL_SLA.get(e['name'], max_p95))} ms",
+                     f"{int(e['sla_target'])} ms",
             "detail": "Add server-side caching / CDN, review DB indexes and slow queries "
                       f"on this endpoint. Carries {share:.0f}% of traffic.",
         })

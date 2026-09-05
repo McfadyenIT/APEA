@@ -125,6 +125,22 @@ src = inspect.getsource(recommendation)
 check("the slowest-endpoint pick skips rows with no target",
       'e.get("sla_target") is not None' in src)
 
+print("\nthe per-endpoint latency cards skip transactions too")
+# The fourth place that sorts by p95 against a target, and the last one found.
+# It read LABEL_SLA directly instead of the sla_target the gate had already
+# decided, so a Radwell run showed three cards -- TXN: Checkout, TXN: Login and
+# Login -- for one bottleneck, two of them advising a CDN for a stopwatch.
+rec_src = inspect.getsource(analyzer._recommend)
+check("the card list filters on the gate's own target",
+      'e.get("sla_target") is not None' in rec_src)
+check("and compares against that target, not a second lookup",
+      'e["p95"] > e["sla_target"]' in rec_src)
+check("the title quotes the same target it filtered on",
+      "int(e['sla_target'])" in rec_src)
+check("no second LABEL_SLA lookup left to drift",
+      "LABEL_SLA.get(e['name']" not in rec_src
+      and 'LABEL_SLA.get(e["name"]' not in rec_src)
+
 print("\nthe report renders an absent verdict as absent")
 UI = io.open(ROOT / "ltmetrics" / "reporting.py", encoding="utf-8").read()
 check("no cross where there is no target",
