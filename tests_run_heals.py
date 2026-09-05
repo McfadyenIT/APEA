@@ -147,6 +147,24 @@ if resolve is not None:
     check("the old blanket failure is gone",
           "items=%d" % 0 not in q and 'items=%d" % (r.status_code' not in q)
 
+print("\n4. the live call log does not second-guess the run's verdict")
+# Amneal 21eddd38a15c: 39 requests, ZERO failures, order 4300 placed -- and the
+# headline read "checkout is the weak link" with a red Failing tile on a stage
+# whose p95 was 0.7s. Two Checkout agreements calls answered HTTP 404, which the
+# script deliberately accepts, so Locust recorded 0 failures; the listener judged
+# by status code, marked them failed, and the stage panel followed the log
+# instead of the run.
+listener = _func(tree, "_ltm_on_request") if tree else None
+check("the request listener exists", listener is not None)
+if listener is not None:
+    ls = _src(tpl, listener)
+    check("ok is Locust's verdict, not the status code",
+          "ok = exception is None" in ls)
+    check("the old status-code test is gone",
+          "status == 0 or status < 400" not in ls)
+    check("an accepted 4xx is still shown to the operator",
+          "accepted by the script" in ls)
+
 print("\nFAILURES: %d" % len(fails))
 for f in fails:
     print("  - %s" % f)

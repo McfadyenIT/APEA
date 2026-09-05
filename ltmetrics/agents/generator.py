@@ -3638,11 +3638,20 @@ def _ltm_on_request(request_type=None, name=None, response_time=None,
                     resp_body = ""
         except Exception:
             pass
-        ok = (exception is None) and (status == 0 or status < 400)
+        # Locust's own verdict, and nothing else. A caught response the script
+        # called r.success() on -- an expected 404 from checkout-agreements, say
+        # -- arrives here with no exception and a 404 status; judging by the
+        # status made this log disagree with the run's own stats, and the stage
+        # panel that reads it then put "checkout is the weak link" on a run with
+        # zero failures. Anything Locust does consider failed arrives WITH an
+        # exception whatever its code.
+        ok = exception is None
         if exception is not None:
             err = str(exception)[:300]
-        elif not ok:
-            err = "HTTP %s" % status
+        elif status >= 400:
+            # Visible, so an operator can still see the store answered 4xx --
+            # but not counted against the run, because the script accepted it.
+            err = "HTTP %s — accepted by the script, not a failure" % status
         else:
             err = ""
         entry = {
