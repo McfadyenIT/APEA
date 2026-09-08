@@ -48,7 +48,10 @@ def _read_stats(run_dir: Path) -> tuple[list[dict], dict | None]:
     path = run_dir / "results" / "locust_stats.csv"
     if not path.exists():
         return [], None
-    with open(path, newline="", encoding="utf-8") as fh:
+    # errors="replace": Locust writes these with the platform default
+    # encoding, which on Windows is the console code page. One character it
+    # cannot map must not cost the whole run's analysis.
+    with open(path, newline="", encoding="utf-8", errors="replace") as fh:
         rows = list(csv.DictReader(fh))
     endpoints, aggregated = [], None
     for r in rows:
@@ -83,7 +86,7 @@ def _read_failures(run_dir: Path) -> list[dict]:
     path = run_dir / "results" / "locust_failures.csv"
     if not path.exists():
         return []
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8", errors="replace") as fh:
         return [{"method": r.get("Method"), "name": r.get("Name"),
                  "error": r.get("Error"), "occurrences": int(_f(r.get("Occurrences")))}
                 for r in csv.DictReader(fh)]

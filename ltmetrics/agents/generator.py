@@ -2272,7 +2272,7 @@ __BROWSE_TASKS__
             finally:
                 _why = ""
                 if not self._order_placed and getattr(self, "_stop_why", ""):
-                    _why = " — stopped at %s: %s" % (
+                    _why = " - stopped at %s: %s" % (
                         getattr(self, "_stop_at", "?"), str(self._stop_why)[:180])
                 self._txn_end(None if self._order_placed
                               else "order not placed" + _why)

@@ -11,6 +11,7 @@ and both threaded (web UI) and blocking (CLI / CI) invocation.
 from __future__ import annotations
 
 import csv
+import os
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,20 @@ _PROCS: dict[str, tuple] = {}
 _LOCK = threading.Lock()
 
 RESULTS_PREFIX = "results/locust"
+
+
+def _utf8_env():
+    """Environment for a child process so it writes UTF-8 whatever the OS default.
+
+    Windows encodes a child's stdout and its CSV files with the console code
+    page, so an em dash lands as 0x97 and every UTF-8 read of that file raises.
+    PYTHONUTF8 switches the interpreter to UTF-8 mode; PYTHONIOENCODING covers
+    the streams. Harmless on Linux, where both are already the default.
+    """
+    env = dict(os.environ)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
 
 
 def stop(run_id: str) -> bool:
@@ -130,7 +145,7 @@ def _execute_once(run_id, run_dir, target_url, plan_cfg, log_path) -> bool:
         with open(log_path, "w", encoding="utf-8") as logf:
             if workers > 1:
                 proc = subprocess.Popen(_master_cmd(plan_cfg, target_url, workers),
-                                        cwd=str(run_dir), stdout=logf,
+                                        cwd=str(run_dir), env=_utf8_env(), stdout=logf,
                                         stderr=subprocess.STDOUT, text=True)
                 for _ in range(workers):
                     worker_procs.append(subprocess.Popen(
@@ -138,7 +153,7 @@ def _execute_once(run_id, run_dir, target_url, plan_cfg, log_path) -> bool:
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True))
             else:
                 proc = subprocess.Popen(_single_cmd(plan_cfg, target_url),
-                                        cwd=str(run_dir), stdout=logf,
+                                        cwd=str(run_dir), env=_utf8_env(), stdout=logf,
                                         stderr=subprocess.STDOUT, text=True)
             _PROCS[run_id] = (proc, worker_procs)
             _monitor(run_id, run_dir, proc, log_path, plan_cfg)
@@ -337,6 +352,7 @@ def _maybe_start_browser_track(run_id, run_dir, target_url, plan_cfg, discovery)
         (run_dir / "results").mkdir(parents=True, exist_ok=True)
         logf = open(run_dir / "results" / "playwright_run.log", "w", encoding="utf-8")
         proc = subprocess.Popen(eng.single_cmd(plan_cfg, target_url), cwd=str(run_dir),
+                                env=_utf8_env(),
                                 stdout=logf, stderr=subprocess.STDOUT, text=True)
         _set(run_id, browser_track="running — %d browser VUs" % int(bt.get("vus") or 0))
         return (proc, logf)
